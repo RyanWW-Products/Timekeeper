@@ -20,7 +20,7 @@ Record time in Toggl, stop running timers, and choose **Read today's data** in T
 
 The first release uses your browser for Microsoft 365 sign-in and chat. Embedded Microsoft 365 sign-in/chat is not implemented. File generation and attachment support depend on your tenant; JSON text can be pasted back into Timekeeper when Copilot cannot create a downloadable proposal.
 
-The team owner maintains the shared agent using the repository's [owner guide](docs/COPILOT_SETUP.md) and [agent instructions](docs/COPILOT_AGENT_INSTRUCTIONS.txt). Agent creation is not part of the installed team's setup flow.
+The team owner maintains the shared agent using the repository's [owner guide](docs/COPILOT_SETUP.md), [agent instructions](docs/COPILOT_AGENT_INSTRUCTIONS.txt) and [knowledge file](docs/COPILOT_AGENT_KNOWLEDGE.txt). Paste the instructions into the agent's Instructions field and upload the knowledge file under Knowledge. Agent creation is not part of the installed team's setup flow.
 
 ## Time policy
 
