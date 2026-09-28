@@ -34,6 +34,9 @@ public partial class App : Application
                 var settingsWindow=new SettingsWindow(window,new AppSettings(),store,false);
                 File.AppendAllText(Path.Combine(output,"ui-smoke.txt"),settingsWindow.SmokeSummary());
                 RenderWindow(settingsWindow,Path.Combine(output,"timekeeper-settings.png"),720,850);
+                var errorWindow=new SettingsWindow(window,new AppSettings(),store,false);
+                errorWindow.ShowSampleError();
+                RenderWindow(errorWindow,Path.Combine(output,"timekeeper-settings-error.png"),720,850);
                 var updatesWindow=new UpdatesWindow(window,smoke:true);
                 File.AppendAllText(Path.Combine(output,"ui-smoke.txt"),updatesWindow.SmokeSummary());
                 RenderWindow(updatesWindow,Path.Combine(output,"timekeeper-updates.png"),620,600);

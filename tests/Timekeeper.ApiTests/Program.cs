@@ -6,6 +6,97 @@ using Timekeeper.Core;
 
 var failures = new List<string>();
 var passed = 0;
+await Check("bad task category identifies table record field and value", async () =>
+{
+    using var f = new Fixture();
+    f.Server.RowsByTable[f.Settings.TasksTable] = [FakeApi.Row((3, 44), (7, "Internal work"), (11, true), (17, null))];
+    var error = await DataError(() => f.Api.ReadReferenceAsync());
+    True(error.Message.Contains("Tasks (bd3bsxtbn)")); True(error.Message.Contains("#44 — Internal work"));
+    True(error.Message.Contains("Category (field 17)")); True(error.Message.Contains("null (blank)"));
+    Equal("https://trialexhibits.quickbase.com/db/bd3bsxtbn?a=dr&rid=44", error.RecordUrl); Equal(0, f.Server.WriteCount);
+});
+await Check("missing record ID identifies result position without inventing a link", async () =>
+{
+    using var f = new Fixture(); f.Server.RowsByTable[f.Settings.CategoriesTable] = [FakeApi.Row((3, 10), (6, "Good")), FakeApi.Row((6, "Missing ID"))];
+    var error = await DataError(() => f.Api.ReadReferenceAsync());
+    True(error.Message.Contains("Categories (beb9dvs6p)")); True(error.Message.Contains("result row 2"));
+    True(error.Message.Contains("Record ID (field 3)")); True(error.Message.Contains("missing field or value")); Equal<string?>(null, error.RecordUrl);
+});
+await Check("malformed field wrapper receives the same contextual error", async () =>
+{
+    using var f = new Fixture(); f.Server.RowsByTable[f.Settings.TasksTable] = [new Dictionary<string, object?> { ["3"] = new { value = 7 }, ["7"] = new { value = "Broken task" }, ["11"] = new { value = true }, ["17"] = "invalid wrapper" }];
+    var error = await DataError(() => f.Api.ReadReferenceAsync());
+    True(error.Message.Contains("#7 — Broken task")); True(error.Message.Contains("Category (field 17)"));
+});
+await Check("exact whole decimal IDs are accepted across references", async () =>
+{
+    using var f = new Fixture();
+    f.Server.RowsByTable[f.Settings.CategoriesTable] = [FakeApi.Row((3, "10.0"), (6, "Internal"))];
+    f.Server.RowsByTable[f.Settings.TasksTable] = [FakeApi.Row((3, 44.0m), (7, "Internal work"), (11, true), (17, "10.000"))];
+    f.Server.RowsByTable[f.Settings.ProjectsTable] = [FakeApi.Row((3, "100.0"), (6, "Internal"))];
+    f.Server.RowsByTable[f.Settings.AssignmentsTable] = [FakeApi.Row((3, 201.0m), (13, "Assigned work"), (15, "100.00"), (11, "Active"), (73, new[] { new { email = f.Settings.Email } }), (77, "44.0"), (75, 10.0m))];
+    var reference = await f.Api.ReadReferenceAsync();
+    Equal(10, reference.Categories.Single().Id); Equal(44, reference.Tasks.Single().Id); Equal(100, reference.InternalProject!.Id);
+    Equal(201, reference.Assignments.Single().Id); Equal<int?>(44, reference.Assignments.Single().TaskId); Equal<int?>(10, reference.Assignments.Single().CategoryId);
+});
+await Check("fractions overflow and nonpositive required IDs are never rounded or accepted", async () =>
+{
+    foreach (var value in new object[] { "10.5", "10.000000000000000000000000000001", "2147483648", -7, "0.0", true })
+    {
+        using var f = new Fixture(); f.Server.RowsByTable[f.Settings.TasksTable] = [FakeApi.Row((3, 44), (7, "Internal work"), (11, true), (17, value))];
+        var error = await DataError(() => f.Api.ReadReferenceAsync()); True(error.Message.Contains("Category (field 17)")); Equal(0, f.Server.WriteCount);
+    }
+});
+await Check("optional assignment relations accept blank and whole zero", async () =>
+{
+    foreach (var value in new object?[] { null, "", "  ", "0.00", 0.0m })
+    {
+        using var f = new Fixture();
+        f.Server.RowsByTable[f.Settings.AssignmentsTable] = [FakeApi.Row((3, 201), (15, 100), (11, "Active"), (73, new[] { new { email = f.Settings.Email } }), (77, value), (75, value))];
+        var reference = await f.Api.ReadReferenceAsync(); Equal<int?>(null, reference.Assignments.Single().TaskId); Equal<int?>(null, reference.Assignments.Single().CategoryId);
+    }
+});
+await Check("irrelevant assignments are filtered before parsing their relations", async () =>
+{
+    using var f = new Fixture();
+    f.Server.RowsByTable[f.Settings.AssignmentsTable] = [
+        FakeApi.Row((3, 201), (15, null), (11, "Active"), (73, new[] { new { email = "someone.else@example.com" } })),
+        FakeApi.Row((3, 202), (15, null), (11, "Closed"), (73, new[] { new { email = f.Settings.Email } })),
+        FakeApi.Row((3, 203), (15, 100), (11, "Active"), (73, new[] { new { email = f.Settings.Email } }))];
+    var reference = await f.Api.ReadReferenceAsync(); Equal(203, reference.Assignments.Single().Id);
+});
+await Check("a personal broken assignment still blocks with its project field identified", async () =>
+{
+    using var f = new Fixture();
+    f.Server.RowsByTable[f.Settings.AssignmentsTable] = [FakeApi.Row((3, 201), (13, "Assigned work"), (15, null), (11, "Active"), (73, new[] { new { email = f.Settings.Email } }))];
+    var error = await DataError(() => f.Api.ReadReferenceAsync());
+    True(error.Message.Contains("Assignments (biqs87fvg)")); True(error.Message.Contains("#201 — Assigned work")); True(error.Message.Contains("Project (field 15)"));
+});
+await Check("assignment lookup identifies bad optional relation without suppressing other employees", async () =>
+{
+    foreach (var field in new[] { 75, 77 })
+    {
+        using var f = new Fixture();
+        f.Server.RowsByTable[f.Settings.AssignmentsTable] = [FakeApi.Row((3, 201), (13, "Other work"), (15, 100), (field, "not a number"), (73, new[] { new { email = "someone.else@example.com" } }))];
+        var error = await DataError(() => f.Api.FindAssignmentsAsync("Other"));
+        True(error.Message.Contains($"field {field}")); True(error.Message.Contains("#201 — Other work")); True(error.Message.Contains("not a number"));
+    }
+});
+await Check("field diagnostics bound text and redact credentials without dumping records", async () =>
+{
+    using var f = new Fixture();
+    f.Server.RowsByTable[f.Settings.TasksTable] = [FakeApi.Row((3, 44), (7, "TOP-SECRET-TOGGL\n\u202e" + new string('x', 400)), (11, true), (17, "TOP-SECRET-QB"), (8, "unrelated private notes"))];
+    var error = await DataError(() => f.Api.ReadReferenceAsync());
+    True(!error.Message.Contains("TOP-SECRET")); True(!error.Message.Contains("\u202e")); True(!error.Message.Contains("private notes"));
+    True(error.Message.Contains("[redacted]")); True(error.Message.Length < 800);
+});
+await Check("invalid existing hours identify the timecard", async () =>
+{
+    using var f = new Fixture();
+    f.Server.RowsByTable[f.Settings.TimecardsTable] = [FakeApi.Row((3, 901), (7, "2026-09-28"), (10, "bad hours"), (19, "Existing work"), (24, new { id = f.Settings.EmployeeId }))];
+    var error = await DataError(() => f.Api.ReadExistingAsync(Fixture.Day));
+    True(error.Message.Contains("Timecards (bd3bsxtbp)")); True(error.Message.Contains("#901 — Existing work")); True(error.Message.Contains("Hours (field 10)"));
+});
 await Check("read uses local RFC3339 bounds and exact Toggl fields", async () =>
 {
     using var f = new Fixture();
@@ -209,6 +300,12 @@ await Check("line error becomes known failure and stops dependent rows", async (
     using var f = new Fixture(); var s = await f.Read(); var p = f.Proposal(s); f.Server.WriteMode = "line-error";
     var r = await f.Service.SubmitAsync(s, p, Rules.Validate(s, p).Rows); Equal("failed", r.Rows[0].Status); Equal("partial", r.Status); Equal(1, f.Server.WriteCount);
 });
+await Check("fractional created IDs stay unknown and never become a confirmed record", async () =>
+{
+    using var f = new Fixture(); var s = await f.Read(); var p = f.Proposal(s); f.Server.WriteMode = "fractional-id";
+    var receipt = await f.Service.SubmitAsync(s, p, Rules.Validate(s, p).Rows);
+    Equal("unknown", receipt.Status); Equal("unknown", receipt.Rows[0].Status); Equal<int?>(null, receipt.Rows[0].RecordId); Equal(1, f.Server.WriteCount);
+});
 await Check("reconcile timeout with one exact new record", async () =>
 {
     using var f = new Fixture(); var s = await f.Read(); var p = f.Proposal(s); f.Server.WriteMode = "commit-timeout";
@@ -291,6 +388,11 @@ async Task Check(string name, Func<Task> action)
 static void True(bool value) { if (!value) throw new Exception("Expected true"); }
 static void Equal<T>(T expected, T actual) { if (!EqualityComparer<T>.Default.Equals(expected, actual)) throw new Exception($"Expected {expected}, got {actual}"); }
 static async Task Throws<T>(Func<Task> action) where T : Exception { try { await action(); } catch (T) { return; } throw new Exception("Expected " + typeof(T).Name); }
+static async Task<QuickbaseDataException> DataError(Func<Task> action)
+{
+    try { await action(); } catch (QuickbaseDataException error) { return error; }
+    throw new Exception("Expected contextual Quickbase error");
+}
 
 sealed class Fixture : IDisposable
 {
@@ -314,6 +416,7 @@ sealed class Fixture : IDisposable
 
 sealed class FakeApi : HttpMessageHandler
 {
+    public Dictionary<string, List<object>> RowsByTable = [];
     public string EntryUrl = "";
     public string? IdentityXml;
     public string IdentityRequestXml = "";
@@ -351,6 +454,7 @@ sealed class FakeApi : HttpMessageHandler
                 "bd3bsxtbp" => Existing.Select(e => Row((3, e.RecordId), (7, e.Date.ToString("yyyy-MM-dd")), (10, e.Hours), (11, e.Project), (16, e.Task), (22, e.Category), (24, new { id = "123.test", email = "person@example.com" }), (19, e.Description), (73, e.Assignment))).ToList(),
                 _ => throw new Exception("Unexpected table")
             };
+            if (RowsByTable.TryGetValue(table!, out var overrideRows)) rows = overrideRows;
             if (table == "beb9dvs6p") CategoryQueries++;
             var total = OverCap ? 20001 : rows.Count + (ChangingTotal && skip > 0 ? 1 : 0);
             return Json(new { data = rows.Skip(skip).Take(table == "beb9dvs6p" ? CategoryPageSize : 1000).ToArray(), metadata = new { totalRecords = total } });
@@ -366,12 +470,13 @@ sealed class FakeApi : HttpMessageHandler
             }
             if (WriteMode is "timeout" or "commit-timeout") throw new TaskCanceledException("Sensitive transport data must not escape");
             if (WriteMode == "malformed") return Text("invalid-json");
+            if (WriteMode == "fractional-id") return Json(new { metadata = new { createdRecordIds = new[] { 501.5m } } });
             if (WriteMode == "line-error") return Json(new { metadata = new { createdRecordIds = Array.Empty<int>(), lineErrors = new Dictionary<string, string[]> { ["1"] = ["Rejected"] } } });
             return Json(new { metadata = new { createdRecordIds = new[] { 500 + WriteCount }, lineErrors = new Dictionary<string, string[]>() } });
         }
         throw new Exception("Unexpected mock request: " + url.AbsolutePath);
     }
-    private static object Row(params (int Id, object? Value)[] cells) => cells.ToDictionary(c => c.Id.ToString(), c => new { value = c.Value });
+    public static object Row(params (int Id, object? Value)[] cells) => cells.ToDictionary(c => c.Id.ToString(), c => new { value = c.Value });
     private static HttpResponseMessage Json(object value) => Text(JsonSerializer.Serialize(value));
     private static HttpResponseMessage Text(string text) => new(HttpStatusCode.OK) { Content = new StringContent(text, Encoding.UTF8) };
 }

@@ -197,26 +197,28 @@ public sealed class TimecardApi : IDisposable
         return raw.Select(r =>
         {
             if (!DateOnly.TryParse(CellString(r, 7), CultureInfo.InvariantCulture, DateTimeStyles.None, out var recordDate) || recordDate != date)
-                throw new InvalidDataException("Quickbase returned an existing timecard outside the selected date.");
+                throw FieldError(r, settings.TimecardsTable, 7, "Date", $"the selected date {date:yyyy-MM-dd}");
             var employee = Cell(r, 24);
             if (String(employee, "id") != settings.EmployeeId)
-                throw new InvalidDataException("Quickbase returned an existing timecard for an unexpected employee. Verify the employee field mapping.");
-            return new ExistingTimecard(Int(Cell(r, 3)), recordDate, Decimal(Cell(r, 10)), Int(Cell(r, 11)), Int(Cell(r, 16)), Int(Cell(r, 22)), NullableInt(Cell(r, 73)), CellString(r, 19));
+                throw FieldError(r, settings.TimecardsTable, 24, "Employee", "the verified Quickbase user; check the employee field mapping");
+            return new ExistingTimecard(RecordId(r, settings.TimecardsTable, 3, "Record ID"), recordDate, Hours(r), RecordId(r, settings.TimecardsTable, 11, "Project"), RecordId(r, settings.TimecardsTable, 16, "Task"), RecordId(r, settings.TimecardsTable, 22, "Category"), OptionalRecordId(r, settings.TimecardsTable, 73, "Assignment"), CellString(r, 19));
         }).OrderBy(r => r.RecordId).ToList();
     }
 
     public async Task<ReferenceData> ReadReferenceAsync(CancellationToken ct = default)
     {
-        var categories = (await QueryAllAsync(settings.CategoriesTable, [3, 6], null, ct)).Select(r => new CategoryRecord(Int(Cell(r, 3)), CellString(r, 6))).ToList();
+        var categories = (await QueryAllAsync(settings.CategoriesTable, [3, 6], null, ct)).Select(r => new CategoryRecord(RecordId(r, settings.CategoriesTable, 3, "Record ID"), CellString(r, 6))).ToList();
         var tasks = (await QueryAllAsync(settings.TasksTable, [3, 7, 11, 17], null, ct))
-            .Where(r => Truth(Cell(r, 11))).Select(r => new TaskRecord(Int(Cell(r, 3)), CellString(r, 7), Int(Cell(r, 17)))).ToList();
+            .Where(r => Truth(Cell(r, 11))).Select(r => new TaskRecord(RecordId(r, settings.TasksTable, 3, "Record ID"), CellString(r, 7), RecordId(r, settings.TasksTable, 17, "Category"))).ToList();
         var assignmentRows = await QueryAllAsync(settings.AssignmentsTable, AssignmentFields,
             "{11.XEX.'Completed'}AND{11.XEX.'Cancelled'}AND{11.XEX.'Canceled'}", ct);
-        var assignments = assignmentRows.Select(ParseAssignment)
-            .Where(a => a.Employees.Contains(settings.Email, StringComparer.OrdinalIgnoreCase) && !IsClosed(a.Status)).ToList();
+        // Only personal, open assignments belong in this read. A missing relation on
+        // somebody else's assignment must not prevent this user's connection test.
+        var assignments = assignmentRows.Where(r => AssignmentEmployees(r).Contains(settings.Email, StringComparer.OrdinalIgnoreCase) && !IsClosed(CellString(r, 11)))
+            .Select(ParseAssignment).ToList();
         var projectWhere = settings.InternalProjectId > 0 ? $"{{3.EX.'{settings.InternalProjectId}'}}" : $"{{6.CT.'{EscapeQuery(settings.InternalProjectSearch)}'}}";
         var projects = (await QueryAllAsync(settings.ProjectsTable, [3, 6], projectWhere, ct))
-            .Select(r => new ProjectRecord(Int(Cell(r, 3)), CellString(r, 6))).ToList();
+            .Select(r => new ProjectRecord(RecordId(r, settings.ProjectsTable, 3, "Record ID"), CellString(r, 6))).ToList();
         // Multiple annual project matches must be selected explicitly in settings, never guessed.
         var internalProject = projects.Count == 1 ? projects[0] : null;
         return new ReferenceData { Tasks = tasks.OrderBy(t => t.Id).ToList(), Categories = categories.OrderBy(c => c.Id).ToList(), Assignments = assignments.OrderBy(a => a.Id).ToList(), InternalProject = internalProject };
@@ -239,14 +241,16 @@ public sealed class TimecardApi : IDisposable
     internal async Task<ProjectRecord?> ReadProjectAsync(int id, CancellationToken ct)
     {
         var rows = await QueryAllAsync(settings.ProjectsTable, [3, 6], $"{{3.EX.'{id}'}}", ct);
-        return rows.Count == 1 ? new ProjectRecord(Int(Cell(rows[0], 3)), CellString(rows[0], 6)) : null;
+        return rows.Count == 1 ? new ProjectRecord(RecordId(rows[0], settings.ProjectsTable, 3, "Record ID"), CellString(rows[0], 6)) : null;
     }
     internal static bool IsClosed(string status) => new[] { "closed", "complete", "completed", "cancelled", "canceled", "inactive", "archived" }.Contains(status.Trim(), StringComparer.OrdinalIgnoreCase);
-    private static AssignmentRecord ParseAssignment(JsonElement row) => new(Int(Cell(row, 3)), CellString(row, 13), Int(Cell(row, 15)), CellString(row, 16), CellString(row, 23), CellString(row, 11), StripHtml(CellString(row, 8)))
+    private AssignmentRecord ParseAssignment(JsonElement row) => new(RecordId(row, settings.AssignmentsTable, 3, "Record ID"), CellString(row, 13), RecordId(row, settings.AssignmentsTable, 15, "Project"), CellString(row, 16), CellString(row, 23), CellString(row, 11), StripHtml(CellString(row, 8)))
     {
-        Employees = Cell(row, 73).ValueKind == JsonValueKind.Array ? Cell(row, 73).EnumerateArray().Select(u => String(u, "email")).Where(e => e.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(e => e, StringComparer.OrdinalIgnoreCase).ToList() : [],
-        TaskId = NullableInt(Cell(row, 77)), CategoryId = NullableInt(Cell(row, 75))
+        Employees = AssignmentEmployees(row),
+        TaskId = OptionalRecordId(row, settings.AssignmentsTable, 77, "Task"), CategoryId = OptionalRecordId(row, settings.AssignmentsTable, 75, "Category")
     };
+    private static List<string> AssignmentEmployees(JsonElement row) => Cell(row, 73).ValueKind == JsonValueKind.Array
+        ? Cell(row, 73).EnumerateArray().Select(u => String(u, "email")).Where(e => e.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(e => e, StringComparer.OrdinalIgnoreCase).ToList() : [];
 
     internal async Task<List<JsonElement>> QueryAllAsync(string table, int[] fields, string? where, CancellationToken ct)
     {
@@ -272,8 +276,8 @@ public sealed class TimecardApi : IDisposable
             }
             foreach (var row in data.EnumerateArray())
             {
-                var id = Int(Cell(row, 3));
-                if (id <= 0 || !seenIds.Add(id)) throw new InvalidDataException("Quickbase pagination repeated or omitted a record ID. Read again.");
+                var id = RecordId(row, table, 3, "Record ID", resultRow: output.Count + 1);
+                if (!seenIds.Add(id)) throw FieldError(row, table, 3, "Record ID", "a unique record ID across all pages", output.Count + 1);
                 output.Add(row.Clone());
             }
             if (output.Count > RecordCap) throw new InvalidDataException("Quickbase exceeded the read safety limit; partial results were discarded.");
@@ -308,7 +312,8 @@ public sealed class TimecardApi : IDisposable
             }
             using var document = ParseJson(await ReadLimitedAsync(response, ct), "Quickbase");
             if (!document.RootElement.TryGetProperty("metadata", out var meta)) return Unknown(row);
-            var created = meta.TryGetProperty("createdRecordIds", out var ids) && ids.ValueKind == JsonValueKind.Array ? ids.EnumerateArray().Select(Int).ToArray() : [];
+            var created = meta.TryGetProperty("createdRecordIds", out var ids) && ids.ValueKind == JsonValueKind.Array
+                ? ids.EnumerateArray().Select(value => TryRecordId(value, out int id) && id > 0 ? id : throw new InvalidDataException("Quickbase returned an invalid created record ID.")).ToArray() : [];
             var hasErrors = meta.TryGetProperty("lineErrors", out var errors) && errors.ValueKind == JsonValueKind.Object && errors.EnumerateObject().Any();
             var updated = meta.TryGetProperty("updatedRecordIds", out var updates) && updates.ValueKind == JsonValueKind.Array && updates.GetArrayLength() > 0;
             if (created.Length == 1 && created[0] > 0 && !hasErrors && !updated) return new RowOutcome { Row = row, Status = "created", RecordId = created[0], Message = "Created in Quickbase." };
@@ -387,13 +392,69 @@ public sealed class TimecardApi : IDisposable
             throw new ArgumentException("Search text cannot contain quotes, braces, backslashes, or control characters.");
         return value;
     }
-    private static JsonElement Cell(JsonElement row, int id) => row.TryGetProperty(id.ToString(CultureInfo.InvariantCulture), out var cell) && cell.TryGetProperty("value", out var value) ? value : default;
+    private static JsonElement Cell(JsonElement row, int id) => row.ValueKind == JsonValueKind.Object && row.TryGetProperty(id.ToString(CultureInfo.InvariantCulture), out var cell) && cell.ValueKind == JsonValueKind.Object && cell.TryGetProperty("value", out var value) ? value : default;
     private static string CellString(JsonElement row, int id) => ValueString(Cell(row, id));
     private static string String(JsonElement value, string name) => value.ValueKind == JsonValueKind.Object && value.TryGetProperty(name, out var property) ? ValueString(property) : "";
     private static string ValueString(JsonElement value) => value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined ? "" : value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : value.ToString();
-    private static int Int(JsonElement value) => int.TryParse(ValueString(value), NumberStyles.Integer, CultureInfo.InvariantCulture, out var result) ? result : throw new InvalidDataException("The service returned an invalid numeric record ID.");
-    private static int? NullableInt(JsonElement value) => string.IsNullOrEmpty(ValueString(value)) || ValueString(value) == "0" ? null : Int(value);
-    private static decimal Decimal(JsonElement value) => decimal.TryParse(ValueString(value), NumberStyles.Number, CultureInfo.InvariantCulture, out var result) ? result : throw new InvalidDataException("Quickbase returned invalid hours.");
+    private static bool TryRecordId(JsonElement value, out int result)
+    {
+        result = 0;
+        if (value.ValueKind is not (JsonValueKind.Number or JsonValueKind.String)) return false;
+        var text = ValueString(value).Trim();
+        // Numeric relationship fields may be serialized as 44.0. Accept only
+        // exact whole values; never round a fraction into a different record ID.
+        if (!Regex.IsMatch(text, @"\A[+]?[0-9]+(?:\.0+)?\z")) return false;
+        int point = text.IndexOf('.');
+        return int.TryParse(point < 0 ? text : text[..point], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out result);
+    }
+    private int RecordId(JsonElement row, string table, int field, string fieldName, int? resultRow = null)
+    {
+        if (TryRecordId(Cell(row, field), out int result) && result > 0) return result;
+        throw FieldError(row, table, field, fieldName, "a positive whole-number record ID", resultRow);
+    }
+    private int? OptionalRecordId(JsonElement row, string table, int field, string fieldName)
+    {
+        var value = Cell(row, field);
+        if (value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined || value.ValueKind == JsonValueKind.String && string.IsNullOrWhiteSpace(value.GetString())) return null;
+        if (TryRecordId(value, out int result) && result >= 0) return result == 0 ? null : result;
+        throw FieldError(row, table, field, fieldName, "a whole-number record ID, or blank/zero for an optional link");
+    }
+    private decimal Hours(JsonElement row)
+    {
+        var value = Cell(row, 10);
+        if (value.ValueKind is JsonValueKind.Number or JsonValueKind.String && decimal.TryParse(ValueString(value), NumberStyles.Number, CultureInfo.InvariantCulture, out var result)) return result;
+        throw FieldError(row, settings.TimecardsTable, 10, "Hours", "a numeric hours value");
+    }
+    private QuickbaseDataException FieldError(JsonElement row, string table, int field, string fieldName, string expected, int? resultRow = null)
+    {
+        var (tableName, nameField) = table == settings.TasksTable ? ("Tasks", 7) : table == settings.AssignmentsTable ? ("Assignments", 13)
+            : table == settings.ProjectsTable ? ("Projects", 6) : table == settings.CategoriesTable ? ("Categories", 6) : ("Timecards", 19);
+        bool hasId = TryRecordId(Cell(row, 3), out int recordId) && recordId > 0;
+        string record = hasId ? $"#{recordId}" : $"unavailable (result row {resultRow?.ToString(CultureInfo.InvariantCulture) ?? "unknown"})";
+        string name = DiagnosticText(CellString(row, nameField));
+        if (name.Length > 0) record += $" — {name}";
+        var value = Cell(row, field);
+        string received = value.ValueKind switch
+        {
+            JsonValueKind.Undefined => "missing field or value",
+            JsonValueKind.Null => "null (blank)",
+            JsonValueKind.String => string.IsNullOrWhiteSpace(value.GetString()) ? "empty text (blank)" : $"text \"{DiagnosticText(value.GetString()!)}\"",
+            JsonValueKind.Number => $"number {DiagnosticText(value.GetRawText())}",
+            JsonValueKind.Array => "an array (not a single numeric value)",
+            JsonValueKind.Object => "an object (not a numeric value)",
+            _ => $"a {value.ValueKind.ToString().ToLowerInvariant()} value"
+        };
+        string url = $"https://{settings.Realm}/db/{table}?a=dr&rid={recordId}";
+        return new QuickbaseDataException($"Quickbase could not read {fieldName}.\nTable: {tableName} ({table})\nRecord: {record}\nField: {fieldName} (field {field})\nReceived: {received}\nExpected: {expected}.\nCheck this record and the Quickbase table/field mapping.", hasId ? url : null);
+    }
+    private string DiagnosticText(string value)
+    {
+        // Show only the relevant field/name, never a whole record, response or credential.
+        foreach (var token in new[] { credentials.TogglToken, credentials.QuickbaseToken })
+            if (token.Length > 0) value = value.Replace(token, "[redacted]", StringComparison.Ordinal);
+        value = new string(value.Select(c => char.IsControl(c) || char.GetUnicodeCategory(c) == UnicodeCategory.Format ? ' ' : c).ToArray());
+        return value.Length > 100 ? value[..100] + "…" : value;
+    }
     private static long Long(JsonElement value, string name) => long.TryParse(String(value, name), NumberStyles.Integer, CultureInfo.InvariantCulture, out var result) ? result : throw new InvalidDataException("Toggl returned an invalid numeric value.");
     private static bool Truth(JsonElement value) => value.ValueKind == JsonValueKind.True || ValueString(value).Equals("true", StringComparison.OrdinalIgnoreCase) || ValueString(value) == "1";
     private static string StripHtml(string value) => WebUtility.HtmlDecode(Regex.Replace(value, "<[^>]+>", " ")).Trim();

@@ -15,8 +15,10 @@ internal sealed class SettingsWindow : Window
     private readonly Dictionary<string,TextBox> _fields=[];
     private readonly PasswordBox _toggl = new(), _quickbase = new();
     private readonly CheckBox _add = new() { Content="Add a Timecards entry on weekdays" }, _fill = new() { Content="Fill remaining weekday hours with Misc internal" }, _identity = new() { Content="The verified Toggl and Quickbase accounts shown below are mine." };
-    private readonly TextBlock _status = new() { Text="Test both connections to confirm your identity before saving.", TextWrapping=TextWrapping.Wrap, Margin=new Thickness(0,14,0,12) };
+    private readonly TextBox _status = new() { Text="Test both connections to confirm your identity before saving.", IsReadOnly=true, TextWrapping=TextWrapping.Wrap, BorderThickness=new Thickness(0), Background=Brushes.Transparent, Padding=new Thickness(0), MaxHeight=180, VerticalScrollBarVisibility=ScrollBarVisibility.Auto, Margin=new Thickness(0,14,0,12) };
     private readonly Button _test = new() { Content="Test connections" }, _save=new() { Content="Save settings" };
+    private readonly Button _copyError = new() { Content="Copy error details", Visibility=Visibility.Collapsed }, _openRecord = new() { Content="Open Quickbase record ↗", Visibility=Visibility.Collapsed };
+    private string? _recordUrl;
     private string? _testedConfiguration;
     private string _detectedEmployeeId;
     private string? _testedToggl, _testedQuickbase;
@@ -37,7 +39,7 @@ internal sealed class SettingsWindow : Window
         panel.Children.Add(Label("Toggl API token")); panel.Children.Add(_toggl);
         panel.Children.Add(Label("Quickbase user token")); panel.Children.Add(_quickbase);
         var tokenHelp=new Button { Content="How to get a Quickbase token ↗",FontSize=12,Padding=new Thickness(10,6,10,6),Margin=new Thickness(0,8,0,0),HorizontalAlignment=HorizontalAlignment.Left };
-        tokenHelp.Click+=(_,_)=> { try { Process.Start(new ProcessStartInfo("https://help.quickbase.com/docs/create-and-use-user-tokens") { UseShellExecute=true }); } catch(Exception ex) { _status.Text=ex.Message; } };
+        tokenHelp.Click+=(_,_)=> { try { Process.Start(new ProcessStartInfo("https://help.quickbase.com/docs/create-and-use-user-tokens") { UseShellExecute=true }); } catch(Exception ex) { ShowError(ex); } };
         panel.Children.Add(tokenHelp);
         panel.Children.Add(new TextBlock { Text="Tokens are saved in Windows Credential Manager. They are never included in the Copilot file.",FontSize=12,Foreground=Brushes.SlateGray,Margin=new Thickness(0,7,0,8),TextWrapping=TextWrapping.Wrap });
         _identity.Margin=new Thickness(0,8,0,10); panel.Children.Add(_identity);
@@ -56,6 +58,10 @@ internal sealed class SettingsWindow : Window
         AddField(advanced,"timecardsTable","Timecards table ID",settings.TimecardsTable); AddField(advanced,"tasksTable","Tasks table ID",settings.TasksTable); AddField(advanced,"projectsTable","Projects table ID",settings.ProjectsTable); AddField(advanced,"assignmentsTable","Assignments table ID",settings.AssignmentsTable); AddField(advanced,"categoriesTable","Categories table ID",settings.CategoriesTable);
         panel.Children.Add(new Expander { Header="Advanced · Case Manager table configuration",Content=advanced,Margin=new Thickness(0,20,0,0) });
         var footer=new StackPanel(); footer.Children.Add(_status);
+        var errorActions=new WrapPanel();
+        _copyError.Margin=new Thickness(0,0,8,12); _copyError.Click+=(_,_)=> { try { Clipboard.SetText(_status.Text); } catch(Exception ex) { MessageBox.Show(this,ex.Message,"Could not copy error"); } };
+        _openRecord.Margin=new Thickness(0,0,0,12); _openRecord.Click+=(_,_)=> { if(_recordUrl is null) return; try { Process.Start(new ProcessStartInfo(_recordUrl) { UseShellExecute=true }); } catch(Exception ex) { MessageBox.Show(this,ex.Message,"Could not open record"); } };
+        errorActions.Children.Add(_copyError); errorActions.Children.Add(_openRecord); footer.Children.Add(errorActions);
         var buttons=new StackPanel { Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Right };
         _test.Margin=new Thickness(0,0,10,0); _test.Click+=Test_Click; _save.Style=(Style)FindResource("Primary"); _save.Click+=Save_Click; buttons.Children.Add(_test); buttons.Children.Add(_save); footer.Children.Add(buttons); Grid.SetRow(footer,2); outer.Children.Add(footer); Content=outer;
         _fields["email"].TextChanged+=(_,_)=>ClearDetectedIdentity();
@@ -72,8 +78,19 @@ internal sealed class SettingsWindow : Window
     }
     private void ClearDetectedIdentity()
     {
+        ClearErrorActions();
         _detectedEmployeeId=""; _testedConfiguration=null; _identity.IsChecked=false;
         _status.Text="Test connections to verify both accounts.";
+    }
+    private void ClearErrorActions()
+    {
+        _recordUrl=null; _copyError.Visibility=_openRecord.Visibility=Visibility.Collapsed;
+    }
+    private void ShowError(Exception error)
+    {
+        _status.Text=error.Message; _copyError.Visibility=Visibility.Visible;
+        _recordUrl=(error as QuickbaseDataException)?.RecordUrl;
+        _openRecord.Visibility=_recordUrl is null?Visibility.Collapsed:Visibility.Visible;
     }
     private AppSettings Collect(bool allowMissingEmployeeId=false)
     {
@@ -87,6 +104,7 @@ internal sealed class SettingsWindow : Window
     }
     private async void Test_Click(object sender,RoutedEventArgs e)
     {
+        ClearErrorActions();
         _test.IsEnabled=false; _save.IsEnabled=false; _inputPanel.IsEnabled=false; _testedConfiguration=null;
         try
         {
@@ -105,11 +123,12 @@ internal sealed class SettingsWindow : Window
             _testedConfiguration=System.Text.Json.JsonSerializer.Serialize(settings,JsonDefaults.Options); _testedToggl=credentials.TogglToken; _testedQuickbase=credentials.QuickbaseToken;
             _status.Text=$"✓ {identity}\nInternal project: {reference.InternalProject.Name} ({reference.InternalProject.Id}). Confirm your identity and save.";
         }
-        catch(Exception ex) { _status.Text=ex.Message; }
+        catch(Exception ex) { ShowError(ex); }
         finally { _test.IsEnabled=true; _save.IsEnabled=true; _inputPanel.IsEnabled=true; }
     }
     private void Save_Click(object sender,RoutedEventArgs e)
     {
+        ClearErrorActions();
         try
         {
             var settings=Collect();
@@ -117,7 +136,7 @@ internal sealed class SettingsWindow : Window
             if(_testedConfiguration!=System.Text.Json.JsonSerializer.Serialize(settings,JsonDefaults.Options)||_testedToggl!=_toggl.Password.Trim()||_testedQuickbase!=_quickbase.Password.Trim()) throw new ArgumentException("Test connections with these settings before saving.");
             CredentialVault.Save(settings,new Credentials(_toggl.Password.Trim(),_quickbase.Password.Trim())); _store.SaveSettings(settings); SavedSettings=settings; DialogResult=true; Close();
         }
-        catch(Exception ex) { _status.Text=ex.Message; }
+        catch(Exception ex) { ShowError(ex); }
     }
     internal string SmokeSummary()
     {
@@ -133,6 +152,12 @@ internal sealed class SettingsWindow : Window
         _quickbase.Password="changed-synthetic-token";
         if(_detectedEmployeeId!=""||_testedConfiguration!=null||_identity.IsChecked==true) throw new InvalidOperationException("Changing the token retained a stale identity.");
         _fields["email"].Text=""; _toggl.Password=""; _quickbase.Password="";
-        return "PASS: setup accepts blank ID for discovery only\nPASS: detected user ID is kept out of the settings form\nPASS: token changes clear detected ID and verification\n";
+        ShowSampleError();
+        if(_copyError.Visibility!=Visibility.Visible||_openRecord.Visibility!=Visibility.Visible||!_status.IsReadOnly) throw new InvalidOperationException("Record errors must be selectable, copyable and linked.");
+        ShowError(new InvalidOperationException("Synthetic generic error"));
+        if(_recordUrl!=null||_openRecord.Visibility!=Visibility.Collapsed) throw new InvalidOperationException("An unrelated error retained a stale record link.");
+        ClearErrorActions(); _status.Text="Test connections to verify both accounts.";
+        return "PASS: setup accepts blank ID for discovery only\nPASS: detected user ID is kept out of the settings form\nPASS: token changes clear detected ID and verification\nPASS: detailed errors are copyable and record links cannot go stale\n";
     }
+    internal void ShowSampleError() => ShowError(new QuickbaseDataException("Quickbase could not read Category.\nTable: Tasks (example123)\nRecord: #44 — Sample internal task\nField: Category (field 17)\nReceived: null (blank)\nExpected: a positive whole-number record ID.\nCheck this record and the Quickbase table/field mapping.","https://demo.quickbase.com/db/example123?a=dr&rid=44"));
 }

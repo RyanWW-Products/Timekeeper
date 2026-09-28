@@ -72,6 +72,7 @@ Choose **Try a sample day** to explore export, proposal validation, and review w
 
 ## Common problems
 
+- **Quickbase cannot read a field:** The message identifies the table, record ID/name, field number and received value. Use **Open Quickbase record** to inspect the source, or **Copy error details** to share that specific diagnostic. A blank required relationship may need correction in Quickbase; an unexpected value may also indicate a field-mapping mismatch. If the record ID itself is missing, the message gives the result row's position instead. No timecards are written by a failed connection test.
 - **Credentials rejected:** Check your own tokens and required permissions in Settings. Copilot cannot repair a token, and you should not send it one.
 - **Quickbase account mismatch:** Use the Quickbase sign-in email belonging to the token, then test again. The application discovers the corresponding ID; do not try to enter an ID manually.
 - **Internal project not found:** Check its name in Settings, or ask your Quickbase administrator for the correct internal project ID. This is a project identifier, separate from your automatically detected user ID.
