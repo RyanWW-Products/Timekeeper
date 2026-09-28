@@ -17,6 +17,7 @@ internal sealed class UpdatesWindow : Window
     private readonly Button _check = new() { Content = "Check for updates" }, _install = new() { Content = "Download and install", IsEnabled = false }, _cancel = new() { Content = "Cancel download", Visibility = Visibility.Collapsed };
     private readonly PasswordBox _token = new();
     private readonly Button _saveToken = new() { Content = "Save update access" };
+    private readonly Expander _access = new() { Header = "GitHub access" };
     private readonly ProgressBar _progress = new() { Height = 5, Margin = new Thickness(0, 10, 0, 10), Visibility = Visibility.Collapsed };
     private AppRelease? _release;
     private CancellationTokenSource? _cancellation;
@@ -39,11 +40,12 @@ internal sealed class UpdatesWindow : Window
         var page = new Button { Content = "Open releases page ↗", HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 14, 0, 12) };
         page.Click += (_, _) => { try { Process.Start(new ProcessStartInfo(UpdateClient.ReleasesPage) { UseShellExecute = true }); } catch (Exception ex) { _status.Text = ex.Message; } }; panel.Children.Add(page);
         var access = new StackPanel();
-        access.Children.Add(new TextBlock { Text = "Only needed for private releases or GitHub request limits. Use a fine-grained GitHub token with Contents: read access to the release repository. Leave blank for public releases. Saved in Windows Credential Manager.", TextWrapping = TextWrapping.Wrap, FontSize = 12, Margin = new Thickness(0, 8, 0, 8) });
+        access.Children.Add(new TextBlock { Text = $"Private releases require a GitHub token here, even when you are signed into GitHub in your browser. Use a fine-grained token with Contents: read access to {UpdateClient.Repository}; your organization may require approval. This is separate from your Quickbase and Toggl tokens. Leave blank for public releases. Saved in Windows Credential Manager.", TextWrapping = TextWrapping.Wrap, FontSize = 12, Margin = new Thickness(0, 8, 0, 8) });
         access.Children.Add(_token); _saveToken.Margin = new Thickness(0, 10, 0, 0); _saveToken.HorizontalAlignment = HorizontalAlignment.Left;
         _saveToken.Click += (_, _) => { try { CredentialVault.SaveUpdateToken(_token.Password.Trim()); _release = null; _install.IsEnabled = false; _status.Text = "Update access saved. Check for updates to use it."; } catch (Exception ex) { _status.Text = ex.Message; } };
-        access.Children.Add(_saveToken); panel.Children.Add(new Expander { Header = "GitHub access (optional)", Content = access });
-        Content = panel;
+        access.Children.Add(_saveToken); _access.Content = access; panel.Children.Add(_access);
+        MaxHeight = Math.Max(300, SystemParameters.WorkArea.Height - 40);
+        Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         if (!smoke) try { _token.Password = CredentialVault.LoadUpdateToken(); } catch (Exception ex) { _status.Text = ex.Message; }
         Closing += (_, e) => { if (_busy) { _cancellation?.Cancel(); e.Cancel = true; _status.Text = "Cancelling the update request…"; } };
     }
@@ -68,7 +70,7 @@ internal sealed class UpdatesWindow : Window
             _notes.Text = _release?.Notes ?? "You have the latest available stable version.";
         }
         catch (OperationCanceledException) { _status.Text = "Update check cancelled or timed out."; }
-        catch (Exception ex) { _status.Text = ex.Message; }
+        catch (Exception ex) { ShowError(ex); }
         finally { _cancellation = null; Busy(false); }
     }
     private async void Install_Click(object sender, RoutedEventArgs e)
@@ -88,9 +90,14 @@ internal sealed class UpdatesWindow : Window
             process.Dispose(); started = true;
         }
         catch (OperationCanceledException) { _status.Text = "Update download cancelled or timed out. Your installed app is unchanged."; }
-        catch (Exception ex) { _status.Text = ex.Message; }
+        catch (Exception ex) { ShowError(ex); }
         finally { _cancellation = null; Busy(false); }
         if (started) Application.Current.Shutdown();
+    }
+    private void ShowError(Exception error)
+    {
+        _status.Text = error.Message;
+        if (error is UpdateAccessException) _access.IsExpanded = true;
     }
     internal string SmokeSummary()
     {
@@ -98,6 +105,8 @@ internal sealed class UpdatesWindow : Window
         Busy(true, true);
         if (_check.IsEnabled || _install.IsEnabled || _token.IsEnabled || _cancel.Visibility != Visibility.Visible) throw new InvalidOperationException("Update controls were not gated during download.");
         Busy(false);
-        return "PASS: updates require a checked release and disable competing actions during download\n";
+        ShowError(new UpdateAccessException("GitHub could not return the release. Private releases require a GitHub token with Contents: read access. Timekeeper cannot use your browser's GitHub login."));
+        if (!_access.IsExpanded || _install.IsEnabled) throw new InvalidOperationException("Update access help was not shown after an access failure.");
+        return "PASS: updates require a checked release, disable competing actions during download, and show access help after an authentication failure\n";
     }
 }

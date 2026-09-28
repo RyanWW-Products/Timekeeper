@@ -39,7 +39,7 @@ public partial class App : Application
                 RenderWindow(errorWindow,Path.Combine(output,"timekeeper-settings-error.png"),720,850);
                 var updatesWindow=new UpdatesWindow(window,smoke:true);
                 File.AppendAllText(Path.Combine(output,"ui-smoke.txt"),updatesWindow.SmokeSummary());
-                RenderWindow(updatesWindow,Path.Combine(output,"timekeeper-updates.png"),620,600);
+                RenderWindow(updatesWindow,Path.Combine(output,"timekeeper-updates.png"),620,750);
                 Shutdown(0);
             }
             else window.Show();

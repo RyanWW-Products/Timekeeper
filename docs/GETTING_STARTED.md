@@ -64,7 +64,7 @@ If a request times out or its outcome is unclear, select its receipt in **Submis
 
 Open **Updates** in the sidebar and choose **Check for updates**. If a newer version is available, review its notes and choose **Download and install**. Timekeeper verifies the download, closes, and opens the Windows installer. Complete that installer and reopen Timekeeper; your settings and history remain in place. Finish any active read or write first. Cancelling the download leaves your installed app unchanged.
 
-For private GitHub releases, expand **GitHub access (optional)** and save a fine-grained token with **Contents: Read-only** access to `RyanWW-Products/Timekeeper`. Your GitHub account must have access to that repository; your organization may also require token approval. This is separate from your Toggl and Quickbase tokens. If you prefer, use **Open releases page**, sign into GitHub in your browser, and download the installer there. Public releases do not need a token.
+For private GitHub releases, expand **GitHub access** and save a fine-grained token with **Contents: Read-only** access to `RyanWW-Products/Timekeeper`. Your GitHub account must have access to that repository; your organization may also require token approval. This is separate from your Toggl and Quickbase tokens. Signing into GitHub in your browser does not sign the app in. If you prefer, use **Open releases page**, sign into GitHub in your browser, and download the installer there. Public releases do not need a token. Access errors automatically expand these settings; an expired or revoked token must be replaced and saved before checking again.
 
 ## Try it without live data
 

@@ -8,6 +8,8 @@ namespace Timekeeper.Core;
 
 public sealed record AppRelease(Version Version, string Tag, string Notes, Uri Page, Uri AssetApi, string FileName, long Size, string Sha256);
 
+public sealed class UpdateAccessException(string message) : InvalidOperationException(message);
+
 /// <summary>Explicit, user-requested updates from the application's fixed GitHub release feed.</summary>
 public sealed class UpdateClient : IDisposable
 {
@@ -132,16 +134,24 @@ public sealed class UpdateClient : IDisposable
         }
         return request;
     }
-    private static void EnsureSuccess(HttpResponseMessage response)
+    private void EnsureSuccess(HttpResponseMessage response)
     {
         if (response.IsSuccessStatusCode) return;
-        throw new InvalidOperationException(response.StatusCode switch
-        {
-            HttpStatusCode.NotFound => "No release is available, or this GitHub account cannot access it. Open the releases page to check.",
-            HttpStatusCode.Unauthorized => "GitHub did not accept the update access token.",
-            HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests => "GitHub could not allow this check. Check access permissions, or try again later if the request limit was reached.",
-            _ => $"GitHub could not complete the update request (HTTP {(int)response.StatusCode}). Try again later."
-        });
+        bool rateLimited = response.StatusCode == HttpStatusCode.TooManyRequests ||
+            (response.StatusCode == HttpStatusCode.Forbidden &&
+             (response.Headers.RetryAfter is not null ||
+              (response.Headers.TryGetValues("X-RateLimit-Remaining", out var remaining) && remaining.Contains("0"))));
+        if (rateLimited)
+            throw new InvalidOperationException("GitHub's request limit was reached. Wait before checking again, or download through Open releases page.");
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            throw new UpdateAccessException(_token.Length == 0
+                ? $"GitHub could not return the release. If {Repository} is private, save a GitHub token with Contents: read access below, or use Open releases page and sign in. Timekeeper cannot use your browser's GitHub login."
+                : $"GitHub could not return the release with the saved token. Check that the token allows Contents: read access to {Repository} and has any required organization approval. Use Open releases page to confirm the release is available.");
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+            throw new UpdateAccessException("GitHub did not accept the saved update access token. It may be expired or revoked. Replace it below and save, then check again.");
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+            throw new UpdateAccessException($"GitHub denied this update request. Check the saved token's Contents: read access to {Repository} and any required organization approval, or use Open releases page.");
+        throw new InvalidOperationException($"GitHub could not complete the update request (HTTP {(int)response.StatusCode}). Try again later.");
     }
     private static async Task<byte[]> ReadLimitedAsync(HttpContent content, int limit, CancellationToken ct)
     {

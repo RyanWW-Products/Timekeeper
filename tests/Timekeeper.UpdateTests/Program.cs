@@ -37,11 +37,38 @@ await Check("missing installer rejected", async () => { using var f = new Fixtur
 await Check("missing checksum rejected", async () => { using var f = new Fixture { Digest = null }; await Reject(() => f.Check()); });
 await Check("oversized installer rejected", async () => { using var f = new Fixture { Size = 300L * 1024 * 1024 }; await Reject(() => f.Check()); });
 await Check("foreign asset URL rejected", async () => { using var f = new Fixture { AssetUrl = "https://api.github.com/repos/another/app/releases/assets/1" }; await Reject(() => f.Check()); });
-await Check("private feed access failure has actionable message", async () =>
+await Check("anonymous private feed error explains browser login and token setup", async () =>
+{
+    using var f = new Fixture(token: "") { Status = HttpStatusCode.NotFound };
+    var error = await AccessError(() => f.Check());
+    True(error.Message.Contains("browser's GitHub login")); True(error.Message.Contains(UpdateClient.Repository));
+    True(!f.SawApiToken);
+});
+await Check("authenticated private feed error explains repository and organization access", async () =>
 {
     using var f = new Fixture { Status = HttpStatusCode.NotFound };
-    try { await f.Check(); throw new Exception("Expected failure"); }
-    catch (InvalidOperationException e) { True(e.Message.Contains("access")); }
+    var error = await AccessError(() => f.Check());
+    True(error.Message.Contains("saved token")); True(error.Message.Contains("organization approval"));
+    True(error.Message.Contains(UpdateClient.Repository));
+});
+await Check("invalid token offers replacement", async () =>
+{
+    using var f = new Fixture { Status = HttpStatusCode.Unauthorized };
+    True((await AccessError(() => f.Check())).Message.Contains("expired or revoked"));
+});
+await Check("forbidden access offers permission guidance", async () =>
+{
+    using var f = new Fixture { Status = HttpStatusCode.Forbidden };
+    True((await AccessError(() => f.Check())).Message.Contains("Contents: read access"));
+});
+await Check("GitHub rate limits are distinguished from access failures", async () =>
+{
+    foreach (var status in new[] { HttpStatusCode.Forbidden, HttpStatusCode.TooManyRequests })
+    {
+        using var f = new Fixture { Status = status, RateLimited = true };
+        try { await f.Check(); throw new Exception("Expected failure"); }
+        catch (InvalidOperationException e) { True(e is not UpdateAccessException); True(e.Message.Contains("request limit")); }
+    }
 });
 await Check("verified download preserves bytes", async () =>
 {
@@ -92,6 +119,11 @@ static async Task Reject(Func<Task> action)
     try { await action(); } catch (InvalidOperationException) { return; }
     throw new Exception("Expected rejected update");
 }
+static async Task<UpdateAccessException> AccessError(Func<Task> action)
+{
+    try { await action(); } catch (UpdateAccessException e) { return e; }
+    throw new Exception("Expected update access error");
+}
 
 sealed class Fixture : HttpMessageHandler
 {
@@ -100,16 +132,16 @@ sealed class Fixture : HttpMessageHandler
     public long Size;
     public string Tag = "v0.3.0", AssetName = "Timekeeper-Setup-0.3.0-win-x64.exe";
     public string AssetUrl = "https://api.github.com/repos/" + UpdateClient.Repository + "/releases/assets/123";
-    public bool Prerelease, Draft, SawApiToken, SawCdn, SawCdnToken;
+    public bool Prerelease, Draft, SawApiToken, SawCdn, SawCdnToken, RateLimited;
     public string? Redirect;
     public HttpStatusCode Status = HttpStatusCode.OK;
     public string Directory = Path.Combine(Path.GetTempPath(), "Timekeeper-update-tests-" + Guid.NewGuid().ToString("N"));
     public UpdateClient Client;
     private readonly HttpClient _http;
-    public Fixture()
+    public Fixture(string token = "synthetic-github-token")
     {
         Digest = "sha256:" + Convert.ToHexString(SHA256.HashData(Bytes)); Size = Bytes.Length;
-        _http = new HttpClient(this, disposeHandler: false); Client = new UpdateClient("synthetic-github-token", _http);
+        _http = new HttpClient(this, disposeHandler: false); Client = new UpdateClient(token, _http);
     }
     public Task<AppRelease?> Check() => Client.CheckAsync(new Version(0, 2, 0));
     public async Task<string> Download() => await Client.DownloadAsync((await Check())!, Directory);
@@ -119,11 +151,15 @@ sealed class Fixture : HttpMessageHandler
         if (request.RequestUri!.Host == "api.github.com") SawApiToken |= request.Headers.Authorization?.Parameter == "synthetic-github-token";
         else { SawCdn = true; SawCdnToken |= request.Headers.Authorization is not null; }
         if (request.RequestUri!.AbsolutePath.EndsWith("/latest"))
-            return Task.FromResult(new HttpResponseMessage(Status) { Content = new StringContent(JsonSerializer.Serialize(new
+        {
+            var response = new HttpResponseMessage(Status) { Content = new StringContent(JsonSerializer.Serialize(new
             {
                 tag_name = Tag, draft = Draft, prerelease = Prerelease, body = "Update notes",
                 assets = new[] { new { name = AssetName, url = AssetUrl, digest = Digest, size = Size } }
-            })) });
+            })) };
+            if (RateLimited) response.Headers.Add("X-RateLimit-Remaining", "0");
+            return Task.FromResult(response);
+        }
         if (request.RequestUri.Host == "api.github.com" && Redirect is not null)
         {
             var response = new HttpResponseMessage(HttpStatusCode.Found); response.Headers.Location = new Uri(Redirect); return Task.FromResult(response);
