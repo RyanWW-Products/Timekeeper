@@ -1,7 +1,6 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using System.Xml.Linq;
 using Timekeeper.Core;
 
 var failures = new List<string>();
@@ -124,12 +123,18 @@ await Check("setup discovers token-owner identity with no employee ID", async ()
 {
     using var f = new Fixture(); using var http = new HttpClient(f.Server);
     var settings = f.Settings with { EmployeeId = "" };
-    f.Server.IdentityXml = "<qdbapi><errcode>0</errcode><user id='123.test'><email>person@example.com</email><firstName>Pat</firstName><lastName>Example</lastName></user></qdbapi>";
+    f.Server.IdentityJson = JsonSerializer.Serialize(new { result = "123.test;person@example.com;Pat Example" });
     var identity = await TimecardApi.DiscoverQuickbaseIdentityAsync(settings, new("TOP-SECRET-TOGGL", "TOP-SECRET-QB"), http);
     Equal("123.test", identity.EmployeeId); Equal("person@example.com", identity.Email); Equal("Pat Example", identity.DisplayName);
     Equal("", settings.EmployeeId); Equal(0, f.Server.WriteCount);
-    var sent = XElement.Parse(f.Server.IdentityRequestXml);
-    True(sent.Element("email") is null); Equal("TOP-SECRET-QB", sent.Element("usertoken")!.Value);
+    using var sent = JsonDocument.Parse(f.Server.IdentityRequestJson);
+    Equal(settings.TimecardsTable, sent.RootElement.GetProperty("from").GetString());
+    Equal("UserToID(User()) & \";\" & UserToEmail(User()) & \";\" & UserToName(User())", sent.RootElement.GetProperty("formula").GetString());
+    Equal(2, sent.RootElement.EnumerateObject().Count()); // no supplied email, employee ID, or record ID
+    True(!f.Server.IdentityRequestJson.Contains("TOP-SECRET"));
+    Equal("QB-USER-TOKEN TOP-SECRET-QB", f.Server.IdentityAuthorization);
+    Equal(settings.Realm, f.Server.IdentityRealm); Equal(HttpMethod.Post, f.Server.IdentityMethod);
+    Equal("https://api.quickbase.com/v1/formula/run", f.Server.IdentityUrl);
 });
 await Check("ordinary API constructor still rejects blank employee ID", () =>
 {
@@ -157,43 +162,70 @@ await Check("normal reads still reject a stale valid employee ID", async () =>
 await Check("discovery rejects another user's email without modifying settings", async () =>
 {
     using var f = new Fixture(); using var http = new HttpClient(f.Server);
-    f.Server.IdentityXml = "<qdbapi><errcode>0</errcode><user id='123.test'><email>someoneelse@example.com</email></user></qdbapi>";
+    f.Server.IdentityJson = JsonSerializer.Serialize(new { result = "123.test;someoneelse@example.com;Someone Else" });
     var settings = f.Settings with { EmployeeId = "" };
     await Throws<InvalidOperationException>(() => TimecardApi.DiscoverQuickbaseIdentityAsync(settings, new("a", "b"), http));
     Equal("", settings.EmployeeId); Equal(0, f.Server.WriteCount);
 });
-await Check("discovery rejects empty, anonymous, malformed and duplicate identities", async () =>
+await Check("discovery rejects empty, anonymous, malformed and duplicate identity results", async () =>
 {
     using var f = new Fixture(); using var http = new HttpClient(f.Server);
-    foreach (var xml in new[]
+    foreach (var json in new[]
     {
-        "<qdbapi><errcode>0</errcode><user id=''><email>person@example.com</email></user></qdbapi>",
-        "<qdbapi><errcode>0</errcode><user id='1.ckbs'><email>person@example.com</email></user></qdbapi>",
-        "<qdbapi><errcode>0</errcode><user id='123.test'><email>person@example.com</email><login>anonymous</login></user></qdbapi>",
-        "<qdbapi><errcode>0</errcode><user id='123.test'><email>not an email</email></user></qdbapi>",
-        "<qdbapi><errcode>0</errcode><user id='123.test'><email>person@example.com</email></user><user id='456.test'><email>person@example.com</email></user></qdbapi>",
-        "<qdbapi><errcode>1</errcode><errtext>TOP-SECRET-QB</errtext></qdbapi>"
+        "{}", "[]", "null", "{\"result\":null}", "{\"result\":3}",
+        "{\"result\":\";person@example.com;Person\"}",
+        "{\"result\":\"1.ckbs;person@example.com;anonymous\"}",
+        "{\"result\":\"123.test;person@example.com\"}",
+        "{\"result\":\"123.test;not an email;Person\"}",
+        "{\"result\":\"123.test;person@example.com;Person\",\"result\":\"456.test;person@example.com;Person\"}",
+        "{\"error\":\"TOP-SECRET-QB\"}",
+        JsonSerializer.Serialize(new { result = "123.test;person@example.com;" + new string('x', 2048) })
     })
     {
-        f.Server.IdentityXml = xml;
+        f.Server.IdentityJson = json;
         try { await TimecardApi.DiscoverQuickbaseIdentityAsync(f.Settings with { EmployeeId = "" }, new("TOP-SECRET-TOGGL", "TOP-SECRET-QB"), http); }
         catch (InvalidOperationException ex) { True(!ex.ToString().Contains("TOP-SECRET", StringComparison.Ordinal)); continue; }
         throw new Exception("Expected invalid identity rejection");
     }
 });
-await Check("discovery malformed XML errors never expose token or response", async () =>
+await Check("discovery malformed JSON errors never expose token or response", async () =>
 {
     using var f = new Fixture(); using var http = new HttpClient(f.Server);
-    f.Server.IdentityXml = "<qdbapi><TOP-SECRET-QB";
+    f.Server.IdentityJson = "{TOP-SECRET-QB";
     try { await TimecardApi.DiscoverQuickbaseIdentityAsync(f.Settings with { EmployeeId = "" }, new("TOP-SECRET-TOGGL", "TOP-SECRET-QB"), http); }
     catch (InvalidDataException ex) { True(!ex.ToString().Contains("TOP-SECRET", StringComparison.Ordinal)); return; }
-    throw new Exception("Expected malformed XML rejection");
+    throw new Exception("Expected malformed JSON rejection");
 });
-await Check("discovery rejects XML external entities", async () =>
+await Check("discovery rejects legacy XML and external entities", async () =>
 {
     using var f = new Fixture(); using var http = new HttpClient(f.Server);
-    f.Server.IdentityXml = "<!DOCTYPE qdbapi [<!ENTITY xxe SYSTEM 'https://example.invalid/'>]><qdbapi><errcode>0</errcode><user id='123.test'><email>&xxe;</email></user></qdbapi>";
+    f.Server.IdentityJson = "<!DOCTYPE qdbapi [<!ENTITY xxe SYSTEM 'https://example.invalid/'>]><qdbapi><errcode>0</errcode><user id='123.test'><email>&xxe;</email></user></qdbapi>";
     await Throws<InvalidDataException>(() => TimecardApi.DiscoverQuickbaseIdentityAsync(f.Settings with { EmployeeId = "" }, new("a", "b"), http));
+});
+await Check("identity HTTP failures explain saved app assignment and never expose response bodies", async () =>
+{
+    foreach (var status in new[] { HttpStatusCode.BadRequest, HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden, HttpStatusCode.NotFound })
+    {
+        using var f = new Fixture(); using var http = new HttpClient(f.Server);
+        f.Server.IdentityStatus = status; f.Server.IdentityJson = "TOP-SECRET-QB TOP-SECRET-TOGGL private server details";
+        try { await TimecardApi.DiscoverQuickbaseIdentityAsync(f.Settings with { EmployeeId = "" }, new("TOP-SECRET-TOGGL", "TOP-SECRET-QB"), http); }
+        catch (HttpRequestException ex)
+        {
+            True(ex.Message.Contains($"HTTP {(int)status}")); True(ex.Message.Contains("save that token page"));
+            True(!ex.ToString().Contains("TOP-SECRET")); True(!ex.Message.Contains("private server")); Equal(0, f.Server.WriteCount); continue;
+        }
+        throw new Exception("Expected identity HTTP rejection");
+    }
+});
+await Check("identity display name safely falls back without losing verified email", async () =>
+{
+    foreach (var name in new[] { "", new string('x', 257), "bad\nname", "bad\u202ename", "TOP-SECRET-QB", "TOP-SECRET-TOGGL" })
+    {
+        using var f = new Fixture(); using var http = new HttpClient(f.Server);
+        f.Server.IdentityJson = JsonSerializer.Serialize(new { result = "123.test;PERSON@example.com;" + name });
+        var identity = await TimecardApi.DiscoverQuickbaseIdentityAsync(f.Settings with { EmployeeId = "" }, new("TOP-SECRET-TOGGL", "TOP-SECRET-QB"), http);
+        Equal("123.test", identity.EmployeeId); Equal("PERSON@example.com", identity.Email); Equal(identity.Email, identity.DisplayName);
+    }
 });
 await Check("Toggl can have a different email, with both identities displayed", async () =>
 {
@@ -418,8 +450,10 @@ sealed class FakeApi : HttpMessageHandler
 {
     public Dictionary<string, List<object>> RowsByTable = [];
     public string EntryUrl = "";
-    public string? IdentityXml;
-    public string IdentityRequestXml = "";
+    public string? IdentityJson;
+    public string IdentityRequestJson = "", IdentityAuthorization = "", IdentityRealm = "", IdentityUrl = "";
+    public HttpMethod? IdentityMethod;
+    public HttpStatusCode IdentityStatus = HttpStatusCode.OK;
     public string WriteMode = "success";
     public bool WrongIdentity, WrongToggl, ChangeDescription, ChangeTaskCategory, ChangingTotal, OverCap, Overnight, OldRunning;
     public int WriteCount, CategoryQueries, CategoryPageSize = 1000, EntryCount = 1, EntryQueries, CurrentQueries;
@@ -428,10 +462,13 @@ sealed class FakeApi : HttpMessageHandler
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var url = request.RequestUri!;
-        if (url.AbsolutePath == "/db/main")
+        if (url.AbsolutePath == "/v1/formula/run")
         {
-            IdentityRequestXml = await request.Content!.ReadAsStringAsync(cancellationToken);
-            return Text(IdentityXml ?? $"<qdbapi><errcode>0</errcode><user id='{(WrongIdentity ? "wrong" : "123.test")}'><email>person@example.com</email></user></qdbapi>");
+            IdentityRequestJson = await request.Content!.ReadAsStringAsync(cancellationToken);
+            IdentityAuthorization = request.Headers.Authorization?.ToString() ?? "";
+            IdentityRealm = request.Headers.GetValues("QB-Realm-Hostname").Single();
+            IdentityMethod = request.Method; IdentityUrl = url.AbsoluteUri;
+            return new(IdentityStatus) { Content = new StringContent(IdentityJson ?? JsonSerializer.Serialize(new { result = $"{(WrongIdentity ? "999.wrong" : "123.test")};person@example.com;Pat Example" }), Encoding.UTF8, "application/json") };
         }
         if (url.AbsolutePath.EndsWith("/me")) return Json(new { email = WrongToggl ? "other@example.com" : "person@example.com" });
         if (url.AbsolutePath.EndsWith("/time_entries/current")) { CurrentQueries++; return OldRunning ? Json(new { start = "2026-09-24T13:00:00Z", duration = -1 }) : Text("null"); }

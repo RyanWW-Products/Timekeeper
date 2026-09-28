@@ -4,6 +4,8 @@ Timekeeper is a Windows application for turning Toggl entries into reviewed Quic
 
 The installed application includes its .NET runtime. End users do not need Python, a terminal, or a separate .NET installation.
 
+The interface uses warm ivory, deep green and muted teal, with restrained serif headings and monospaced totals. The same visual system carries through settings, updates and review dialogs; see [interface design](docs/DESIGN.md) for shared styles and visual verification.
+
 ## Get started
 
 1. Download and run the Windows installer from [Releases](https://github.com/RyanWW-Products/Timekeeper/releases/latest), or use the local build in `artifacts/installer`.

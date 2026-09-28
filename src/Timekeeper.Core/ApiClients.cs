@@ -4,8 +4,6 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Xml;
-using System.Xml.Linq;
 
 namespace Timekeeper.Core;
 
@@ -84,36 +82,34 @@ public sealed class TimecardApi : IDisposable
 
     private async Task<QuickbaseIdentity> ReadQuickbaseIdentityAsync(CancellationToken ct)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"https://{settings.Realm}/db/main");
-        request.Headers.Add("QUICKBASE-ACTION", "API_GetUserInfo");
-        request.Content = new StringContent(new XElement("qdbapi", new XElement("usertoken", credentials.QuickbaseToken)).ToString(SaveOptions.DisableFormatting), Encoding.UTF8, "application/xml");
+        // User tokens do not support the XML API_GetUserInfo /db/main endpoint.
+        // The REST formula API evaluates User() as the authenticated caller in this table.
+        // Keep this formula fixed: a caller-supplied email lookup would not prove token ownership.
+        const string formula = "UserToID(User()) & \";\" & UserToEmail(User()) & \";\" & UserToName(User())";
+        using var request = QuickbaseRequest("formula/run", new { from = settings.TimecardsTable, formula });
         using var response = await SendAsync(request, ct);
+        if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.NotFound)
+            throw new HttpRequestException($"Quickbase could not verify your account (HTTP {(int)response.StatusCode}). Check the realm and user token. In Quickbase, confirm the token is active, assign it to the app containing your timecards, and save that token page before testing again. Also check the Timecards table ID in Advanced settings.");
         EnsureSuccess(response, "Quickbase identity verification");
-        try
-        {
-            var xml = await ReadLimitedAsync(response, ct);
-            using var reader = XmlReader.Create(new StringReader(xml), new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = 1024 * 1024 });
-            var result = XDocument.Load(reader).Root;
-            var users = result?.Elements("user").ToArray();
-            if (result?.Name != "qdbapi" || result.Element("errcode")?.Value != "0" || users?.Length != 1)
-                throw new InvalidOperationException("Quickbase could not verify the token's user. Confirm API access with your Quickbase administrator.");
-            var user = users[0];
-            var id = user.Attribute("id")?.Value ?? "";
-            var email = user.Element("email")?.Value.Trim() ?? "";
-            if (!Regex.IsMatch(id, "\\A[0-9]+\\.[A-Za-z0-9]{1,64}\\z") || id == "1.ckbs"
-                || string.Equals(user.Element("login")?.Value.Trim(), "anonymous", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(user.Element("screenName")?.Value.Trim(), "anonymous", StringComparison.OrdinalIgnoreCase)
-                || !System.Net.Mail.MailAddress.TryCreate(email, out var address) || address.Address != email)
-                throw new InvalidOperationException("Quickbase did not return a usable signed-in user identity. Check the Quickbase API token.");
-            if (!string.Equals(email, settings.Email, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("The Quickbase token belongs to a different work email. Correct the email or token before continuing.");
-            var displayName = string.Join(" ", new[] { user.Element("firstName")?.Value.Trim(), user.Element("lastName")?.Value.Trim() }.Where(name => !string.IsNullOrEmpty(name)));
-            if (string.IsNullOrEmpty(displayName)) displayName = user.Element("screenName")?.Value.Trim() ?? "";
-            if (string.IsNullOrEmpty(displayName)) displayName = email;
-            if (displayName.Length > 256 || displayName.Any(char.IsControl)) displayName = email;
-            return new QuickbaseIdentity(id, email, displayName);
-        }
-        catch (XmlException) { throw new InvalidDataException("Quickbase identity verification returned an invalid response."); }
+        using var document = ParseJson(await ReadLimitedAsync(response, ct), "Quickbase identity verification");
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object || root.EnumerateObject().Count(p => p.NameEquals("result")) != 1
+            || !root.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.String || result.GetString()!.Length > 2048)
+            throw new InvalidOperationException("Quickbase did not return a usable signed-in user identity. Check the Quickbase API token.");
+        var parts = result.GetString()!.Split(';', 3);
+        if (parts.Length != 3)
+            throw new InvalidOperationException("Quickbase did not return a usable signed-in user identity. Check the Quickbase API token.");
+        var id = parts[0];
+        var email = parts[1].Trim();
+        if (!Regex.IsMatch(id, "\\A[0-9]+\\.[A-Za-z0-9]{1,64}\\z") || id == "1.ckbs"
+            || !System.Net.Mail.MailAddress.TryCreate(email, out var address) || address.Address != email)
+            throw new InvalidOperationException("Quickbase did not return a usable signed-in user identity. Check the Quickbase API token.");
+        if (!string.Equals(email, settings.Email, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The Quickbase token belongs to a different work email. Correct the email or token before continuing.");
+        var displayName = parts[2].Trim();
+        if (string.IsNullOrEmpty(displayName) || displayName.Length > 256 || displayName.Any(c => char.IsControl(c) || char.GetUnicodeCategory(c) == UnicodeCategory.Format)
+            || displayName.Contains(credentials.QuickbaseToken, StringComparison.Ordinal) || displayName.Contains(credentials.TogglToken, StringComparison.Ordinal)) displayName = email;
+        return new QuickbaseIdentity(id, email, displayName);
     }
 
     public async Task<ReadSession> ReadAsync(DateOnly start, DateOnly end, IProgress<string>? progress = null, CancellationToken ct = default)

@@ -24,11 +24,12 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _cancellation;
     private bool _busy;
     private bool _writing;
+    private readonly bool _smoke;
     private Point _dragStart;
 
     public MainWindow(SessionStore store, bool demo=false)
     {
-        _store=store; _settings=demo ? new AppSettings() : store.LoadSettings();
+        _store=store; _smoke=demo; _settings=demo ? new AppSettings() : store.LoadSettings();
         InitializeComponent();
         VersionText.Text=$"Timekeeper {UpdatesWindow.VersionLabel} · Windows";
         DateOnly today;
@@ -88,6 +89,9 @@ public partial class MainWindow : Window
         ReadTodayButton.IsEnabled=ReadRangeButton.IsEnabled=!_busy;
         ImportButton.IsEnabled=PasteButton.IsEnabled=FindButton.IsEnabled=!_busy&&_session!=null;
         SaveExportButton.IsEnabled=!_busy&&_exportPath!=null;
+        RowDetailsButton.IsEnabled=!_busy&&_validation is { IsValid:true }&&_validation.Rows.Count>0;
+        ExportCard.Cursor=!_busy&&_exportPath!=null?Cursors.Hand:Cursors.Arrow;
+        ReconcileButton.IsEnabled=ExportReceiptButton.IsEnabled=!_busy&&HistoryGrid.SelectedItem is SubmissionReceipt;
         WriteButton.IsEnabled=!_busy&&_session is { Demo:false }&&_proposal!=null&&_validation is { IsValid:true }&&_validation.Rows.Count>0&&(_validation.Warnings.Count==0||AcknowledgeWarnings.IsChecked==true);
     }
     private void ResetReview()
@@ -185,10 +189,16 @@ public partial class MainWindow : Window
     private void Import_DragOver(object sender,DragEventArgs e)
     {
         e.Effects=!_busy&&_session!=null&&(e.Data.GetDataPresent(DataFormats.FileDrop)||e.Data.GetDataPresent(DataFormats.UnicodeText))?DragDropEffects.Copy:DragDropEffects.None; e.Handled=true;
+        ImportCard.Background=(Brush)FindResource(e.Effects==DragDropEffects.Copy?"AccentSoft":"SurfaceMuted");
+        ImportCard.BorderBrush=(Brush)FindResource(e.Effects==DragDropEffects.Copy?"Accent":"Line");
+    }
+    private void Import_DragLeave(object sender,DragEventArgs e)
+    {
+        ImportCard.Background=(Brush)FindResource("SurfaceMuted"); ImportCard.BorderBrush=(Brush)FindResource("Line");
     }
     private void Import_Drop(object sender,DragEventArgs e)
     {
-        e.Handled=true; if(_busy||_session is null) return;
+        Import_DragLeave(sender,e); e.Handled=true; if(_busy||_session is null) return;
         if(e.Data.GetData(DataFormats.FileDrop) is string[] files)
         { if(files.Length==1) ImportFile(files[0]); else StatusText.Text="Drop one proposal file at a time."; }
         else if(e.Data.GetData(DataFormats.UnicodeText) is string text) AcceptProposal(text);
@@ -226,7 +236,7 @@ public partial class MainWindow : Window
             ReviewGrid.ItemsSource=_validation.Rows; ReviewGrid.SelectedIndex=_validation.Rows.Count>0?0:-1; ReviewGrid.Visibility=Visibility.Visible;
             ReviewTitle.Text=_validation.Rows.Count==0?"Everything is already accounted for":$"{_validation.Rows.Count} timecards ready for your review";
             VerifiedBadge.Visibility=Visibility.Visible;
-            ValidationMessage.Text="File, source entries, task/category relationships, calculations, and existing time checked. Review the assignment choices and descriptions below.";
+            ValidationMessage.Text="Source entries, relationships and calculated hours checked. Review the assignment choices and descriptions below.";
             ReadyMetric.Text=$"{_validation.Rows.Sum(r=>r.Hours):0.00} h";
             DailyTotals.Text=string.Join("\n",_session.Days.Select(day=>$"{day.Date:MMM d}:  {day.Existing.Sum(c=>c.Hours):0.00} h existing + {_validation.Rows.Where(r=>r.Date==day.Date).Sum(r=>r.Hours):0.00} h new = {day.Existing.Sum(c=>c.Hours)+_validation.Rows.Where(r=>r.Date==day.Date).Sum(r=>r.Hours):0.00} h total"));
             if(_validation.Warnings.Count>0)
@@ -235,7 +245,7 @@ public partial class MainWindow : Window
                 VerifiedBadge.Visibility=Visibility.Collapsed;
                 ValidationMessage.Text="Checks passed with items requiring your confirmation below. Review them before writing.";
             }
-            WriteHint.Text=_session.Demo?"Demo only · Quickbase writing is disabled.":$"Submit as {_session.Settings.Email} · ID {_session.Settings.EmployeeId}";
+            WriteHint.Text=_session.Demo?"Demo only · Quickbase writing is disabled.":$"Submit as {_session.Settings.Email}";
             StatusText.Text=_validation.Rows.Count==0?"No new rows to write.":"Proposal checked. Review the rows before writing.";
         }
         catch(Exception ex) { ImportError(ex.Message); }
@@ -244,7 +254,7 @@ public partial class MainWindow : Window
     private void ImportError(string message)
     {
         _validation=null; _proposal=null; VerifiedBadge.Visibility=ReviewGrid.Visibility=Visibility.Collapsed;
-        ReviewTitle.Text="This proposal needs a correction"; ValidationMessage.Text=message; ValidationMessage.Foreground=new SolidColorBrush(Color.FromRgb(166,57,39)); StatusText.Text="Nothing was submitted. Correct the proposal and import it again."; UpdateEnabled();
+        ReviewTitle.Text="This proposal needs a correction"; ValidationMessage.Text=message; ValidationMessage.Foreground=(Brush)FindResource("Danger"); StatusText.Text="Nothing was submitted. Correct the proposal and import it again."; UpdateEnabled();
     }
     private void Approval_Changed(object sender,RoutedEventArgs e)
     {
@@ -308,16 +318,25 @@ public partial class MainWindow : Window
     }
     private void ShowDay_Click(object sender,RoutedEventArgs e)
     {
-        WorkScroll.Visibility=Visibility.Visible; HistoryPanel.Visibility=Visibility.Collapsed; PageTitle.Text="Your day, ready to submit."; PageSubtitle.Text="Read your time. Resolve the details. Review and send.";
+        WorkScroll.Visibility=Visibility.Visible; HistoryPanel.Visibility=Visibility.Collapsed; PageEyebrow.Text="YOUR WORKDAY / TIMECARDS"; PageTitle.Text="Your day, in good order."; PageSubtitle.Text="Read your time. Resolve the details. Review and send.";
+        DayNav.Tag="Active"; HistoryNav.Tag=null;
+        if(!_busy) StatusText.Text=_validation is { IsValid:true }?"Proposal checked. Review the rows before writing.":_session is not null?"Your time is ready. Send the file to Copilot to continue.":"Ready · Set up your accounts, or explore a sample day.";
     }
     private void History_Click(object sender,RoutedEventArgs e)
     {
         if(_busy) return;
-        try { HistoryGrid.ItemsSource=_store.LoadReceipts(_settings.ProfileKey); WorkScroll.Visibility=Visibility.Collapsed; HistoryPanel.Visibility=Visibility.Visible; PageTitle.Text="A record of every submission."; PageSubtitle.Text="Confirmed writes, saved locally for your review."; }
+        try
+        {
+            HistoryGrid.ItemsSource=_store.LoadReceipts(_settings.ProfileKey); WorkScroll.Visibility=Visibility.Collapsed; HistoryPanel.Visibility=Visibility.Visible;
+            HistoryEmpty.Visibility=HistoryGrid.Items.Count==0?Visibility.Visible:Visibility.Collapsed;
+            PageEyebrow.Text="YOUR WORKDAY / HISTORY"; PageTitle.Text="A record of your time."; PageSubtitle.Text="Submission results, saved locally for your review.";
+            DayNav.Tag=null; HistoryNav.Tag="Active"; UpdateEnabled();
+            StatusText.Text=HistoryGrid.Items.Count==0?"No submissions yet. Your receipts will be saved here.":$"{HistoryGrid.Items.Count} saved submissions · Check uncertain results before retrying.";
+        }
         catch(Exception ex) { StatusText.Text=ex.Message; }
     }
     private void History_SelectionChanged(object sender,SelectionChangedEventArgs e)
-    { ReceiptDetails.Text=HistoryGrid.SelectedItem is SubmissionReceipt receipt?ReceiptText(receipt):"Select a receipt to see its record IDs and row results."; }
+    { ReceiptDetails.Text=HistoryGrid.SelectedItem is SubmissionReceipt receipt?ReceiptText(receipt):"Select a receipt to see its record IDs and row results."; UpdateEnabled(); }
     private static string ReceiptText(SubmissionReceipt receipt)
     {
         var text=new StringBuilder($"{receipt.Status.ToUpperInvariant()} · {receipt.StartedAtUtc.LocalDateTime:g}\n{receipt.Message}\nSubmission: {receipt.SubmissionId}\n\n");
@@ -346,6 +365,18 @@ public partial class MainWindow : Window
     private void OnClosing(object? sender,CancelEventArgs e)
     {
         if(_busy) { e.Cancel=true; StatusText.Text=_writing?"Wait for the submission result before closing. Its outcome is being saved.":"Wait for the current action, or cancel the read before closing."; }
+    }
+    internal void ShowSmokeEmptyState()
+    {
+        if(!_smoke) throw new InvalidOperationException("Synthetic UI states are only available in smoke mode.");
+        ResetSource(); RefreshProfile(); ShowDay_Click(this,new RoutedEventArgs());
+        StartDate.SelectedDate=EndDate.SelectedDate=_settings.Today().ToDateTime(TimeOnly.MinValue);
+        StatusText.Text="Ready · Set up your accounts, or explore a sample day.";
+    }
+    internal void ShowSmokeHistory()
+    {
+        if(!_smoke) throw new InvalidOperationException("Synthetic UI states are only available in smoke mode.");
+        History_Click(this,new RoutedEventArgs());
     }
     public string SmokeSummary()
     {

@@ -3,7 +3,7 @@ param(
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Release',
     [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')]
-    [string]$Version = '0.2.3',
+    [string]$Version = '0.3.0',
     [string]$DotnetPath = 'dotnet',
     [string]$InnoSetupCompiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
     [ValidatePattern('^(|10\.0\.\d+)$')]

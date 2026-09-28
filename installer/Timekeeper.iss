@@ -1,7 +1,7 @@
 ; Compile with scripts/build.ps1. Only the clean publish output and the new
 ; guides are packaged; historical reference material is never a source.
 #ifndef AppVersion
-  #define AppVersion "0.2.3"
+  #define AppVersion "0.3.0"
 #endif
 #ifndef PublishDir
   #define PublishDir "..\artifacts\publish"

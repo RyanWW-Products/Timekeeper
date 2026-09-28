@@ -1,95 +1,164 @@
 <Window x:Class="Timekeeper.App.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="Timekeeper" Icon="Assets/Timekeeper.ico" Style="{StaticResource {x:Type Window}}" Width="1360" Height="960" MinWidth="1040" MinHeight="720" WindowStartupLocation="CenterScreen">
+  <Window.Resources>
+    <Style x:Key="NavIcon" TargetType="TextBlock"><Setter Property="FontFamily" Value="Segoe MDL2 Assets"/><Setter Property="FontSize" Value="16"/><Setter Property="Width" Value="20"/><Setter Property="Margin" Value="0,0,10,0"/><Setter Property="VerticalAlignment" Value="Center"/></Style>
+    <Style x:Key="StepNumber" TargetType="Border"><Setter Property="Background" Value="{StaticResource AccentSoft}"/><Setter Property="CornerRadius" Value="5"/><Setter Property="Width" Value="26"/><Setter Property="Height" Value="26"/><Setter Property="Margin" Value="0,0,10,0"/></Style>
+    <Style x:Key="MetricLabel" TargetType="TextBlock"><Setter Property="FontSize" Value="12"/><Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+    <Style x:Key="MetricValue" TargetType="TextBlock"><Setter Property="FontFamily" Value="{StaticResource MonoFont}"/><Setter Property="FontSize" Value="29"/><Setter Property="Margin" Value="0,9,0,0"/></Style>
+    <Style x:Key="TableText" TargetType="TextBlock"><Setter Property="TextWrapping" Value="NoWrap"/><Setter Property="TextTrimming" Value="CharacterEllipsis"/></Style>
+    <Style x:Key="TableNumber" TargetType="TextBlock" BasedOn="{StaticResource TableText}"><Setter Property="FontFamily" Value="{StaticResource MonoFont}"/><Setter Property="HorizontalAlignment" Value="Right"/></Style>
+  </Window.Resources>
   <Grid>
     <Grid.ColumnDefinitions><ColumnDefinition Width="216"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-    <Border Background="#132F40">
-      <DockPanel Margin="20,30,20,22">
+    <Border Background="{StaticResource Sidebar}">
+      <DockPanel Margin="18,28,18,22">
         <StackPanel DockPanel.Dock="Top">
-          <StackPanel Orientation="Horizontal" Margin="2,0,0,40"><Border Background="#43C7BD" Width="34" Height="34" CornerRadius="10"><TextBlock Text="t" FontSize="26" FontWeight="Bold" Foreground="#103243" HorizontalAlignment="Center" Margin="0,-4,0,0"/></Border><TextBlock Text="timekeeper" Foreground="White" FontSize="21" FontWeight="SemiBold" VerticalAlignment="Center" Margin="9,0,0,0"/></StackPanel>
-          <TextBlock Text="WORKSPACE" Foreground="#88A5B5" FontSize="10" FontWeight="Bold" Margin="12,0,0,12"/>
-          <Button x:Name="DayNav" Content="Your timecards" Style="{StaticResource Navigation}" Click="ShowDay_Click" Background="#265063"/>
-          <Button Content="Submission history" Style="{StaticResource Navigation}" Click="History_Click"/>
-          <Button Content="Settings" Style="{StaticResource Navigation}" Click="Settings_Click"/>
-          <Button Content="Getting started" Style="{StaticResource Navigation}" Click="Help_Click"/>
-          <Button Content="Updates" Style="{StaticResource Navigation}" Click="Updates_Click"/>
+          <StackPanel Orientation="Horizontal" Margin="7,0,0,10">
+            <Grid Width="31" Height="36" Margin="0,0,10,0">
+              <Ellipse Width="29" Height="29" Stroke="#D1B183" StrokeThickness="1.5"/>
+              <Path Data="M 15,9 L 15,18 L 22,18" Stroke="#F5F2E9" StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+              <Ellipse Width="3" Height="3" Fill="#D1B183" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,2,0,0"/>
+            </Grid>
+            <TextBlock Text="timekeeper" FontFamily="{StaticResource DisplayFont}" Foreground="{StaticResource Surface}" FontSize="23" VerticalAlignment="Center"/>
+          </StackPanel>
+          <TextBlock Text="A LITTLE ORDER FOR YOUR DAY" FontFamily="{StaticResource MonoFont}" Foreground="{StaticResource SidebarMuted}" FontSize="9" Margin="8,0,0,38"/>
+          <TextBlock Text="WORKSPACE" FontFamily="{StaticResource MonoFont}" Foreground="{StaticResource SidebarMuted}" FontSize="10" Margin="15,0,0,12"/>
+          <Button x:Name="DayNav" Style="{StaticResource Navigation}" Tag="Active" Click="ShowDay_Click"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE787;" Style="{StaticResource NavIcon}"/><TextBlock Text="Your timecards"/></StackPanel></Button>
+          <Button x:Name="HistoryNav" Style="{StaticResource Navigation}" Click="History_Click"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE81C;" Style="{StaticResource NavIcon}"/><TextBlock Text="Submission history"/></StackPanel></Button>
+          <Border Background="#3A554B" Height="1" Margin="14,16,14,21"/>
+          <TextBlock Text="PREFERENCES &amp; HELP" FontFamily="{StaticResource MonoFont}" Foreground="{StaticResource SidebarMuted}" FontSize="10" Margin="15,0,0,12"/>
+          <Button Style="{StaticResource Navigation}" Click="Settings_Click"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE713;" Style="{StaticResource NavIcon}"/><TextBlock Text="Settings"/></StackPanel></Button>
+          <Button Style="{StaticResource Navigation}" Click="Help_Click"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE897;" Style="{StaticResource NavIcon}"/><TextBlock Text="Getting started"/></StackPanel></Button>
+          <Button Style="{StaticResource Navigation}" Click="Updates_Click"><StackPanel Orientation="Horizontal"><TextBlock Text="&#xE895;" Style="{StaticResource NavIcon}"/><TextBlock Text="Updates"/></StackPanel></Button>
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom" VerticalAlignment="Bottom">
-          <Border BorderBrush="#305060" BorderThickness="0,1,0,0" Padding="0,19,0,0"><StackPanel><TextBlock Text="CONNECTED WORKFLOW" FontSize="10" FontWeight="Bold" Foreground="#88A5B5"/><TextBlock Text="Toggl → Copilot → Quickbase" FontSize="11" Foreground="#C6DBE5" Margin="0,8,0,16"/><TextBlock x:Name="ProfileLabel" Text="Set up your account" FontWeight="SemiBold" Foreground="White" FontSize="12"/><TextBlock x:Name="VersionText" Text="Timekeeper · Windows" Foreground="#88A5B5" FontSize="11" Margin="0,7,0,0"/></StackPanel></Border>
+          <Border BorderBrush="#3A554B" BorderThickness="0,1,0,0" Padding="7,20,7,0">
+            <StackPanel>
+              <TextBlock Text="YOUR CONNECTED WORKFLOW" FontFamily="{StaticResource MonoFont}" FontSize="9" Foreground="{StaticResource SidebarMuted}"/>
+              <TextBlock Text="Toggl → Copilot → Quickbase" FontSize="11" Foreground="{StaticResource Surface}" Margin="0,8,0,22"/>
+              <TextBlock x:Name="ProfileLabel" Text="Set up your account" FontWeight="SemiBold" Foreground="{StaticResource Surface}" FontSize="12"/>
+              <TextBlock x:Name="VersionText" Text="Timekeeper · Windows" Foreground="{StaticResource SidebarMuted}" FontSize="10" Margin="0,7,0,0"/>
+            </StackPanel>
+          </Border>
         </StackPanel>
         <Grid/>
       </DockPanel>
     </Border>
-    <Grid Grid.Column="1" Margin="32,25,32,18">
+    <Grid Grid.Column="1" Margin="28,28,28,18">
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-      <Grid Margin="0,0,0,20">
-        <StackPanel><TextBlock Text="DAILY TIMECARDS" Foreground="{StaticResource Accent}" FontSize="11" FontWeight="Bold"/><TextBlock x:Name="PageTitle" Text="Your day, ready to submit." FontSize="29" FontWeight="SemiBold" Margin="0,5,0,5"/><TextBlock x:Name="PageSubtitle" Text="Read your time. Resolve the details. Review and send." Foreground="{StaticResource Muted}"/></StackPanel>
-        <Button Content="Try a sample day" Click="Demo_Click" HorizontalAlignment="Right" VerticalAlignment="Top" FontSize="12" Padding="13,8"/>
+      <Grid Margin="0,0,0,16">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <StackPanel Margin="0,0,18,0">
+          <TextBlock x:Name="PageEyebrow" Text="YOUR WORKDAY / TIMECARDS" Style="{StaticResource SectionLabel}" Foreground="{StaticResource Accent}"/>
+          <TextBlock x:Name="PageTitle" Text="Your day, in good order." FontFamily="{StaticResource DisplayFont}" FontSize="31" Margin="0,6,0,6"/>
+          <TextBlock x:Name="PageSubtitle" Text="Read your time. Resolve the details. Review and send." Foreground="{StaticResource Muted}" FontSize="13"/>
+        </StackPanel>
+        <Button Grid.Column="1" Content="Try a sample day ↗" Style="{StaticResource Quiet}" Click="Demo_Click" VerticalAlignment="Top" FontSize="12" Margin="0,15,0,0"/>
       </Grid>
       <ScrollViewer x:Name="WorkScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,0">
         <StackPanel>
-          <Border x:Name="DemoBanner" Visibility="Collapsed" Background="#FFF1D1" CornerRadius="7" Padding="14,10" Margin="0,0,0,16"><TextBlock Text="DEMO · Sample data only. Quickbase writing is disabled. Read your data to leave demo." Foreground="#775615" FontSize="12"/></Border>
-          <Border Style="{StaticResource Card}" Padding="16" Margin="0,0,0,16">
+          <Border x:Name="DemoBanner" Visibility="Collapsed" Background="{StaticResource WarningSoft}" CornerRadius="7" Padding="14,10" Margin="0,0,0,14">
+            <TextBlock Text="SAMPLE WORKSPACE  ·  Explore the workflow with sample data. Quickbase writing is disabled." Foreground="{StaticResource Warning}" FontSize="12"/>
+          </Border>
+          <Border Style="{StaticResource Card}" Padding="18,13" Margin="0,0,0,16">
             <WrapPanel VerticalAlignment="Center">
-              <Button x:Name="ReadTodayButton" Content="Read today's data" Style="{StaticResource Primary}" Click="ReadToday_Click" Margin="0,0,20,0"/>
-              <StackPanel Margin="0,0,10,0"><TextBlock Text="FROM" FontSize="9" FontWeight="Bold" Foreground="{StaticResource Muted}"/><DatePicker x:Name="StartDate" Width="128" Margin="0,3,0,0"/></StackPanel>
-              <StackPanel Margin="0,0,10,0"><TextBlock Text="THROUGH" FontSize="9" FontWeight="Bold" Foreground="{StaticResource Muted}"/><DatePicker x:Name="EndDate" Width="128" Margin="0,3,0,0"/></StackPanel>
-              <Button x:Name="ReadRangeButton" Content="Read dates" Click="ReadRange_Click" Margin="0,0,0,0" VerticalAlignment="Bottom"/>
+              <Button x:Name="ReadTodayButton" Content="Read today's data" Style="{StaticResource Primary}" Click="ReadToday_Click" Margin="0,0,24,0" VerticalAlignment="Bottom"/>
+              <StackPanel Margin="0,0,10,0"><TextBlock Text="From" Foreground="{StaticResource Muted}" FontSize="11" Margin="1,0,0,5"/><DatePicker x:Name="StartDate" Width="140" AutomationProperties.Name="Read from date"/></StackPanel>
+              <StackPanel Margin="0,0,12,0"><TextBlock Text="Through" Foreground="{StaticResource Muted}" FontSize="11" Margin="1,0,0,5"/><DatePicker x:Name="EndDate" Width="140" AutomationProperties.Name="Read through date"/></StackPanel>
+              <Button x:Name="ReadRangeButton" Content="Read dates" Click="ReadRange_Click" VerticalAlignment="Bottom"/>
             </WrapPanel>
           </Border>
-          <UniformGrid Columns="4" Margin="0,0,0,20">
-            <Border Style="{StaticResource Card}" Margin="0,0,10,0" Padding="16"><StackPanel><TextBlock Text="TRACKED IN TOGGL" FontSize="10" Foreground="{StaticResource Muted}" FontWeight="SemiBold"/><TextBlock x:Name="TrackedMetric" Text="—" FontSize="29" FontWeight="SemiBold" Margin="0,8,0,0"/></StackPanel></Border>
-            <Border Style="{StaticResource Card}" Margin="0,0,10,0" Padding="16"><StackPanel><TextBlock Text="ALREADY IN QUICKBASE" FontSize="10" Foreground="{StaticResource Muted}" FontWeight="SemiBold"/><TextBlock x:Name="ExistingMetric" Text="—" FontSize="29" FontWeight="SemiBold" Margin="0,8,0,0"/></StackPanel></Border>
-            <Border Style="{StaticResource Card}" Margin="0,0,10,0" Padding="16"><StackPanel><TextBlock Text="READY TO ADD" FontSize="10" Foreground="{StaticResource Muted}" FontWeight="SemiBold"/><TextBlock x:Name="ReadyMetric" Text="—" FontSize="29" FontWeight="SemiBold" Foreground="{StaticResource Accent}" Margin="0,8,0,0"/></StackPanel></Border>
-            <Border Style="{StaticResource Card}" Padding="16"><StackPanel><TextBlock Text="WEEKDAY FILL TARGET" FontSize="10" Foreground="{StaticResource Muted}" FontWeight="SemiBold"/><TextBlock x:Name="TargetMetric" Text="8.00 h" FontSize="29" FontWeight="SemiBold" Margin="0,8,0,0"/></StackPanel></Border>
-          </UniformGrid>
-          <Grid Margin="0,0,0,20">
+          <Border Style="{StaticResource Card}" Padding="0" Margin="0,0,0,16">
+            <UniformGrid Columns="4">
+              <Border Padding="20,14" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0"><StackPanel><TextBlock Text="Tracked in Toggl" Style="{StaticResource MetricLabel}"/><TextBlock x:Name="TrackedMetric" Text="—" Style="{StaticResource MetricValue}"/></StackPanel></Border>
+              <Border Padding="20,14" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0"><StackPanel><TextBlock Text="Already in Quickbase" Style="{StaticResource MetricLabel}"/><TextBlock x:Name="ExistingMetric" Text="—" Style="{StaticResource MetricValue}"/></StackPanel></Border>
+              <Border Padding="20,14" Background="{StaticResource AccentSoft}" BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0"><StackPanel><TextBlock Text="Ready to add" Style="{StaticResource MetricLabel}" Foreground="{StaticResource Accent}"/><TextBlock x:Name="ReadyMetric" Text="—" Style="{StaticResource MetricValue}" Foreground="{StaticResource Accent}"/></StackPanel></Border>
+              <Border Padding="20,14"><StackPanel><TextBlock Text="Weekday fill target" Style="{StaticResource MetricLabel}"/><TextBlock x:Name="TargetMetric" Text="8.00 h" Style="{StaticResource MetricValue}"/></StackPanel></Border>
+            </UniformGrid>
+          </Border>
+          <Grid Margin="0,0,0,16">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="18"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-            <Border Style="{StaticResource Card}" Padding="20">
-              <StackPanel>
-                <TextBlock Text="01  SEND TO COPILOT" FontSize="11" FontWeight="Bold" Foreground="{StaticResource Muted}"/>
-                <Border x:Name="ExportCard" Background="#E9F5F3" BorderBrush="#9DCFC9" BorderThickness="1" CornerRadius="9" Padding="16,22" Margin="0,14,0,12" Cursor="Hand" MouseLeftButtonDown="Export_MouseDown" MouseMove="Export_MouseMove" ToolTip="Drag this file into your Copilot agent, or use Save file.">
-                  <StackPanel HorizontalAlignment="Center"><TextBlock Text="⇧" Foreground="{StaticResource Accent}" FontSize="32" HorizontalAlignment="Center"/><TextBlock x:Name="ExportTitle" Text="Your file will appear here" FontWeight="SemiBold" FontSize="16" HorizontalAlignment="Center" Margin="0,8,0,5"/><TextBlock x:Name="ExportDetail" Text="Start by reading your time above." TextAlignment="Center" FontSize="12" Foreground="{StaticResource Muted}"/></StackPanel>
+            <Border Style="{StaticResource Card}" Padding="18">
+              <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource StepNumber}"><TextBlock Text="01" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Accent}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><TextBlock Text="Send to Copilot" FontWeight="SemiBold" VerticalAlignment="Center"/></StackPanel>
+                <Border x:Name="ExportCard" Grid.Row="1" BorderThickness="1" CornerRadius="9" Padding="12,15" Margin="0,12,0,12" Cursor="Hand" MouseLeftButtonDown="Export_MouseDown" MouseMove="Export_MouseMove" ToolTip="Drag this file into your Copilot agent, or use Save file.">
+                  <Border.Style><Style TargetType="Border"><Setter Property="Background" Value="{StaticResource AccentSoft}"/><Setter Property="BorderBrush" Value="#B9CEBC"/><Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#DCE9DF"/><Setter Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger></Style.Triggers></Style></Border.Style>
+                  <StackPanel>
+                    <Grid Width="34" Height="39" HorizontalAlignment="Center" Margin="0,0,0,10">
+                      <Path Data="M 6,1 L 22,1 L 31,10 L 31,37 L 3,37 L 3,1 Z" Fill="{StaticResource Surface}" Stroke="{StaticResource Accent}" StrokeThickness="1.3"/>
+                      <Path Data="M 21,1 L 21,11 L 31,11 M 10,20 L 24,20 M 10,25 L 21,25" Stroke="{StaticResource Accent}" StrokeThickness="1.3"/>
+                    </Grid>
+                    <TextBlock x:Name="ExportTitle" Text="Your file will appear here" FontFamily="{StaticResource DisplayFont}" FontSize="19" TextAlignment="Center" Margin="0,0,0,7"/>
+                    <TextBlock x:Name="ExportDetail" Text="Start by reading your time above." TextAlignment="Center" FontSize="12" Foreground="{StaticResource Muted}" MinHeight="34"/>
+                  </StackPanel>
                 </Border>
-                <WrapPanel><Button x:Name="CopilotButton" Content="Open Copilot ↗" Click="OpenCopilot_Click" FontSize="12" Padding="12,8" Margin="0,0,8,0"/><Button x:Name="SaveExportButton" Content="Save file" Click="SaveExport_Click" IsEnabled="False" FontSize="12" Padding="12,8"/></WrapPanel>
-              </StackPanel>
+                <WrapPanel Grid.Row="2"><Button x:Name="CopilotButton" Content="Open Copilot ↗" Click="OpenCopilot_Click" FontSize="12" Padding="12,8" Margin="0,0,8,0"/><Button x:Name="SaveExportButton" Content="Save file" Click="SaveExport_Click" IsEnabled="False" Style="{StaticResource Quiet}" FontSize="12" Padding="12,8"/></WrapPanel>
+              </Grid>
             </Border>
-            <Border Grid.Column="2" Style="{StaticResource Card}" Padding="20">
-              <StackPanel>
-                <TextBlock Text="02  BRING BACK THE PROPOSAL" FontSize="11" FontWeight="Bold" Foreground="{StaticResource Muted}"/>
-                <Border x:Name="ImportCard" AllowDrop="True" DragOver="Import_DragOver" Drop="Import_Drop" Background="#F5F7FA" BorderBrush="#C6D2DC" BorderThickness="1" CornerRadius="9" Padding="16,22" Margin="0,14,0,12">
-                  <StackPanel><TextBlock Text="⇩" Foreground="#718A9E" FontSize="32" HorizontalAlignment="Center"/><TextBlock Text="Drop Copilot's file here" FontWeight="SemiBold" FontSize="16" HorizontalAlignment="Center" Margin="0,8,0,5"/><TextBlock Text="Download the proposal, then drag it here." TextAlignment="Center" FontSize="12" Foreground="{StaticResource Muted}"/></StackPanel>
+            <Border Grid.Column="2" Style="{StaticResource Card}" Padding="18">
+              <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <StackPanel Orientation="Horizontal"><Border Style="{StaticResource StepNumber}"><TextBlock Text="02" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Accent}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><TextBlock Text="Bring back the proposal" FontWeight="SemiBold" VerticalAlignment="Center"/></StackPanel>
+                <Border x:Name="ImportCard" Grid.Row="1" AllowDrop="True" DragOver="Import_DragOver" DragLeave="Import_DragLeave" Drop="Import_Drop" Background="{StaticResource SurfaceMuted}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="9" Padding="12,15" Margin="0,12,0,12">
+                  <StackPanel>
+                    <Grid Width="38" Height="39" HorizontalAlignment="Center" Margin="0,0,0,10"><Path Data="M 19,2 L 19,24 M 12,17 L 19,24 L 26,17 M 3,25 L 3,34 L 35,34 L 35,25" Stroke="{StaticResource Muted}" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/></Grid>
+                    <TextBlock Text="Drop Copilot's file here" FontFamily="{StaticResource DisplayFont}" FontSize="19" TextAlignment="Center" Margin="0,0,0,7"/>
+                    <TextBlock Text="Download the proposal, then drag it here." TextAlignment="Center" FontSize="12" Foreground="{StaticResource Muted}" MinHeight="34"/>
+                  </StackPanel>
                 </Border>
-                <WrapPanel><Button x:Name="ImportButton" Content="Open file" Click="Import_Click" IsEnabled="False" FontSize="12" Padding="12,8" Margin="0,0,8,0"/><Button x:Name="PasteButton" Content="Paste" Click="Paste_Click" IsEnabled="False" FontSize="12" Padding="12,8" Margin="0,0,8,0"/><Button x:Name="FindButton" Content="Find assignment" Click="Find_Click" IsEnabled="False" FontSize="12" Padding="10,8"/></WrapPanel>
-              </StackPanel>
+                <WrapPanel Grid.Row="2"><Button x:Name="ImportButton" Content="Open file" Click="Import_Click" IsEnabled="False" FontSize="12" Padding="12,8" Margin="0,0,8,0"/><Button x:Name="PasteButton" Content="Paste" Click="Paste_Click" IsEnabled="False" Style="{StaticResource Quiet}" FontSize="12" Padding="9,8" Margin="0,0,5,0"/><Button x:Name="FindButton" Content="Find assignment" Click="Find_Click" IsEnabled="False" Style="{StaticResource Quiet}" FontSize="12" Padding="9,8"/></WrapPanel>
+              </Grid>
             </Border>
           </Grid>
           <Border Style="{StaticResource Card}" Padding="0">
             <StackPanel>
-              <Grid Margin="20,18"><StackPanel><TextBlock Text="03  REVIEW &amp; SUBMIT" FontSize="11" FontWeight="Bold" Foreground="{StaticResource Muted}"/><TextBlock x:Name="ReviewTitle" Text="Waiting for your proposal" FontSize="19" FontWeight="SemiBold" Margin="0,6,0,0"/></StackPanel><Border x:Name="VerifiedBadge" HorizontalAlignment="Right" VerticalAlignment="Center" Background="#DDF3E7" Padding="12,7" CornerRadius="15" Visibility="Collapsed"><TextBlock Text="✓  Data verified" Foreground="#21643F" FontWeight="SemiBold" FontSize="12"/></Border></Grid>
-              <TextBlock x:Name="ValidationMessage" Text="The app checks the returned file and calculates your time before you submit." Foreground="{StaticResource Muted}" Margin="20,0,20,16" FontSize="12"/>
+              <Grid Margin="20,18,20,14"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel Margin="0,0,12,0"><StackPanel Orientation="Horizontal"><Border Style="{StaticResource StepNumber}"><TextBlock Text="03" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Accent}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><TextBlock Text="Review &amp; submit" FontWeight="SemiBold" VerticalAlignment="Center"/></StackPanel><TextBlock x:Name="ReviewTitle" Text="Waiting for your proposal" FontFamily="{StaticResource DisplayFont}" FontSize="22" Margin="0,10,0,0"/></StackPanel>
+                <Border x:Name="VerifiedBadge" Grid.Column="1" VerticalAlignment="Top" Background="{StaticResource SuccessSoft}" BorderBrush="#C7D9C5" BorderThickness="1" Padding="12,6" CornerRadius="6" Visibility="Collapsed"><TextBlock Text="✓  Data verified" Foreground="{StaticResource Success}" FontWeight="SemiBold" FontSize="12"/></Border>
+              </Grid>
+              <TextBlock x:Name="ValidationMessage" Text="The app checks the returned file and calculates your time before you submit." Foreground="{StaticResource Muted}" Margin="20,0,20,14" FontSize="12"/>
               <DataGrid x:Name="ReviewGrid" MinHeight="100" MaxHeight="320" Visibility="Collapsed" ScrollViewer.HorizontalScrollBarVisibility="Auto" MouseDoubleClick="RowDetails_Click" ToolTip="Double-click a row to inspect its full description and field IDs.">
-                <DataGrid.Resources><Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="NoWrap"/><Setter Property="TextTrimming" Value="CharacterEllipsis"/></Style></DataGrid.Resources>
                 <DataGrid.Columns>
-                  <DataGridTextColumn Header="Date" Binding="{Binding Date, StringFormat=yyyy-MM-dd}" Width="98"/>
-                  <DataGridTextColumn Header="Hours" Binding="{Binding Hours, StringFormat=F2}" Width="64"/>
-                  <DataGridTextColumn Header="Project" Binding="{Binding ProjectName}" Width="150"/>
-                  <DataGridTextColumn Header="Assignment" Binding="{Binding AssignmentName}" Width="140"/>
-                  <DataGridTextColumn Header="Task" Binding="{Binding TaskName}" Width="125"/>
-                  <DataGridTextColumn Header="Category" Binding="{Binding CategoryName}" Width="95"/>
-                  <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="*" MinWidth="175"/>
+                  <DataGridTextColumn Header="Date" Binding="{Binding Date, StringFormat=yyyy-MM-dd}" ElementStyle="{StaticResource TableText}" Width="110"/>
+                  <DataGridTextColumn Header="Hours" Binding="{Binding Hours, StringFormat=F2}" ElementStyle="{StaticResource TableNumber}" Width="72"/>
+                  <DataGridTextColumn Header="Project" Binding="{Binding ProjectName}" ElementStyle="{StaticResource TableText}" Width="150"/>
+                  <DataGridTextColumn Header="Assignment" Binding="{Binding AssignmentName}" ElementStyle="{StaticResource TableText}" Width="145"/>
+                  <DataGridTextColumn Header="Task" Binding="{Binding TaskName}" ElementStyle="{StaticResource TableText}" Width="110"/>
+                  <DataGridTextColumn Header="Category" Binding="{Binding CategoryName}" ElementStyle="{StaticResource TableText}" Width="105"/>
+                  <DataGridTextColumn Header="Description" Binding="{Binding Description}" ElementStyle="{StaticResource TableText}" Width="*" MinWidth="185"/>
                 </DataGrid.Columns>
               </DataGrid>
-              <Button Content="View selected row details" Click="RowDetails_Click" HorizontalAlignment="Left" FontSize="11" Margin="20,12,20,0" Padding="10,6"/>
-              <TextBlock x:Name="DailyTotals" Margin="20,14,20,8" FontWeight="SemiBold" FontSize="12"/>
-              <TextBlock x:Name="WarningsText" Margin="20,0,20,10" Foreground="#835D14" FontSize="12" Visibility="Collapsed"/>
-              <CheckBox x:Name="AcknowledgeWarnings" Content="I reviewed the warnings and confirmed the existing-record matches and fill time." Margin="20,0,20,12" Visibility="Collapsed" Checked="Approval_Changed" Unchecked="Approval_Changed"/>
-              <Grid Margin="20,4,20,18"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="WriteHint" Text="Nothing is sent until you click Write to Quickbase." VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,0,14,0"/><Button x:Name="WriteButton" Grid.Column="1" Content="Write to Quickbase" Style="{StaticResource Primary}" IsEnabled="False" Click="Write_Click"/></Grid>
+              <Button x:Name="RowDetailsButton" Content="View selected row details ↗" Click="RowDetails_Click" Style="{StaticResource Quiet}" HorizontalAlignment="Left" FontSize="12" Margin="10,6,20,0" Padding="10,6" IsEnabled="False"/>
+              <TextBlock x:Name="DailyTotals" Margin="20,9,20,14" FontFamily="{StaticResource MonoFont}" FontSize="12"/>
+              <TextBlock x:Name="WarningsText" Margin="20,0,20,12" Foreground="{StaticResource Warning}" FontSize="12" Visibility="Collapsed"/>
+              <CheckBox x:Name="AcknowledgeWarnings" Margin="20,0,20,16" Visibility="Collapsed" Checked="Approval_Changed" Unchecked="Approval_Changed"><TextBlock Text="I reviewed the warnings and confirmed the existing-record matches and fill time." TextWrapping="Wrap" FontSize="12"/></CheckBox>
+              <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="20,16">
+                <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="WriteHint" Text="Nothing is sent until you click Write to Quickbase." VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,0,18,0"/><Button x:Name="WriteButton" Grid.Column="1" Content="Write to Quickbase" Style="{StaticResource Primary}" IsEnabled="False" Click="Write_Click"/></Grid>
+              </Border>
             </StackPanel>
           </Border>
-          <Expander Header="Source entries and existing Quickbase time" Margin="0,18,0,10"><TextBox x:Name="SourceDetails" IsReadOnly="True" TextWrapping="Wrap" BorderThickness="0" Background="Transparent" FontSize="12" MaxHeight="240" VerticalScrollBarVisibility="Auto"/></Expander>
+          <Expander Header="Source entries and existing Quickbase time" Margin="2,16,0,10" FontSize="12"><TextBox x:Name="SourceDetails" IsReadOnly="True" TextWrapping="Wrap" FontFamily="{StaticResource MonoFont}" FontSize="12" MaxHeight="240" VerticalScrollBarVisibility="Auto"/></Expander>
         </StackPanel>
       </ScrollViewer>
-      <Grid x:Name="HistoryPanel" Grid.Row="1" Visibility="Collapsed"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><TextBlock Text="Every write has a local receipt. An uncertain result must be checked before retrying." Foreground="{StaticResource Muted}" Margin="0,0,0,18"/><DataGrid x:Name="HistoryGrid" Grid.Row="1" SelectionChanged="History_SelectionChanged"><DataGrid.Columns><DataGridTextColumn Header="Started" Binding="{Binding StartedAtUtc, StringFormat=yyyy-MM-dd HH:mm}" Width="170"/><DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="120"/><DataGridTextColumn Header="Rows" Binding="{Binding Rows.Count}" Width="70"/><DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*"/></DataGrid.Columns></DataGrid><StackPanel Grid.Row="2" Margin="0,18,0,0"><TextBox x:Name="ReceiptDetails" IsReadOnly="True" TextWrapping="Wrap" MinHeight="100" MaxHeight="240" VerticalScrollBarVisibility="Auto"/><WrapPanel Margin="0,12,0,0"><Button Content="Check selected result" Click="Reconcile_Click" Margin="0,0,10,0"/><Button Content="Export receipt" Click="ExportReceipt_Click"/></WrapPanel></StackPanel></Grid>
-      <Grid Grid.Row="2" Margin="0,14,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><ProgressBar x:Name="BusyBar" Height="3" IsIndeterminate="True" Visibility="Collapsed" Foreground="{StaticResource Accent}" Margin="0,0,0,8"/><TextBlock x:Name="StatusText" Text="Ready · Set up your accounts, or explore a sample day." FontSize="12" Foreground="{StaticResource Muted}"/></StackPanel><Button x:Name="CancelButton" Grid.Column="1" Content="Cancel read" Click="Cancel_Click" Visibility="Collapsed" FontSize="11" Padding="10,4" Margin="12,0,0,0"/></Grid>
+      <Grid x:Name="HistoryPanel" Grid.Row="1" Visibility="Collapsed">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <TextBlock Text="Every submission has a saved receipt. Select one to review its result." Foreground="{StaticResource Muted}" Margin="0,0,0,18"/>
+        <Border Grid.Row="1" Style="{StaticResource Card}" Padding="0,8">
+          <Grid>
+            <DataGrid x:Name="HistoryGrid" SelectionChanged="History_SelectionChanged"><DataGrid.Columns><DataGridTextColumn Header="Started (local)" Binding="{Binding StartedAtUtc.LocalDateTime, StringFormat=yyyy-MM-dd HH:mm}" ElementStyle="{StaticResource TableText}" Width="170"/><DataGridTextColumn Header="Status" Binding="{Binding Status}" ElementStyle="{StaticResource TableText}" Width="115"/><DataGridTextColumn Header="Rows" Binding="{Binding Rows.Count}" ElementStyle="{StaticResource TableNumber}" Width="70"/><DataGridTextColumn Header="Message" Binding="{Binding Message}" ElementStyle="{StaticResource TableText}" Width="*" MinWidth="190"/></DataGrid.Columns></DataGrid>
+            <StackPanel x:Name="HistoryEmpty" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="30"><TextBlock Text="A fresh page." FontFamily="{StaticResource DisplayFont}" FontSize="25" TextAlignment="Center" Margin="0,0,0,12"/><TextBlock Text="Your submission receipts will appear here.&#x0a;Start by reading your timecards." TextAlignment="Center" Foreground="{StaticResource Muted}" FontSize="13"/></StackPanel>
+          </Grid>
+        </Border>
+        <StackPanel Grid.Row="2" Margin="0,18,0,0">
+          <TextBlock Text="SELECTED RECEIPT" Style="{StaticResource SectionLabel}" Margin="0,0,0,8"/>
+          <TextBox x:Name="ReceiptDetails" Text="Select a submission to inspect its receipt." IsReadOnly="True" TextWrapping="Wrap" FontFamily="{StaticResource MonoFont}" FontSize="12" MinHeight="90" MaxHeight="200" VerticalScrollBarVisibility="Auto"/>
+          <WrapPanel Margin="0,12,0,0"><Button x:Name="ReconcileButton" Content="Check selected result" Click="Reconcile_Click" Margin="0,0,10,0" IsEnabled="False"/><Button x:Name="ExportReceiptButton" Content="Export receipt" Click="ExportReceipt_Click" IsEnabled="False"/></WrapPanel>
+        </StackPanel>
+      </Grid>
+      <Border Grid.Row="2" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Margin="0,14,0,0" Padding="0,12,0,0">
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+          <StackPanel><ProgressBar x:Name="BusyBar" Height="3" IsIndeterminate="True" Visibility="Collapsed" Margin="0,0,0,8"/><TextBlock x:Name="StatusText" Text="Ready · Set up your accounts, or explore a sample day." FontSize="12" Foreground="{StaticResource Muted}"/></StackPanel>
+          <Button x:Name="CancelButton" Grid.Column="1" Content="Cancel read" Click="Cancel_Click" Visibility="Collapsed" FontSize="11" Padding="10,4" Margin="12,0,0,0"/>
+        </Grid>
+      </Border>
     </Grid>
   </Grid>
 </Window>
