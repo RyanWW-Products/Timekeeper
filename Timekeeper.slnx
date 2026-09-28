@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Timekeeper.App/Timekeeper.App.csproj" />
+    <Project Path="src/Timekeeper.Core/Timekeeper.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Timekeeper.ApiTests/Timekeeper.ApiTests.csproj" />
+    <Project Path="tests/Timekeeper.Tests/Timekeeper.Tests.csproj" />
+    <Project Path="tests/Timekeeper.UpdateTests/Timekeeper.UpdateTests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+artifacts/
+.dotnet/
+.vs/
+*.user
+*.suo
+Reference Material/
+.codex/
+.agents/
+.env
+.env.*
+*.local.json

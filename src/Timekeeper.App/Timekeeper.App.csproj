@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>Timekeeper</AssemblyName>
+    <RootNamespace>Timekeeper.App</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/Timekeeper.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="Assets/Timekeeper.ico" />
+    <ProjectReference Include="../Timekeeper.Core/Timekeeper.Core.csproj" />
+    <Content Include="../../docs/GETTING_STARTED.md" Link="Help/GETTING_STARTED.md" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../docs/GETTING_STARTED.md')" />
+    <Content Include="../../docs/COPILOT_AGENT_INSTRUCTIONS.txt" Link="Help/COPILOT_AGENT_INSTRUCTIONS.txt" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../docs/COPILOT_AGENT_INSTRUCTIONS.txt')" />
+    <Content Include="../../docs/COPILOT_SETUP.md" Link="Help/COPILOT_SETUP.md" CopyToOutputDirectory="PreserveNewest" Condition="Exists('../../docs/COPILOT_SETUP.md')" />
+  </ItemGroup>
+</Project>

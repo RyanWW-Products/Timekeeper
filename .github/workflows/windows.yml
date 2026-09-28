@@ -1,0 +1,48 @@
+name: Windows build
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+      - name: Install installer compiler if missing
+        shell: pwsh
+        run: |
+          if (!(Test-Path 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe')) {
+            choco install innosetup --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'Could not install Inno Setup' }
+          }
+      - name: Test and build installer
+        shell: pwsh
+        run: |
+          [xml]$props = Get-Content Directory.Build.props
+          ./scripts/build.ps1 -Version $props.Project.PropertyGroup.Version
+      - name: Check published Windows UI
+        shell: pwsh
+        run: |
+          $output = Join-Path $PWD 'artifacts/ui-check'
+          $process = Start-Process ./artifacts/publish/Timekeeper.exe -ArgumentList @('--smoke-test', ('"' + $output + '"')) -WindowStyle Hidden -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw 'Windows UI check failed' }
+          Get-Content (Join-Path $output 'ui-smoke.txt')
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Timekeeper-Windows
+          path: |
+            artifacts/installer/Timekeeper-Setup-*.exe
+            artifacts/installer/SHA256SUMS.txt
+            artifacts/ui-check/*.txt
+            artifacts/ui-check/*.png
+          retention-days: 14
