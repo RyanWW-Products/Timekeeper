@@ -33,12 +33,14 @@ internal sealed class SettingsWindow : Window
         var outer=new Grid { Margin=new Thickness(28,24,28,24) };
         outer.RowDefinitions.Add(new RowDefinition { Height=GridLength.Auto }); outer.RowDefinitions.Add(new RowDefinition()); outer.RowDefinitions.Add(new RowDefinition { Height=GridLength.Auto });
         var header=new StackPanel { Margin=new Thickness(0,0,0,20) };
-        header.Children.Add(new TextBlock { Text="YOUR WORKSPACE",Style=(Style)FindResource("SectionLabel"),Margin=new Thickness(0,0,0,8) });
+        header.Children.Add(new TextBlock { Text="CONFIGURATION",Style=(Style)FindResource("SectionLabel"),Margin=new Thickness(0,0,0,8) });
         header.Children.Add(new TextBlock { Text="Settings",FontFamily=Font("DisplayFont"),FontSize=32 });
-        header.Children.Add(Hint("Connect your accounts and set the defaults for your day.",new Thickness(0,8,0,0)));
+        header.Children.Add(Hint("Accounts, time policy and Quickbase configuration.",new Thickness(0,8,0,0)));
+        var appearanceLink=new Button { Content="Appearance settings",Style=(Style)FindResource("Quiet"),FontSize=12,HorizontalAlignment=HorizontalAlignment.Left,Padding=new Thickness(0,6,0,6),Margin=new Thickness(0,6,0,0) };
+        appearanceLink.Click+=(_,_)=>new AppearanceWindow(this).ShowDialog(); header.Children.Add(appearanceLink);
         outer.Children.Add(header);
         var panel=_inputPanel; var scroll=new ScrollViewer { Content=panel,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled,Padding=new Thickness(0,0,12,0) }; Grid.SetRow(scroll,1); outer.Children.Add(scroll);
-        var accounts=Section(panel,"01 / CONNECTIONS","Your accounts");
+        var accounts=Section(panel,"01 / CONNECTIONS","Accounts");
         var accountFields=Columns(accounts);
         AddField(accountFields.Left,"realm","Quickbase realm",settings.Realm);
         AddField(accountFields.Right,"email","Quickbase sign-in email",settings.Email);
@@ -50,10 +52,10 @@ internal sealed class SettingsWindow : Window
         accounts.Children.Add(tokenHelp);
         accounts.Children.Add(Hint("Saved in Windows Credential Manager. Tokens are never included in your Copilot file.",new Thickness(0,2,0,12)));
         _identity.Content=new TextBlock { Text="The verified Toggl and Quickbase accounts are mine.",TextWrapping=TextWrapping.Wrap,FontSize=12 }; _identity.Margin=new Thickness(0,4,0,0); accounts.Children.Add(_identity);
-        var copilot=Section(panel,"02 / ASSISTANT","Your shared Copilot agent");
+        var copilot=Section(panel,"02 / ASSISTANT","Shared Copilot agent");
         AddField(copilot,"copilot","Agent link",settings.CopilotUrl,"Use your team's shared link. Your agent is already set up for you.");
         if(readCredentials) try { var credentials=CredentialVault.Load(settings); _toggl.Password=credentials.TogglToken; _quickbase.Password=credentials.QuickbaseToken; } catch (Exception ex) { _status.Text=ex.Message; }
-        var preferences=Section(panel,"03 / DAILY DEFAULTS","Make the hours add up");
+        var preferences=Section(panel,"03 / DAILY DEFAULTS","Time policy");
         _add.IsChecked=settings.AddTimecards; _fill.IsChecked=settings.FillWeekdays;
         AddPreference(preferences,_add,"Add a Timecards entry on weekdays","allowance","Timecards hours",settings.TimecardsHours);
         AddPreference(preferences,_fill,"Fill remaining weekday hours with Misc internal","target","Fill target (hours)",settings.TargetHours);
@@ -77,6 +79,7 @@ internal sealed class SettingsWindow : Window
         _fields["realm"].TextChanged+=(_,_)=>ClearDetectedIdentity();
         _quickbase.PasswordChanged+=(_,_)=>ClearDetectedIdentity();
         _toggl.PasswordChanged+=(_,_)=> { _testedConfiguration=null; _identity.IsChecked=false; ClearErrorActions(); _status.Text="Test connections to verify both accounts."; };
+        Appearance.Attach(this);
     }
     private static Brush Brush(string key)=>(Brush)Application.Current.FindResource(key);
     private static FontFamily Font(string key)=>(FontFamily)Application.Current.FindResource(key);

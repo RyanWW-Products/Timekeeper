@@ -26,6 +26,7 @@ internal sealed class TextDialog : Window
         var copy = new Button { Content="Copy text", Margin=new Thickness(0,0,10,0) }; copy.Click += (_,_) => Clipboard.SetText(_text.Text); buttons.Children.Add(copy);
         var done = new Button { Content=editable ? "Validate proposal" : "Close", IsDefault=true, Style=(Style)FindResource("Primary") }; done.Click += (_,_) => { DialogResult=editable; Close(); }; buttons.Children.Add(done);
         Grid.SetRow(buttons,2); grid.Children.Add(buttons); Content=grid;
+        Appearance.Attach(this);
     }
     private static Brush Brush(string key)=>(Brush)Application.Current.FindResource(key);
     private static FontFamily Font(string key)=>(FontFamily)Application.Current.FindResource(key);
@@ -48,6 +49,7 @@ internal sealed class TextDialog : Window
         var button = new Button { Content="Search assignments", Style=(Style)owner.FindResource("Primary"), IsDefault=true };
         button.Click += (_,_) => { dialog.DialogResult=true; dialog.Close(); }; buttons.Children.Add(button); stack.Children.Add(buttons); dialog.Content=new ScrollViewer { Content=stack,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled };
         dialog.Loaded+=(_,_)=>input.Focus();
+        Appearance.Attach(dialog);
         return dialog.ShowDialog()==true ? input.Text : null;
     }
 }

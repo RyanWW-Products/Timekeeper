@@ -13,6 +13,12 @@ Timekeeper runs on 64-bit Windows. Install the supplied setup program, then open
 
 The application keeps its working files under `%LOCALAPPDATA%\Timekeeper`, outside the installation directory. Uninstalling removes the application but preserves those working files. Exported files contain work details; use your organization's approved Microsoft 365 account when uploading them. This guide is available through **Getting started** and in the application's `Help` folder.
 
+## Customize the appearance
+
+Open **Appearance** in the sidebar or **Appearance settings** at the top of Settings. Choose **Ivory** (the original light theme), **Dark**, **Slate**, **Forest** or **Sand**. Use the theme's accent color or select Teal, Blue, Violet or Amber. **Interface size** scales text and controls to 100%, 110% or 120%; **Spacing** offers Comfortable or Compact controls and table rows.
+
+Changes preview immediately across open windows. Choose **Save appearance** to keep them, **Cancel** to restore the previous look, or **Reset appearance** to preview the original Ivory defaults. Appearance saves separately from account settings and does not require a connection test. Your current read session and reviewed proposal stay in place.
+
 ## Get your Quickbase user token
 
 1. Sign into your Quickbase realm and open the user menu on the top bar. Choose **Profile** (older layouts may say **My preferences**).

@@ -26,6 +26,7 @@ public partial class App : Application
         try
         {
             var store = new SessionStore(smoke ? Path.Combine(Path.GetFullPath(e.Args[1]), "smoke-data") : null);
+            Appearance.Initialize(store.RootPath, smoke);
             var window = new MainWindow(store, smoke);
             MainWindow = window;
             if (smoke)
@@ -85,6 +86,7 @@ public partial class App : Application
                 var paste=new TextDialog(window,"Paste Copilot's proposal",JsonSerializer.Serialize(proposal,JsonDefaults.Options),editable:true,smoke:true);
                 RenderWindow(paste,Path.Combine(output,"timekeeper-proposal.png"),(int)paste.Width,(int)paste.Height);
                 File.AppendAllText(report,"PASS: rendered initial, default, minimum, review, history, settings, errors, updates, details and proposal views with synthetic data only\n");
+                File.AppendAllText(report, AppearanceSmoke(output, window, settingsWindow, errorWindow, updatesWindow, details));
                 Shutdown(0);
             }
             else window.Show();
@@ -99,6 +101,72 @@ public partial class App : Application
             else MessageBox.Show("Timekeeper could not open its local data. " + ex.Message, "Timekeeper", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(1);
         }
+    }
+    private string AppearanceSmoke(string output, MainWindow owner, SettingsWindow settings, SettingsWindow error, UpdatesWindow updates, TextDialog details)
+    {
+        string appearanceRoot=Path.Combine(output,"appearance-check",Guid.NewGuid().ToString("N"));
+        Appearance.Initialize(appearanceRoot,true);
+        int originalRows=((DataGrid)owner.FindName("ReviewGrid")).Items.Count;
+        var original=new AppearancePreferences();
+        var choice=new AppearancePreferences("Dark","Violet",120,"Compact");
+        var cancelled=new AppearanceWindow(owner,smoke:true); cancelled.SmokePreview(choice);
+        if(Appearance.Current!=choice) throw new InvalidOperationException("Appearance preview did not apply.");
+        cancelled.Close();
+        if(Appearance.Current!=original || File.Exists(Path.Combine(appearanceRoot,"appearance.json"))) throw new InvalidOperationException("Cancelled appearance was retained or saved.");
+        var saved=new AppearanceWindow(owner,smoke:true); saved.SmokePreview(choice); saved.SmokeSave(); saved.Close();
+        Appearance.Initialize(appearanceRoot,false);
+        if(Appearance.Current!=choice) throw new InvalidOperationException("Appearance did not survive reloading.");
+        if(((DataGrid)owner.FindName("ReviewGrid")).Items.Count!=originalRows || ((Button)owner.FindName("WriteButton")).IsEnabled) throw new InvalidOperationException("Appearance changed the reviewed session or write gate.");
+        if(Appearance.Normalize(new("missing","unknown",900,"unknown"))!=original) throw new InvalidOperationException("Unsupported appearance values were not normalized.");
+        File.WriteAllText(Path.Combine(appearanceRoot,"appearance.json"),"{invalid");
+        if(Appearance.Load(Path.Combine(appearanceRoot,"appearance.json"))!=original) throw new InvalidOperationException("Damaged appearance settings did not fall back safely.");
+        foreach(var theme in Appearance.Themes)
+        {
+            foreach(var accent in Appearance.Accents)
+            {
+                var palette=Appearance.Palette(new(theme.Name,accent));
+                foreach(var pair in new[]{("Ink","Surface"),("Ink","AccentSoft"),("Accent","Surface"),("Accent","Canvas"),("Accent","AccentSoft"),("AccentDeep","AccentSoft"),("Muted","ExportHover"),("ToolTipInk","ToolTipSurface"),("Muted","Canvas"),("Muted","SurfaceMuted"),("Muted","AccentSoft"),("OnAccent","Accent"),("OnAccent","AccentDeep"),("SidebarInk","NavActive"),("SidebarMuted","Sidebar"),("Success","SuccessSoft"),("Warning","WarningSoft"),("Danger","DangerSoft")})
+                    if(Contrast(palette[pair.Item1],palette[pair.Item2])<4.5) throw new InvalidOperationException($"Low text contrast in {theme.Name}/{accent}: {pair.Item1}/{pair.Item2}.");
+            }
+            Appearance.Apply(new(theme.Name));
+            var main=new MainWindow(new SessionStore(Path.Combine(output,"theme-smoke-data")),true);
+            string name=theme.Name.ToLowerInvariant();
+            RenderWindow(main,Path.Combine(output,$"theme-{name}.png"),1380,1220);
+            FindDescendant<ScrollViewer>((DependencyObject)settings.Content)?.ScrollToTop();
+            RenderWindow(settings,Path.Combine(output,$"theme-{name}-settings.png"),(int)settings.Width,850);
+            if(((SolidColorBrush)settings.Background).Color!=Appearance.Palette(new(theme.Name))["Canvas"]) throw new InvalidOperationException("An existing dialog did not update its theme.");
+            var picker=new AppearanceWindow(owner,smoke:true);
+            RenderWindow(picker,Path.Combine(output,$"theme-{name}-appearance.png"),(int)picker.Width,760);
+            var calendar=new Window { Style=(Style)FindResource(typeof(Window)), Content=new Calendar { SelectedDate=new DateTime(2030,3,12),DisplayDate=new DateTime(2030,3,12),HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center }, Width=310, Height=320 };
+            Appearance.Attach(calendar); RenderWindow(calendar,Path.Combine(output,$"theme-{name}-calendar.png"),310,320);
+            picker.Close(); calendar.Close(); main.Close();
+        }
+        Appearance.Apply(new("Dark"));
+        RenderWindow(error,Path.Combine(output,"theme-dark-error.png"),(int)error.Width,850);
+        RenderWindow(updates,Path.Combine(output,"theme-dark-updates.png"),(int)updates.Width,750);
+        RenderWindow(details,Path.Combine(output,"theme-dark-details.png"),(int)details.Width,(int)details.Height);
+        Appearance.Apply(choice);
+        var scaled=new MainWindow(new SessionStore(Path.Combine(output,"scaled-smoke-data")),true);
+        RenderWindow(scaled,Path.Combine(output,"theme-dark-compact-120.png"),1040,720);
+        ((ScrollViewer)scaled.FindName("WorkScroll")).ScrollToEnd();
+        RenderWindow(scaled,Path.Combine(output,"theme-dark-compact-120-review.png"),1040,720);
+        var scaledGrid=(DataGrid)scaled.FindName("ReviewGrid");
+        var tableScroll=FindDescendant<ScrollViewer>(scaledGrid);
+        if(scaledGrid.Columns[1].ActualWidth<72 || tableScroll is null || tableScroll.ScrollableWidth<=0)
+            throw new InvalidOperationException("The enlarged review grid squeezed the hours column instead of scrolling.");
+        var scaledPicker=new AppearanceWindow(owner,smoke:true);
+        RenderWindow(scaledPicker,Path.Combine(output,"theme-dark-compact-120-appearance.png"),760,760);
+        scaledPicker.Close(); scaled.Close(); Appearance.Apply(original);
+        return "PASS: appearance previews revert on cancel, save/reload independently, tolerate damaged preferences and preserve the review/write gate\nPASS: all five themes and accent overrides meet 4.5:1 text contrast checks\nPASS: rendered all themes, existing dialogs, calendars and 120% compact/minimum layouts\n";
+    }
+    private static double Contrast(Color a,Color b)
+    {
+        static double Luminance(Color c)
+        {
+            static double Linear(byte b) { double s=b/255d; return s<=0.04045?s/12.92:Math.Pow((s+0.055)/1.055,2.4); }
+            return 0.2126*Linear(c.R)+0.7152*Linear(c.G)+0.0722*Linear(c.B);
+        }
+        double x=Luminance(a),y=Luminance(b); return (Math.Max(x,y)+0.05)/(Math.Min(x,y)+0.05);
     }
     private string ControlSmokeSummary()
     {
@@ -126,6 +194,25 @@ public partial class App : Application
             throw new InvalidOperationException("Calendar selection did not update the date field.");
         if(date.IsDropDownOpen || popup!.IsOpen)
             throw new InvalidOperationException("The offscreen date smoke check opened a popup.");
+        date.SelectedDate=null; date.UpdateLayout();
+        var watermark=editor.Template.FindName("PART_Watermark",editor) as ContentControl;
+        if(watermark is null || watermark.Visibility!=Visibility.Visible || string.IsNullOrWhiteSpace(watermark.Content?.ToString()))
+            throw new InvalidOperationException("The empty date field lost its format hint.");
+        calendar.DisplayDate=new DateTime(2030,3,12);
+        calendar.Measure(new Size(310,320)); calendar.Arrange(new Rect(0,0,310,320)); calendar.UpdateLayout();
+        var calendarItem=(CalendarItem)calendar.Template.FindName("PART_CalendarItem",calendar);
+        var next=(Button)calendarItem.Template.FindName("PART_NextButton",calendarItem);
+        var previous=(Button)calendarItem.Template.FindName("PART_PreviousButton",calendarItem);
+        var heading=(Button)calendarItem.Template.FindName("PART_HeaderButton",calendarItem);
+        next.RaiseEvent(new RoutedEventArgs(Button.ClickEvent,next));
+        if(calendar.DisplayDate.Month!=4) throw new InvalidOperationException("The themed calendar did not advance a month.");
+        previous.RaiseEvent(new RoutedEventArgs(Button.ClickEvent,previous));
+        if(calendar.DisplayDate.Month!=3) throw new InvalidOperationException("The themed calendar did not return a month.");
+        heading.RaiseEvent(new RoutedEventArgs(Button.ClickEvent,heading)); calendar.UpdateLayout();
+        if(calendar.DisplayMode!=CalendarMode.Year || ((Grid)calendarItem.Template.FindName("PART_YearView",calendarItem)).Visibility!=Visibility.Visible)
+            throw new InvalidOperationException("The themed calendar did not show its month selector.");
+        heading.RaiseEvent(new RoutedEventArgs(Button.ClickEvent,heading)); calendar.UpdateLayout();
+        if(calendar.DisplayMode!=CalendarMode.Decade) throw new InvalidOperationException("The themed calendar did not show its year selector.");
 
         foreach(var orientation in new[]{Orientation.Horizontal,Orientation.Vertical})
         {
@@ -155,7 +242,7 @@ public partial class App : Application
             if(bar.Value>=before)
                 throw new InvalidOperationException($"The {orientation} scrollbar did not page backward.");
         }
-        return "PASS: styled date fields select text, commit typed dates and synchronize calendar selection without opening a popup\nPASS: horizontal and vertical scrollbars respond to thumb dragging and forward/backward page commands\n";
+        return "PASS: styled date fields select text, commit dates, show empty format hints and synchronize selection; calendars navigate months/years without opening a popup\nPASS: horizontal and vertical scrollbars respond to thumb dragging and forward/backward page commands\n";
 
         static void ExecutePage(RepeatButton button)
         {

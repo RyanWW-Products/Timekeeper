@@ -36,6 +36,7 @@ public partial class MainWindow : Window
         try { today=_settings.Today(); } catch { today=DateOnly.FromDateTime(DateTime.Today); }
         StartDate.SelectedDate=EndDate.SelectedDate=today.ToDateTime(TimeOnly.MinValue);
         RefreshProfile();
+        Appearance.Attach(this);
         Closing+=OnClosing;
         if(demo) LoadDemo();
         else
@@ -57,6 +58,11 @@ public partial class MainWindow : Window
     {
         if(_busy) { StatusText.Text="Finish the current read or write before updating Timekeeper."; return; }
         new UpdatesWindow(this).ShowDialog();
+    }
+    private void Appearance_Click(object sender,RoutedEventArgs e)
+    {
+        if(_busy) return;
+        new AppearanceWindow(this).ShowDialog();
     }
     private bool Configured()
     {
@@ -318,7 +324,7 @@ public partial class MainWindow : Window
     }
     private void ShowDay_Click(object sender,RoutedEventArgs e)
     {
-        WorkScroll.Visibility=Visibility.Visible; HistoryPanel.Visibility=Visibility.Collapsed; PageEyebrow.Text="YOUR WORKDAY / TIMECARDS"; PageTitle.Text="Your day, in good order."; PageSubtitle.Text="Read your time. Resolve the details. Review and send.";
+        WorkScroll.Visibility=Visibility.Visible; HistoryPanel.Visibility=Visibility.Collapsed; PageEyebrow.Text="TOGGL / QUICKBASE"; PageTitle.Text="Timecards"; PageSubtitle.Text="Read Toggl entries, review the proposal, and submit to Quickbase.";
         DayNav.Tag="Active"; HistoryNav.Tag=null;
         if(!_busy) StatusText.Text=_validation is { IsValid:true }?"Proposal checked. Review the rows before writing.":_session is not null?"Your time is ready. Send the file to Copilot to continue.":"Ready · Set up your accounts, or explore a sample day.";
     }
@@ -329,7 +335,7 @@ public partial class MainWindow : Window
         {
             HistoryGrid.ItemsSource=_store.LoadReceipts(_settings.ProfileKey); WorkScroll.Visibility=Visibility.Collapsed; HistoryPanel.Visibility=Visibility.Visible;
             HistoryEmpty.Visibility=HistoryGrid.Items.Count==0?Visibility.Visible:Visibility.Collapsed;
-            PageEyebrow.Text="YOUR WORKDAY / HISTORY"; PageTitle.Text="A record of your time."; PageSubtitle.Text="Submission results, saved locally for your review.";
+            PageEyebrow.Text="QUICKBASE / HISTORY"; PageTitle.Text="Submission history"; PageSubtitle.Text="Submission results and saved receipts.";
             DayNav.Tag=null; HistoryNav.Tag="Active"; UpdateEnabled();
             StatusText.Text=HistoryGrid.Items.Count==0?"No submissions yet. Your receipts will be saved here.":$"{HistoryGrid.Items.Count} saved submissions · Check uncertain results before retrying.";
         }

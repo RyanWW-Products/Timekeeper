@@ -36,7 +36,7 @@ internal sealed class UpdatesWindow : Window
         heading.Children.Add(new TextBlock { Text = "Updates", FontFamily = Font("DisplayFont"), FontSize = 32 });
         var version = new Border { Background = Brush("AccentSoft"), CornerRadius = new CornerRadius(7), Padding = new Thickness(11, 7, 11, 7), VerticalAlignment = VerticalAlignment.Center, Child = new TextBlock { Text = $"INSTALLED  {VersionLabel}", FontFamily = Font("MonoFont"), FontSize = 11, Foreground = Brush("AccentDeep") } };
         Grid.SetColumn(version, 1); heading.Children.Add(version); panel.Children.Add(heading);
-        panel.Children.Add(Hint("The latest improvements, ready when you are.", new Thickness(0, 0, 0, 22)));
+        panel.Children.Add(Hint("Check for and install Timekeeper updates.", new Thickness(0, 0, 0, 22)));
         var releasePanel = new StackPanel();
         var statusPanel = new StackPanel(); _statusLabel.Style = (Style)FindResource("SectionLabel"); statusPanel.Children.Add(_statusLabel); statusPanel.Children.Add(_status); _statusCard.Child = statusPanel; _statusCard.Background = Brush("SurfaceMuted"); releasePanel.Children.Add(_statusCard);
         releasePanel.Children.Add(new TextBlock { Text = "Release notes", FontWeight = FontWeights.SemiBold, FontSize = 12, Margin = new Thickness(0, 0, 0, 8) });
@@ -62,6 +62,7 @@ internal sealed class UpdatesWindow : Window
         Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         if (!smoke) try { _token.Password = CredentialVault.LoadUpdateToken(); } catch (Exception ex) { _status.Text = ex.Message; }
         Closing += (_, e) => { if (_busy) { _cancellation?.Cancel(); e.Cancel = true; _status.Text = "Cancelling the update request…"; } };
+        Appearance.Attach(this);
     }
 
     private static Brush Brush(string key) => (Brush)Application.Current.FindResource(key);
