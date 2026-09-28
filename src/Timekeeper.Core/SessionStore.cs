@@ -12,7 +12,17 @@ public sealed class SessionStore
         RootPath = Path.GetFullPath(root ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Timekeeper"));
         Directory.CreateDirectory(RootPath);
     }
-    public AppSettings LoadSettings() => Read<AppSettings>(Path.Combine(RootPath, "settings.json")) ?? new();
+    public AppSettings LoadSettings()
+    {
+        var settings = Read<AppSettings>(Path.Combine(RootPath, "settings.json")) ?? new();
+        // Upgrade only the old generic default; preserve deliberately configured links.
+        if (settings.CopilotUrl is "https://m365.cloud.microsoft/chat" or "https://m365.cloud.microsoft/chat/")
+        {
+            settings = settings with { CopilotUrl = AppSettings.SharedCopilotUrl };
+            SaveSettings(settings);
+        }
+        return settings;
+    }
     public void SaveSettings(AppSettings settings) => Write(Path.Combine(RootPath, "settings.json"), settings);
     public void SaveSession(ReadSession session) => Write(SessionPath(session.SessionId), session);
     public ReadSession? LoadSession(string sessionId) => Read<ReadSession>(SessionPath(sessionId));

@@ -297,17 +297,9 @@ public partial class MainWindow : Window
     private void Help_Click(object sender,RoutedEventArgs e)
     {
         var help=Path.Combine(AppContext.BaseDirectory,"Help");
-        var setup=Path.Combine(help,"COPILOT_SETUP.md");
-        string text=File.Exists(setup)?File.ReadAllText(setup):"Open your Microsoft 365 Copilot agent. Enable file creation and paste the bundled instructions. Then read your day in Timekeeper and drag the export into the agent. Return the downloaded proposal to Timekeeper for review.";
-        var dialog=new TextDialog(this,"Copilot setup",text);
-        dialog.AddAction("Copy agent instructions",()=>
-        {
-            var path=Path.Combine(help,"COPILOT_AGENT_INSTRUCTIONS.txt");
-            if(!File.Exists(path)) throw new FileNotFoundException("The bundled agent instructions are missing. Reinstall Timekeeper.");
-            Clipboard.SetText(File.ReadAllText(path));
-            StatusText.Text="Agent instructions copied. Paste them into the Instructions field in Agent Builder.";
-        });
-        dialog.ShowDialog();
+        var setup=Path.Combine(help,"GETTING_STARTED.md");
+        string text=File.Exists(setup)?File.ReadAllText(setup):"Save your own API tokens and your team's shared Copilot agent link in Settings. Test connections and confirm your accounts. Read your day, drag the export to the shared agent, and return its proposal for review. You do not need to create an agent.";
+        new TextDialog(this,"Getting started",text).ShowDialog();
     }
     private void RowDetails_Click(object sender,RoutedEventArgs e)
     {

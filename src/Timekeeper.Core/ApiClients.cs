@@ -65,7 +65,7 @@ public sealed class TimecardApi : IDisposable
         if (string.IsNullOrWhiteSpace(email) || !System.Net.Mail.MailAddress.TryCreate(email, out _))
             throw new InvalidOperationException("Toggl did not return a valid account email. Check the Toggl API token.");
         await VerifyQuickbaseIdentityAsync(ct);
-        return $"Verified Toggl account: {email}. Quickbase account: {settings.Email} · employee {settings.EmployeeId}. Confirm both accounts are yours.";
+        return $"Verified Toggl account: {email}. Quickbase account: {settings.Email}. Confirm both accounts are yours.";
     }
 
     /// <summary>Resolve only the token's current user during setup. No supplied employee ID is trusted or changed.</summary>

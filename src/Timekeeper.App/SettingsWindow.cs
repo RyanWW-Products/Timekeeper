@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -17,6 +18,7 @@ internal sealed class SettingsWindow : Window
     private readonly TextBlock _status = new() { Text="Test both connections to confirm your identity before saving.", TextWrapping=TextWrapping.Wrap, Margin=new Thickness(0,14,0,12) };
     private readonly Button _test = new() { Content="Test connections" }, _save=new() { Content="Save settings" };
     private string? _testedConfiguration;
+    private string _detectedEmployeeId;
     private string? _testedToggl, _testedQuickbase;
     public AppSettings? SavedSettings { get; private set; }
 
@@ -24,7 +26,7 @@ internal sealed class SettingsWindow : Window
     {
         if(readCredentials) Owner=owner;
         Style=(Style)Application.Current.FindResource(typeof(Window));
-        _original=settings; _store=store; Title="Timekeeper · Settings"; Width=720; Height=830; MinWidth=600; MinHeight=600; WindowStartupLocation=WindowStartupLocation.CenterOwner;
+        _original=settings; _store=store; _detectedEmployeeId=settings.EmployeeId; Title="Timekeeper · Settings"; Width=720; Height=830; MinWidth=600; MinHeight=600; WindowStartupLocation=WindowStartupLocation.CenterOwner;
         var outer=new Grid { Margin=new Thickness(28) };
         outer.RowDefinitions.Add(new RowDefinition { Height=GridLength.Auto }); outer.RowDefinitions.Add(new RowDefinition()); outer.RowDefinitions.Add(new RowDefinition { Height=GridLength.Auto });
         outer.Children.Add(new TextBlock { Text="Set up your workspace", FontSize=26, FontWeight=FontWeights.SemiBold, Margin=new Thickness(0,0,0,18) });
@@ -32,13 +34,14 @@ internal sealed class SettingsWindow : Window
         Heading(panel,"1. Your accounts");
         AddField(panel,"realm","Quickbase realm",settings.Realm);
         AddField(panel,"email","Quickbase sign-in email",settings.Email);
-        AddField(panel,"employee","Quickbase user ID (automatic)",settings.EmployeeId,"Detected from your token when you test connections. No manual lookup is needed.");
-        _fields["employee"].IsReadOnly=true;
-        _fields["employee"].Background=new SolidColorBrush(Color.FromRgb(235,241,245));
         panel.Children.Add(Label("Toggl API token")); panel.Children.Add(_toggl);
         panel.Children.Add(Label("Quickbase user token")); panel.Children.Add(_quickbase);
+        var tokenHelp=new Button { Content="How to get a Quickbase token ↗",FontSize=12,Padding=new Thickness(10,6,10,6),Margin=new Thickness(0,8,0,0),HorizontalAlignment=HorizontalAlignment.Left };
+        tokenHelp.Click+=(_,_)=> { try { Process.Start(new ProcessStartInfo("https://help.quickbase.com/docs/create-and-use-user-tokens") { UseShellExecute=true }); } catch(Exception ex) { _status.Text=ex.Message; } };
+        panel.Children.Add(tokenHelp);
         panel.Children.Add(new TextBlock { Text="Tokens are saved in Windows Credential Manager. They are never included in the Copilot file.",FontSize=12,Foreground=Brushes.SlateGray,Margin=new Thickness(0,7,0,8),TextWrapping=TextWrapping.Wrap });
         _identity.Margin=new Thickness(0,8,0,10); panel.Children.Add(_identity);
+        AddField(panel,"copilot","Shared Copilot agent link",settings.CopilotUrl,"Use the link supplied by your team. You do not need to create an agent.");
         if(readCredentials) try { var credentials=CredentialVault.Load(settings); _toggl.Password=credentials.TogglToken; _quickbase.Password=credentials.QuickbaseToken; } catch (Exception ex) { _status.Text=ex.Message; }
         Heading(panel,"2. Daily preferences");
         _add.IsChecked=settings.AddTimecards; _fill.IsChecked=settings.FillWeekdays; _add.Margin=new Thickness(0,4,0,8); _fill.Margin=new Thickness(0,12,0,8);
@@ -48,8 +51,6 @@ internal sealed class SettingsWindow : Window
         AddField(panel,"zone","Time zone",settings.TimeZoneId,"Example: Eastern Standard Time. This sets calendar dates, not working hours.");
         AddField(panel,"project","Internal Quickbase project ID",settings.InternalProjectId==0?"":settings.InternalProjectId.ToString(),"Enter an exact ID, or leave blank to look up the name below.");
         AddField(panel,"projectSearch","Internal project name",settings.InternalProjectSearch);
-        Heading(panel,"3. Your Copilot agent");
-        AddField(panel,"copilot","Copilot or shared agent link",settings.CopilotUrl,"Use the shared agent link if you have one. Copilot Studio is not required.");
         var advanced=new StackPanel();
         AddField(advanced,"internalTask","Task ID for automatic internal rows",settings.InternalTaskId.ToString());
         AddField(advanced,"timecardsTable","Timecards table ID",settings.TimecardsTable); AddField(advanced,"tasksTable","Tasks table ID",settings.TasksTable); AddField(advanced,"projectsTable","Projects table ID",settings.ProjectsTable); AddField(advanced,"assignmentsTable","Assignments table ID",settings.AssignmentsTable); AddField(advanced,"categoriesTable","Categories table ID",settings.CategoriesTable);
@@ -71,15 +72,15 @@ internal sealed class SettingsWindow : Window
     }
     private void ClearDetectedIdentity()
     {
-        _fields["employee"].Text=""; _testedConfiguration=null; _identity.IsChecked=false;
-        _status.Text="Test connections to detect your Quickbase user ID and verify both accounts.";
+        _detectedEmployeeId=""; _testedConfiguration=null; _identity.IsChecked=false;
+        _status.Text="Test connections to verify both accounts.";
     }
     private AppSettings Collect(bool allowMissingEmployeeId=false)
     {
         string Get(string key)=>_fields[key].Text.Trim();
         decimal Number(string key)=>decimal.TryParse(Get(key),NumberStyles.Number,CultureInfo.InvariantCulture,out var value)?value:throw new ArgumentException($"Enter a valid number for {key}.");
         int Id(string key,bool optional=false)=> optional&&Get(key)==""?0:int.TryParse(Get(key),out var value)?value:throw new ArgumentException($"Enter a valid ID for {key}.");
-        var result=_original with { Realm=Get("realm").ToLowerInvariant(),Email=Get("email"),EmployeeId=Get("employee"),TimeZoneId=Get("zone"),InternalProjectId=Id("project",true),InternalProjectSearch=Get("projectSearch"),InternalTaskId=Id("internalTask"),TimecardsHours=Number("allowance"),TargetHours=Number("target"),AddTimecards=_add.IsChecked==true,FillWeekdays=_fill.IsChecked==true,CopilotUrl=Get("copilot"),TimecardsTable=Get("timecardsTable"),TasksTable=Get("tasksTable"),ProjectsTable=Get("projectsTable"),AssignmentsTable=Get("assignmentsTable"),CategoriesTable=Get("categoriesTable") };
+        var result=_original with { Realm=Get("realm").ToLowerInvariant(),Email=Get("email"),EmployeeId=_detectedEmployeeId,TimeZoneId=Get("zone"),InternalProjectId=Id("project",true),InternalProjectSearch=Get("projectSearch"),InternalTaskId=Id("internalTask"),TimecardsHours=Number("allowance"),TargetHours=Number("target"),AddTimecards=_add.IsChecked==true,FillWeekdays=_fill.IsChecked==true,CopilotUrl=Get("copilot"),TimecardsTable=Get("timecardsTable"),TasksTable=Get("tasksTable"),ProjectsTable=Get("projectsTable"),AssignmentsTable=Get("assignmentsTable"),CategoriesTable=Get("categoriesTable") };
         var errors=Rules.ValidateSettings(result,allowMissingEmployeeId); if(errors.Count>0) throw new ArgumentException(string.Join("\n",errors));
         if(string.IsNullOrWhiteSpace(_toggl.Password)||string.IsNullOrWhiteSpace(_quickbase.Password)) throw new ArgumentException("Enter both API tokens.");
         return result;
@@ -90,11 +91,11 @@ internal sealed class SettingsWindow : Window
         try
         {
             var settings=Collect(allowMissingEmployeeId:true); var credentials=new Credentials(_toggl.Password.Trim(),_quickbase.Password.Trim());
-            _status.Text="Finding your Quickbase user ID from your token…";
+            _status.Text="Verifying your Quickbase account…";
             var detected=await TimecardApi.DiscoverQuickbaseIdentityAsync(settings,credentials);
-            _fields["employee"].Text=detected.EmployeeId;
+            _detectedEmployeeId=detected.EmployeeId;
             settings=Collect();
-            _status.Text="Quickbase user ID detected. Checking both accounts and your internal project…";
+            _status.Text="Checking both accounts and your internal project…";
             using var api=new TimecardApi(settings,credentials);
             var identity=await api.TestAsync();
             var reference=await api.ReadReferenceAsync(default);
@@ -120,18 +121,18 @@ internal sealed class SettingsWindow : Window
     }
     internal string SmokeSummary()
     {
-        if(!_fields["employee"].IsReadOnly) throw new InvalidOperationException("Quickbase ID must be discovered, not typed.");
+        if(_fields.ContainsKey("employee")) throw new InvalidOperationException("Quickbase ID must not appear in the settings form.");
         _fields["email"].Text="smoke@example.com"; _toggl.Password="synthetic-token"; _quickbase.Password="synthetic-token";
         var pending=Collect(allowMissingEmployeeId:true);
         if(pending.EmployeeId!="") throw new InvalidOperationException("Setup did not start with an empty identity.");
         bool blocked=false;
         try { _=Collect(); } catch(ArgumentException) { blocked=true; }
         if(!blocked) throw new InvalidOperationException("Unverified setup can be saved.");
-        _fields["employee"].Text="123.test"; _=Collect();
+        _detectedEmployeeId="123.test"; _=Collect();
         _testedConfiguration="synthetic-tested-state"; _identity.IsChecked=true;
         _quickbase.Password="changed-synthetic-token";
-        if(_fields["employee"].Text!=""||_testedConfiguration!=null||_identity.IsChecked==true) throw new InvalidOperationException("Changing the token retained a stale identity.");
+        if(_detectedEmployeeId!=""||_testedConfiguration!=null||_identity.IsChecked==true) throw new InvalidOperationException("Changing the token retained a stale identity.");
         _fields["email"].Text=""; _toggl.Password=""; _quickbase.Password="";
-        return "PASS: setup accepts blank ID for discovery only\nPASS: detected user ID is read-only\nPASS: token changes clear detected ID and verification\n";
+        return "PASS: setup accepts blank ID for discovery only\nPASS: detected user ID is kept out of the settings form\nPASS: token changes clear detected ID and verification\n";
     }
 }

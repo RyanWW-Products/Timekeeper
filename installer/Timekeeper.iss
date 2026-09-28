@@ -1,7 +1,7 @@
 ; Compile with scripts/build.ps1. Only the clean publish output and the new
 ; guides are packaged; historical reference material is never a source.
 #ifndef AppVersion
-  #define AppVersion "0.2.0"
+  #define AppVersion "0.2.1"
 #endif
 #ifndef PublishDir
   #define PublishDir "..\artifacts\publish"
@@ -44,6 +44,11 @@ Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 Name: "{group}\Timekeeper"; Filename: "{app}\Timekeeper.exe"; WorkingDir: "{app}"
 Name: "{group}\Timekeeper getting started"; Filename: "{sys}\notepad.exe"; Parameters: """{app}\Help\GETTING_STARTED.md"""
 Name: "{autodesktop}\Timekeeper"; Filename: "{app}\Timekeeper.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+
+[InstallDelete]
+; Retire the old agent-creation guides during an upgrade. Team members use a shared agent.
+Type: files; Name: "{app}\Help\COPILOT_SETUP.md"
+Type: files; Name: "{app}\Help\COPILOT_AGENT_INSTRUCTIONS.txt"
 
 ; User settings, exports and receipts are deliberately outside {app} and are
 ; retained by the standard uninstaller. No installer custom code runs APIs.

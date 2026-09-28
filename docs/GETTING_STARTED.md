@@ -8,10 +8,20 @@ Timekeeper runs on 64-bit Windows. Install the supplied setup program, then open
 2. Enter your Toggl API token and Quickbase user token in the application. Keep these out of Copilot chat, exported files, and screenshots.
 3. Check the Quickbase realm, table configuration, internal project, internal task, and timezone against your organization's setup. The supplied schema defaults come from the reference workflow and may need adjustment for another Quickbase app.
 4. Review your time policy. Defaults are 0.17 Timecards hours and an eight-hour weekday target. These are per-user preferences.
-5. Choose **Test connections**. Timekeeper fills the read-only Quickbase user ID and checks that the token's account matches your Quickbase sign-in email. Check the displayed Toggl and Quickbase identities, select the checkbox confirming they belong to you, then choose **Save settings**. Changed credentials or settings require another connection test before saving.
-6. Open **Copilot setup** in Timekeeper and follow its guide. Choose **Copy agent instructions** to copy the text for Agent Builder; **Copy text** copies the setup guide instead. If you have an agent link, save it in Timekeeper's settings.
+5. Choose **Test connections**. Timekeeper detects your Quickbase identity internally and checks that the token's account matches your Quickbase sign-in email. Check the displayed Toggl and Quickbase accounts, select the checkbox confirming they belong to you, then choose **Save settings**. Changed credentials or settings require another connection test before saving.
+6. Choose **Open Copilot** to open the team's shared Timekeeper agent. Its chat link is preconfigured. You do not need to create or configure an agent; the owner must give your Microsoft 365 account access. If your team changes agents, update **Settings → Shared Copilot agent link** with its new chat link.
 
-The application keeps its working files under `%LOCALAPPDATA%\Timekeeper`, outside the installation directory. Uninstalling removes the application but preserves those working files. Exported files contain work details; use your organization's approved Microsoft 365 account when uploading them. The setup guide is available through **Copilot setup**; installed guides are also in the application's `Help` folder.
+The application keeps its working files under `%LOCALAPPDATA%\Timekeeper`, outside the installation directory. Uninstalling removes the application but preserves those working files. Exported files contain work details; use your organization's approved Microsoft 365 account when uploading them. This guide is available through **Getting started** and in the application's `Help` folder.
+
+## Get your Quickbase user token
+
+1. Sign into your Quickbase realm and open the user menu on the top bar. Choose **Profile** (older layouts may say **My preferences**).
+2. Under **My User Information**, choose **Manage my user tokens for [your realm]**.
+3. Choose **New user token**, then **OK**. Name it **Timekeeper** and add a description.
+4. Under **Assign token to apps**, select the Quickbase app containing your timecards and lookup tables, then save.
+5. Copy the token into **Settings → Quickbase user token** in Timekeeper and test connections. Some organizations show a token only at creation, so copy it before leaving that page.
+
+Use your own user token for each person's installation. The shared Copilot agent does not need anyone's tokens. The settings form also links to [Quickbase's official token instructions](https://help.quickbase.com/docs/create-and-use-user-tokens).
 
 ## Record and read your time
 

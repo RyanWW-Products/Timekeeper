@@ -19,6 +19,7 @@ public static class JsonDefaults
 
 public sealed record AppSettings
 {
+    public const string SharedCopilotUrl = "https://m365.cloud.microsoft/chat/?titleId=T_b313a74c-f0a1-7381-7c08-0d5992e75a3f&source=embedded-builder";
     public string Realm { get; init; } = "trialexhibits.quickbase.com";
     public string Email { get; init; } = "";
     public string EmployeeId { get; init; } = "";
@@ -30,7 +31,7 @@ public sealed record AppSettings
     public decimal TargetHours { get; init; } = 8m;
     public bool AddTimecards { get; init; } = true;
     public bool FillWeekdays { get; init; } = true;
-    public string CopilotUrl { get; init; } = "https://m365.cloud.microsoft/chat";
+    public string CopilotUrl { get; init; } = SharedCopilotUrl;
     public string TimecardsTable { get; init; } = "bd3bsxtbp";
     public string TasksTable { get; init; } = "bd3bsxtbn";
     public string ProjectsTable { get; init; } = "bd3bsxtbj";

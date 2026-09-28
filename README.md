@@ -8,7 +8,7 @@ The installed application includes its .NET runtime. End users do not need Pytho
 
 1. Download and run the Windows installer from [Releases](https://github.com/RyanWW-Products/Timekeeper/releases/latest), or use the local build in `artifacts/installer`.
 2. Open Timekeeper from the Start menu, enter your work email and API credentials in Settings, and choose **Test connections**. The app discovers your Quickbase user ID automatically.
-3. Follow [Getting started](docs/GETTING_STARTED.md) and [Copilot setup](docs/COPILOT_SETUP.md).
+3. Use **Open Copilot** for the preconfigured shared Timekeeper agent and follow [Getting started](docs/GETTING_STARTED.md). Team members do not create agents; the owner grants them access in Microsoft 365.
 
 The installer is per user and includes an optional desktop shortcut and standard Windows uninstall entry. This local build is unsigned. Organizational installation and Copilot access policies still apply.
 
@@ -17,6 +17,8 @@ The installer is per user and includes an optional desktop shortcut and standard
 Record time in Toggl, stop running timers, and choose **Read today's data** in Timekeeper. Drag the exported file into your Timekeeper agent in Microsoft 365 Copilot. Answer its matching questions, then return the proposal using drag and drop, **Open file**, or **Paste**. Review validated rows and choose **Write to Quickbase**. Keep the resulting history entry; it records confirmed and unresolved outcomes.
 
 The first release uses your browser for Microsoft 365 sign-in and chat. Embedded Microsoft 365 sign-in/chat is not implemented. File generation and attachment support depend on your tenant; JSON text can be pasted back into Timekeeper when Copilot cannot create a downloadable proposal.
+
+The team owner maintains the shared agent using the repository's [owner guide](docs/COPILOT_SETUP.md) and [agent instructions](docs/COPILOT_AGENT_INSTRUCTIONS.txt). Agent creation is not part of the installed team's setup flow.
 
 ## Time policy
 

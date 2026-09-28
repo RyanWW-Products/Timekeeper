@@ -124,6 +124,21 @@ await Check("multi-day read uses one range request and one running check", async
     using var f = new Fixture(); await f.Api.ReadAsync(Fixture.Day.AddDays(-7), Fixture.Day);
     Equal(1, f.Server.EntryQueries); Equal(1, f.Server.CurrentQueries);
 });
+await Check("shared-agent upgrade preserves identity, preferences and custom links", () =>
+{
+    using var f = new Fixture();
+    var legacy = f.Settings with { CopilotUrl = "https://m365.cloud.microsoft/chat", TimecardsHours = 0.25m, TargetHours = 9m };
+    f.Store.SaveSettings(legacy);
+    var upgraded = f.Store.LoadSettings();
+    Equal(AppSettings.SharedCopilotUrl, upgraded.CopilotUrl);
+    Equal(legacy.ProfileKey, upgraded.ProfileKey); Equal(legacy.EmployeeId, upgraded.EmployeeId);
+    Equal(legacy.TimecardsHours, upgraded.TimecardsHours); Equal(legacy.TargetHours, upgraded.TargetHours);
+    Equal(upgraded, f.Store.LoadSettings());
+    True(File.ReadAllText(Path.Combine(f.Store.RootPath, "settings.json")).Contains("titleId="));
+    var custom = legacy with { CopilotUrl = "https://m365.cloud.microsoft/chat/?titleId=custom-team-agent" };
+    f.Store.SaveSettings(custom); Equal(custom, f.Store.LoadSettings());
+    return Task.CompletedTask;
+});
 await Check("latest revised session wins tied source timestamp", async () =>
 {
     using var f = new Fixture(); var s = await f.Read(); f.Store.SaveSession(s);

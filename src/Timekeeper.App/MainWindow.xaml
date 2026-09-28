@@ -9,7 +9,7 @@
           <Button x:Name="DayNav" Content="Your timecards" Style="{StaticResource Navigation}" Click="ShowDay_Click" Background="#265063"/>
           <Button Content="Submission history" Style="{StaticResource Navigation}" Click="History_Click"/>
           <Button Content="Settings" Style="{StaticResource Navigation}" Click="Settings_Click"/>
-          <Button Content="Copilot setup" Style="{StaticResource Navigation}" Click="Help_Click"/>
+          <Button Content="Getting started" Style="{StaticResource Navigation}" Click="Help_Click"/>
           <Button Content="Updates" Style="{StaticResource Navigation}" Click="Updates_Click"/>
         </StackPanel>
         <StackPanel DockPanel.Dock="Bottom" VerticalAlignment="Bottom">
