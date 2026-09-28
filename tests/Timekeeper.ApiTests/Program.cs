@@ -314,6 +314,97 @@ await Check("warnings require acknowledgement and are recorded on receipt", asyn
     Equal(validation.Warnings.Count, receipt.ReviewedWarnings.Count); True(receipt.WarningsAcknowledgedAtUtc.HasValue);
     Equal(validation.Warnings.Count, f.Store.LoadReceipts().Single().ReviewedWarnings.Count);
 });
+await Check("equivalent hours formatting after a create does not stop remaining rows", async () =>
+{
+    foreach (var scale in new[] { 1, 2, 3 })
+    {
+        using var f = new Fixture(); var s = await f.Read(); var p = f.Proposal(s);
+        f.Server.ExistingHoursScale = scale;
+        var receipt = await f.Service.SubmitAsync(s, p, Rules.Validate(s, p).Rows);
+        Equal("complete", receipt.Status); Equal(3, f.Server.WriteCount);
+        True(receipt.Rows.All(r => r.Status == "created")); Equal(8m, f.Server.Existing.Sum(r => r.Hours));
+    }
+});
+await Check("equivalent hours formatting in baseline records passes the freshness check", async () =>
+{
+    using var f = new Fixture(); f.Server.Existing.Add(new(990, Fixture.Day, 0.50m, 100, 44, 10, null, "Earlier internal work"));
+    var s = await f.Read(); var p = f.Proposal(s); f.Server.ExistingHoursScale = 3;
+    var receipt = await f.Service.SubmitAsync(s, p, Rules.Validate(s, p).Rows);
+    Equal("complete", receipt.Status); Equal(3, f.Server.WriteCount); Equal(8m, f.Server.Existing.Sum(r => r.Hours));
+});
+await Check("real field changes after a create halt remaining writes and identify the record", async () =>
+{
+    var changes = new (string Field, Func<ExistingTimecard, ExistingTimecard> Change)[]
+    {
+        ("Hours", r => r with { Hours = r.Hours + 0.01m }),
+        ("Project", r => r with { Project = r.Project + 1 }),
+        ("Task", r => r with { Task = r.Task + 1 }),
+        ("Category", r => r with { Category = r.Category + 1 }),
+        ("Assignment", r => r with { Assignment = 99 }),
+        ("Description", r => r with { Description = "TOP-SECRET-QB changed description" })
+    };
+    foreach (var (field, change) in changes)
+    {
+        using var f = new Fixture(); var s = await f.Read(); var p = f.Proposal(s);
+        f.Server.BeforeExistingRead = () => { if (f.Server.WriteCount == 1) f.Server.Existing[0] = change(f.Server.Existing[0]); };
+        var receipt = await f.Service.SubmitAsync(s, p, Rules.Validate(s, p).Rows);
+        Equal("partial", receipt.Status); Equal(1, f.Server.WriteCount);
+        Equal("created", receipt.Rows[0].Status); True(receipt.Rows.Skip(1).All(r => r.Status == "not_sent"));
+        True(receipt.Message.Contains("row 2")); True(receipt.Message.Contains("#501")); True(receipt.Message.Contains(field));
+        True(!receipt.Message.Contains("TOP-SECRET")); True(!receipt.Message.Contains("changed description"));
+        Equal(receipt.Message, f.Store.LoadReceipts().Single().Message);
+    }
+});
+await Check("a missing created record is named and never automatically resent", async () =>
+{
+    using var f = new Fixture(); var s = await f.Read(); var p = f.Proposal(s);
+    f.Server.BeforeExistingRead = () => { if (f.Server.WriteCount == 1) f.Server.Existing.Clear(); };
+    var receipt = await f.Service.SubmitAsync(s, p, Rules.Validate(s, p).Rows);
+    Equal("partial", receipt.Status); Equal(1, f.Server.WriteCount);
+    True(receipt.Message.Contains("#501")); True(receipt.Message.Contains("missing")); Equal("not_sent", receipt.Rows[1].Status);
+});
+await Check("an external added record halts remaining writes and names that record", async () =>
+{
+    using var f = new Fixture(); var s = await f.Read(); var p = f.Proposal(s);
+    f.Server.BeforeExistingRead = () => { if (f.Server.WriteCount == 1) f.Server.Existing.Add(new(990, Fixture.Day, 0.25m, 100, 44, 10, null, "Outside edit")); };
+    var receipt = await f.Service.SubmitAsync(s, p, Rules.Validate(s, p).Rows);
+    Equal("partial", receipt.Status); Equal(1, f.Server.WriteCount);
+    True(receipt.Message.Contains("#990")); True(receipt.Message.Contains("added outside"));
+});
+await Check("failed between-row reads preserve a safe HTTP reason without sending the next row", async () =>
+{
+    using var f = new Fixture(); var s = await f.Read(); var p = f.Proposal(s);
+    f.Server.BeforeExistingRead = () => { if (f.Server.WriteCount == 1) f.Server.ExistingReadStatus = HttpStatusCode.TooManyRequests; };
+    var receipt = await f.Service.SubmitAsync(s, p, Rules.Validate(s, p).Rows);
+    Equal("partial", receipt.Status); Equal(1, f.Server.WriteCount); Equal("not_sent", receipt.Rows[1].Status);
+    True(receipt.Message.Contains("HTTP 429")); True(!receipt.Message.Contains("TOP-SECRET"));
+});
+await Check("a fresh proposal can finish a partial day without replaying its created source", async () =>
+{
+    using var f = new Fixture();
+    f.Server.EntriesResponse = new[]
+    {
+        new { id = 123456789012L, workspace_id = 55, start = "2026-09-28T13:00:00Z", stop = "2026-09-28T16:00:00Z", duration = 10800, description = "First work", project_name = "Internal", billable = false },
+        new { id = 123456789013L, workspace_id = 55, start = "2026-09-28T16:00:00Z", stop = "2026-09-28T18:50:00Z", duration = 10200, description = "Second work", project_name = "Internal", billable = false }
+    };
+    var s = await f.Read(); var p = f.Proposal(s);
+    p.Rows.Add(new() { Date = Fixture.Day, SourceEntryIds = [123456789013], Project = 100, Task = 44, Category = 10, Description = "Second work" });
+    f.Server.BeforeExistingRead = () => { if (f.Server.WriteCount == 1) f.Server.ExistingReadStatus = HttpStatusCode.ServiceUnavailable; };
+    var partial = await f.Service.SubmitAsync(s, p, Rules.Validate(s, p).Rows);
+    Equal("partial", partial.Status); Equal(1, f.Server.WriteCount); Equal(3m, partial.Rows[0].Row.Hours);
+    f.Server.BeforeExistingRead = null; f.Server.ExistingReadStatus = HttpStatusCode.OK; f.Server.ExistingHoursScale = 1;
+    var fresh = await f.Read();
+    var remaining = new ProposalEnvelope { SessionId = fresh.SessionId, EmployeeId = f.Settings.EmployeeId,
+        Rows = [p.Rows[1]],
+        AlreadyRecorded = [new() { SourceEntryId = p.Rows[0].SourceEntryIds[0], ExistingRecordId = partial.Rows[0].RecordId!.Value }] };
+    var validation = Rules.Validate(fresh, remaining); True(validation.IsValid); Equal(3, validation.Rows.Count);
+    Equal(2.83m, validation.Rows.Single(r => r.Kind == "work").Hours);
+    Equal(0.17m, validation.Rows.Single(r => r.Kind == "timecards").Hours);
+    Equal(2m, validation.Rows.Single(r => r.Kind == "misc_internal").Hours);
+    var receipt = await f.Service.SubmitAsync(fresh, remaining, validation.Rows, warningsAcknowledged: true);
+    Equal("complete", receipt.Status); Equal(4, f.Server.WriteCount);
+    Equal(1, f.Server.Existing.Count(r => r.RecordId == 501)); Equal(8m, f.Server.Existing.Sum(r => r.Hours));
+});
 await Check("timeout becomes unknown, halts rows, and blocks next session", async () =>
 {
     using var f = new Fixture(); var s = await f.Read(); var p = f.Proposal(s); f.Server.WriteMode = "timeout";
@@ -451,6 +542,7 @@ sealed class FakeApi : HttpMessageHandler
     public Dictionary<string, List<object>> RowsByTable = [];
     public string EntryUrl = "";
     public string? IdentityJson;
+    public object? EntriesResponse;
     public string IdentityRequestJson = "", IdentityAuthorization = "", IdentityRealm = "", IdentityUrl = "";
     public HttpMethod? IdentityMethod;
     public HttpStatusCode IdentityStatus = HttpStatusCode.OK;
@@ -458,7 +550,9 @@ sealed class FakeApi : HttpMessageHandler
     public bool WrongIdentity, WrongToggl, ChangeDescription, ChangeTaskCategory, ChangingTotal, OverCap, Overnight, OldRunning;
     public int WriteCount, CategoryQueries, CategoryPageSize = 1000, EntryCount = 1, EntryQueries, CurrentQueries;
     public List<ExistingTimecard> Existing = [];
-    public Action? BeforeWrite;
+    public Action? BeforeWrite, BeforeExistingRead;
+    public int? ExistingHoursScale;
+    public HttpStatusCode ExistingReadStatus = HttpStatusCode.OK;
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var url = request.RequestUri!;
@@ -476,19 +570,28 @@ sealed class FakeApi : HttpMessageHandler
         {
             EntryQueries++;
             EntryUrl = Uri.UnescapeDataString(url.ToString());
+            if (EntriesResponse is not null) return Json(EntriesResponse);
             return Json(Enumerable.Range(0, EntryCount).Select(n => new { id = 123456789012L + n, workspace_id = 55, start = Overnight ? "2026-09-28T03:00:00Z" : "2026-09-28T13:00:00Z", stop = "2026-09-28T20:00:00Z", duration = 25200, description = ChangeDescription ? "Edited" : "Work", project_name = "Internal", billable = true }).ToArray());
         }
         using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
         if (url.AbsolutePath.EndsWith("/records/query"))
         {
             var root = body.RootElement; var table = root.GetProperty("from").GetString(); var skip = root.GetProperty("options").GetProperty("skip").GetInt32();
+            if (table == "bd3bsxtbp")
+            {
+                BeforeExistingRead?.Invoke();
+                if (ExistingReadStatus != HttpStatusCode.OK) return new(ExistingReadStatus) { Content = new StringContent("TOP-SECRET-QB private response") };
+            }
+            object ReadHours(decimal hours) => ExistingHoursScale is int scale
+                ? JsonSerializer.Deserialize<JsonElement>(hours.ToString("F" + Math.Max(scale, (decimal.GetBits(hours)[3] >> 16) & 0xff), System.Globalization.CultureInfo.InvariantCulture))
+                : hours;
             List<object> rows = table switch
             {
                 "beb9dvs6p" => [Row((3, 10), (6, "Internal")), Row((3, 20), (6, "Billable"))],
                 "bd3bsxtbn" => [Row((3, 1), (7, "Work"), (11, true), (17, ChangeTaskCategory ? 20 : 10)), Row((3, 44), (7, "Internal work"), (11, true), (17, 10))],
                 "bd3bsxtbj" => [Row((3, 100), (6, "Internal"))],
                 "biqs87fvg" => [],
-                "bd3bsxtbp" => Existing.Select(e => Row((3, e.RecordId), (7, e.Date.ToString("yyyy-MM-dd")), (10, e.Hours), (11, e.Project), (16, e.Task), (22, e.Category), (24, new { id = "123.test", email = "person@example.com" }), (19, e.Description), (73, e.Assignment))).ToList(),
+                "bd3bsxtbp" => Existing.Select(e => Row((3, e.RecordId), (7, e.Date.ToString("yyyy-MM-dd")), (10, ReadHours(e.Hours)), (11, e.Project), (16, e.Task), (22, e.Category), (24, new { id = "123.test", email = "person@example.com" }), (19, e.Description), (73, e.Assignment))).ToList(),
                 _ => throw new Exception("Unexpected table")
             };
             if (RowsByTable.TryGetValue(table!, out var overrideRows)) rows = overrideRows;

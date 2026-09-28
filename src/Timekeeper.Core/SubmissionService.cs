@@ -41,7 +41,7 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
             try { await CheckExistingDuringSubmissionAsync(session, receipt, receipt.Rows[i].Row.Date, ct); }
             catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or InvalidDataException or OperationCanceledException)
             {
-                receipt.Message = "Fresh Quickbase data could not be confirmed. Remaining rows were not sent; read again after resolving this receipt.";
+                receipt.Message = $"Stopped before row {i + 1} ({receipt.Rows[i].Row.Date:yyyy-MM-dd}): {ex.Message}\nThis row and all remaining rows were not sent. Read again and tell Copilot which entries this receipt confirms were created.";
                 break;
             }
             receipt.Rows[i].Status = "pending";
@@ -160,7 +160,7 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
             var entries = allEntries.Where(e => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(e.Start, timezone).DateTime) == day.Date);
             if (!Same(day.Entries.OrderBy(e => e.Id), entries.OrderBy(e => e.Id))) throw Stale("Toggl entries");
             var existing = await api.ReadExistingAsync(day.Date, ct);
-            if (!Same(day.Existing.OrderBy(e => e.RecordId), existing.OrderBy(e => e.RecordId))) throw Stale("Existing Quickbase timecards");
+            CheckExistingUnchanged(day.Existing, existing, day.Date);
         }
     }
 
@@ -169,7 +169,35 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
         var expected = session.Days.Single(d => d.Date == date).Existing.ToList();
         expected.AddRange(receipt.Rows.Where(r => r.Status == "created" && r.Row.Date == date).Select(r => new ExistingTimecard(r.RecordId!.Value, r.Row.Date, r.Row.Hours, r.Row.Project, r.Row.Task, r.Row.Category, r.Row.Assignment, r.Row.Description)));
         var actual = await api.ReadExistingAsync(date, ct);
-        if (!Same(expected.OrderBy(r => r.RecordId), actual.OrderBy(r => r.RecordId))) throw Stale("Existing Quickbase timecards");
+        CheckExistingUnchanged(expected, actual, date);
+    }
+    private static void CheckExistingUnchanged(IReadOnlyList<ExistingTimecard> expected, IReadOnlyList<ExistingTimecard> actual, DateOnly date)
+    {
+        // Record equality compares decimal values, so 3, 3.0 and 3.00 hours are equal.
+        // JSON text equality incorrectly treats the service's decimal formatting as an edit.
+        if (expected.OrderBy(r => r.RecordId).SequenceEqual(actual.OrderBy(r => r.RecordId))) return;
+        var actualById = actual.ToDictionary(r => r.RecordId);
+        foreach (var before in expected.OrderBy(r => r.RecordId))
+        {
+            if (!actualById.TryGetValue(before.RecordId, out var after))
+                throw Changed($"record #{before.RecordId} is missing from the current read.");
+            if (before == after) continue;
+            var fields = new List<string>();
+            if (before.Date != after.Date) fields.Add("Date");
+            if (before.Hours != after.Hours) fields.Add("Hours");
+            if (before.Project != after.Project) fields.Add("Project");
+            if (before.Task != after.Task) fields.Add("Task");
+            if (before.Category != after.Category) fields.Add("Category");
+            if (before.Assignment != after.Assignment) fields.Add("Assignment");
+            if (before.Description != after.Description) fields.Add("Description");
+            // Identify the fields without echoing potentially sensitive descriptions or response bodies.
+            throw Changed($"record #{before.RecordId} has changed fields: {string.Join(", ", fields)}.");
+        }
+        var expectedIds = expected.Select(r => r.RecordId).ToHashSet();
+        var added = actual.First(r => !expectedIds.Contains(r.RecordId));
+        throw Changed($"record #{added.RecordId} was added outside this submission.");
+
+        InvalidOperationException Changed(string detail) => new($"Quickbase timecards for {date:yyyy-MM-dd} changed: {detail} Read the day again and create a new proposal before writing.");
     }
     private static InvalidOperationException Stale(string what) => new($"{what} changed since the export. Read the day again and create a new proposal before writing.");
     private static bool Same<T>(T a, T b) => JsonSerializer.Serialize(a, JsonDefaults.Options) == JsonSerializer.Serialize(b, JsonDefaults.Options);
