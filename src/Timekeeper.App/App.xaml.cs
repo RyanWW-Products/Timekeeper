@@ -74,6 +74,20 @@ public partial class App : Application
                 Appearance.Apply(new("Dark", "Theme color", 120, "Compact"));
                 RenderWindow(recovery,Path.Combine(output,"theme-dark-deletion-recovery-120.png"),(int)recovery.Width,(int)recovery.Height);
                 Appearance.Apply(new()); recovery.Close();
+                var secondDay=sample.Days[0] with { Date=sample.Days[0].Date.AddDays(1), Entries=sample.Days[0].Entries.Select(e=>e with { Id=e.Id+1000,Start=e.Start.AddDays(1),Stop=e.Stop!.Value.AddDays(1) }).ToList() };
+                var multiDay=sample with { Days=[sample.Days[0],secondDay] };
+                var oneDayProposal=DemoData.CreateProposal(multiDay); oneDayProposal=oneDayProposal with { Rows=oneDayProposal.Rows.Where(r=>r.Date==secondDay.Date).ToList() };
+                var datePicker=new ProposalDatesWindow(window,multiDay,oneDayProposal,smoke:true);
+                File.AppendAllText(report,datePicker.SmokeSummary());
+                RenderWindow(datePicker,Path.Combine(output,"timekeeper-proposal-dates.png"),(int)datePicker.Width,(int)datePicker.Height);
+                Appearance.Apply(new("Dark","Theme color",120,"Compact"));
+                RenderWindow(datePicker,Path.Combine(output,"theme-dark-proposal-dates-120.png"),(int)datePicker.Width,(int)datePicker.Height);
+                Appearance.Apply(new()); datePicker.Close();
+                var dateReview=new MainWindow(new SessionStore(Path.Combine(output,"date-review-data")),true);
+                File.AppendAllText(report,dateReview.SmokeDateSelection(multiDay,oneDayProposal,secondDay.Date));
+                ((ScrollViewer)dateReview.FindName("WorkScroll")).ScrollToEnd();
+                RenderWindow(dateReview,Path.Combine(output,"timekeeper-selected-date-review.png"),(int)dateReview.Width,(int)dateReview.Height);
+                dateReview.Close();
 
                 var settingsWindow=new SettingsWindow(window,new AppSettings(),store,false);
                 File.AppendAllText(report,settingsWindow.SmokeSummary());

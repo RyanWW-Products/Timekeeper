@@ -1,5 +1,5 @@
 TIMEKEEPER AGENT KNOWLEDGE
-For the Windows application 0.4.2; exchange/proposal schema 1
+For the Windows application 0.4.3; exchange/proposal schema 1
 Updated 2026-09-30
 
 PURPOSE AND AUTHORITY
@@ -64,7 +64,7 @@ A short description states only work supported by the source and the user's clar
 
 SOURCE COVERAGE AND EXISTING TIME
 
-Every source ID appears exactly once: either in one row's source_entry_ids, or in one already_recorded link. One entry cannot be split among several rows. Missing sources, duplicate source IDs, unknown IDs and cross-date grouping fail validation.
+Every source ID on the dates the user requests appears exactly once: either in one row's source_entry_ids, or in one already_recorded link. One entry cannot be split among several rows. Missing sources, duplicate source IDs, unknown IDs and cross-date grouping fail validation.
 
 Existing Quickbase time is context, not new work to return. Similar descriptions or equal hours do not prove the same work was already recorded. The user explicitly confirms which Toggl source is covered by which supplied existing record before an already_recorded link is used. The dates must match. Several sources may link to one existing record only when their combined rounded hours do not exceed its hours. Timekeeper also requires acknowledgment of these links.
 
@@ -158,3 +158,11 @@ If the user deleted a record created by Timekeeper and wants to replace it, the 
 The user selects entries they intentionally deleted and chooses Confirm deletion & allow rewrite. A permission change can also hide a record, so absence alone is not proof of deletion. The app rechecks absence and saves a dated confirmation while retaining the original creation result and record ID. This action never writes or deletes Quickbase records.
 
 Then read the day again and upload the fresh export. Do not reuse the old proposal or mark a deleted record as already_recorded. Match the recovered sources as new work, use already_recorded only for confirmed matching records still present in the fresh export, and let the app recalculate Timecards/Misc internal. For a whole-day rewrite, the user first verifies the old day is empty in Quickbase; this agent never deletes records. The app checks recovered IDs again before replacements and blocks them if restored. Never suggest erasing receipt files or bypassing history from another installation.
+
+CHOOSING ONE DATE FROM A MULTI-DAY READ
+
+Respect the dates the user asks to process. If a read includes September 28 and 29 but the user asks for September 29 only, return September 29 work and any confirmed existing-record links for that day. Keep the original session_id and employee_id. Do not add already_recorded links for September 28 merely to satisfy full-range coverage, and do not invent matches. Cover every source on September 29; an omitted entry within the selected day still fails validation.
+
+Timekeeper 0.4.3 or later asks Which dates do you want to submit? when the proposal covers only part of a multi-day read. Tell the user to leave September 29 checked and continue. They can instead select all dates, but that choice requires a proposal accounting for every source on both days. The review identifies selected and excluded dates and offers Change dates. Only selected dates receive work rows, Timecards/Misc internal additions and freshness checks. Nothing is written until the final Write to Quickbase action.
+
+Keep proposal schema 1 unchanged: do not add selected_dates or other new properties to the returned file. Date selection is an explicit choice in the app, saved with the receipt. It does not refresh an expired read or bypass matching, duplicate or unknown-outcome checks. If an older app reports missing sources on an intentionally excluded day, update to 0.4.3 or read only the intended day and obtain a new proposal. Read again before submitting another day from a range that already has a submission receipt.

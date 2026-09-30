@@ -20,6 +20,7 @@ public partial class MainWindow : Window
     private ReadSession? _session;
     private ProposalEnvelope? _proposal;
     private ValidationResult? _validation;
+    private IReadOnlyCollection<DateOnly>? _selectedDates;
     private string? _exportPath;
     private CancellationTokenSource? _cancellation;
     private bool _busy;
@@ -96,6 +97,7 @@ public partial class MainWindow : Window
         ImportButton.IsEnabled=PasteButton.IsEnabled=FindButton.IsEnabled=!_busy&&_session!=null;
         SaveExportButton.IsEnabled=!_busy&&_exportPath!=null;
         RowDetailsButton.IsEnabled=!_busy&&_validation is { IsValid:true }&&_validation.Rows.Count>0;
+        ChangeProposalDatesButton.IsEnabled=!_busy&&_proposal is not null;
         ExportCard.Cursor=!_busy&&_exportPath!=null?Cursors.Hand:Cursors.Arrow;
         ReconcileButton.IsEnabled=ExportReceiptButton.IsEnabled=!_busy&&HistoryGrid.SelectedItem is SubmissionReceipt;
         RecoverDeletedButton.IsEnabled=!_busy&&!_smoke&&HistoryGrid.SelectedItem is SubmissionReceipt selected
@@ -105,6 +107,8 @@ public partial class MainWindow : Window
     }
     private void ResetReview()
     {
+        _selectedDates=null; ProposalDatesPanel.Visibility=Visibility.Collapsed;
+        if(_session is not null) UpdateMetrics(_session);
         _proposal=null; _validation=null; ReviewGrid.ItemsSource=null; ReviewGrid.Visibility=VerifiedBadge.Visibility=WarningsText.Visibility=AcknowledgeWarnings.Visibility=Visibility.Collapsed;
         AcknowledgeWarnings.IsChecked=false; ReviewTitle.Text="Waiting for your proposal"; ValidationMessage.Text="The app checks the returned file and calculates your time before you submit."; ValidationMessage.Foreground=(Brush)FindResource("Muted"); DailyTotals.Text=""; ReadyMetric.Text="—"; WriteHint.Text="Nothing is sent until you click Write to Quickbase."; UpdateEnabled();
     }
@@ -235,30 +239,66 @@ public partial class MainWindow : Window
         var dialog=new TextDialog(this,"Paste Copilot's proposal","",true);
         if(dialog.ShowDialog()==true) AcceptProposal(dialog.Value);
     }
-    private void AcceptProposal(string json)
+    private void AcceptProposal(string json, Func<ReadSession,ProposalEnvelope,IReadOnlyCollection<DateOnly>?>? chooseDates=null, bool forceDateChoice=false)
     {
         ResetReview(); if(_session is null) return;
         try
         {
-            _proposal=ProposalExchange.Parse(json); _validation=Rules.Validate(_session,_proposal);
+            _proposal=ProposalExchange.Parse(json);
+            if(forceDateChoice||ProposalScope.NeedsChoice(_session,_proposal))
+            {
+                _selectedDates=(chooseDates??ChooseProposalDates)(_session,_proposal);
+                if(_selectedDates is null) { ResetReview(); StatusText.Text="Date selection cancelled. Nothing was submitted."; return; }
+            }
+            var scope=ProposalScope.Select(_session,_proposal,_selectedDates);
+            _validation=Rules.Validate(scope.Session,scope.Proposal);
             if(!_validation.IsValid) { ImportError(string.Join("\n",_validation.Errors)); return; }
+            UpdateMetrics(scope.Session);
+            if(_session.Days.Count>1)
+            {
+                var included=scope.Session.Days.Select(d=>d.Date).ToHashSet();
+                var excluded=_session.Days.Where(d=>!included.Contains(d.Date)).Select(d=>d.Date).ToList();
+                ProposalDatesText.Text="Reviewing: "+DateList(included)+(excluded.Count>0?". Excluded: "+DateList(excluded)+".":". All dates from this read are included.");
+                ProposalDatesPanel.Visibility=Visibility.Visible;
+            }
             ReviewGrid.ItemsSource=_validation.Rows; ReviewGrid.SelectedIndex=_validation.Rows.Count>0?0:-1; ReviewGrid.Visibility=Visibility.Visible;
             ReviewTitle.Text=_validation.Rows.Count==0?"Everything is already accounted for":$"{_validation.Rows.Count} timecards ready for your review";
             VerifiedBadge.Visibility=Visibility.Visible;
             ValidationMessage.Text="Source entries, relationships and calculated hours checked. Review the assignment choices and descriptions below.";
             ReadyMetric.Text=$"{_validation.Rows.Sum(r=>r.Hours):0.00} h";
-            DailyTotals.Text=string.Join("\n",_session.Days.Select(day=>$"{day.Date:MMM d}:  {day.Existing.Sum(c=>c.Hours):0.00} h existing + {_validation.Rows.Where(r=>r.Date==day.Date).Sum(r=>r.Hours):0.00} h new = {day.Existing.Sum(c=>c.Hours)+_validation.Rows.Where(r=>r.Date==day.Date).Sum(r=>r.Hours):0.00} h total"));
+            DailyTotals.Text=string.Join("\n",scope.Session.Days.Select(day=>$"{day.Date:MMM d}:  {day.Existing.Sum(c=>c.Hours):0.00} h existing + {_validation.Rows.Where(r=>r.Date==day.Date).Sum(r=>r.Hours):0.00} h new = {day.Existing.Sum(c=>c.Hours)+_validation.Rows.Where(r=>r.Date==day.Date).Sum(r=>r.Hours):0.00} h total"));
             if(_validation.Warnings.Count>0)
             {
                 WarningsText.Text=string.Join("\n\n",_validation.Warnings); WarningsText.Visibility=AcknowledgeWarnings.Visibility=Visibility.Visible;
                 VerifiedBadge.Visibility=Visibility.Collapsed;
                 ValidationMessage.Text="Checks passed with items requiring your confirmation below. Review them before writing.";
             }
-            WriteHint.Text=_session.Demo?"Demo only · Quickbase writing is disabled.":$"Submit as {_session.Settings.Email}";
+            WriteHint.Text=_session.Demo?"Demo only · Quickbase writing is disabled.":$"Submit as {_session.Settings.Email}\nDates: {DateList(scope.Session.Days.Select(d=>d.Date))}";
             StatusText.Text=_validation.Rows.Count==0?"No new rows to write.":"Proposal checked. Review the rows before writing.";
         }
         catch(Exception ex) { ImportError(ex.Message); }
         UpdateEnabled();
+    }
+    private static string DateList(IEnumerable<DateOnly> dates)=>string.Join(", ",dates.Order().Select(d=>d.ToString("MMM d, yyyy")));
+    private void UpdateMetrics(ReadSession session)
+    {
+        TrackedMetric.Text=$"{session.Days.Sum(d=>d.Entries.Where(e=>!e.Running).Sum(e=>e.DurationSeconds/3600m)):0.00} h";
+        ExistingMetric.Text=$"{session.Days.Sum(d=>d.Existing.Sum(e=>e.Hours)):0.00} h";
+    }
+    private IReadOnlyCollection<DateOnly>? ChooseProposalDates(ReadSession session,ProposalEnvelope proposal)
+    {
+        var dialog=new ProposalDatesWindow(this,session,proposal);
+        return dialog.ShowDialog()==true?dialog.SelectedDates:null;
+    }
+    private void ChangeProposalDates_Click(object sender,RoutedEventArgs e)
+    {
+        if(_busy||_session is null||_proposal is null) return;
+        var previous=_selectedDates;
+        AcceptProposal(JsonSerializer.Serialize(_proposal,JsonDefaults.Options),(session,proposal)=>
+        {
+            var dialog=new ProposalDatesWindow(this,session,proposal,previous);
+            return dialog.ShowDialog()==true?dialog.SelectedDates:null;
+        },true);
     }
     private void ImportError(string message)
     {
@@ -273,12 +313,12 @@ public partial class MainWindow : Window
     private async void Write_Click(object sender,RoutedEventArgs e)
     {
         if(!WriteButton.IsEnabled||_session is null||_proposal is null||_validation is null) return;
-        var session=_session; var proposal=_proposal; var rows=_validation.Rows.ToList(); var warningsAcknowledged=AcknowledgeWarnings.IsChecked==true;
+        var session=_session; var proposal=_proposal; var rows=_validation.Rows.ToList(); var warningsAcknowledged=AcknowledgeWarnings.IsChecked==true; var selectedDates=_selectedDates?.ToArray();
         await RunAsync(async ct=>
         {
             _writing=true; StatusText.Text="Rechecking current data, then writing the reviewed rows…";
             using var api=MakeApi();
-            var result=await new SubmissionService(api,_store).SubmitAsync(session,proposal,rows,ct,warningsAcknowledged: warningsAcknowledged);
+            var result=await new SubmissionService(api,_store).SubmitAsync(session,proposal,rows,ct,warningsAcknowledged: warningsAcknowledged,selectedDates:selectedDates);
             ResetReview(); ReviewTitle.Text=result.Status=="complete"?"Your timecards are submitted":"Review the submission result"; ValidationMessage.Text=result.Message;
             StatusText.Text=result.Message;
             new TextDialog(this,"Quickbase submission receipt",ReceiptText(result)).ShowDialog();
@@ -327,6 +367,7 @@ public partial class MainWindow : Window
     }
     private void ShowDay_Click(object sender,RoutedEventArgs e)
     {
+        if(HistoryPanel.Visibility==Visibility.Visible) WorkScroll.ScrollToTop();
         WorkScroll.Visibility=Visibility.Visible; HistoryPanel.Visibility=Visibility.Collapsed; PageEyebrow.Text="TOGGL / QUICKBASE"; PageTitle.Text="Timecards"; PageSubtitle.Text="Read Toggl entries, review the proposal, and submit to Quickbase.";
         DayNav.Tag="Active"; HistoryNav.Tag=null;
         if(!_busy) StatusText.Text=_validation is { IsValid:true }?"Proposal checked. Review the rows before writing.":_session is not null?"Your time is ready. Send the file to Copilot to continue.":"Ready · Set up your accounts, or explore a sample day.";
@@ -348,7 +389,9 @@ public partial class MainWindow : Window
     { ReceiptDetails.Text=HistoryGrid.SelectedItem is SubmissionReceipt receipt?ReceiptText(receipt):"Select a receipt to see its record IDs and row results."; UpdateEnabled(); }
     private static string ReceiptText(SubmissionReceipt receipt)
     {
-        var text=new StringBuilder($"{receipt.Status.ToUpperInvariant()} · {receipt.StartedAtUtc.LocalDateTime:g}\n{receipt.Message}\nSubmission: {receipt.SubmissionId}\n\n");
+        var text=new StringBuilder($"{receipt.Status.ToUpperInvariant()} · {receipt.StartedAtUtc.LocalDateTime:g}\n{receipt.DisplayMessage}\nSubmission: {receipt.SubmissionId}\n\n");
+        if(receipt.SelectedDates is not null) text.AppendLine($"Selected dates: {DateList(receipt.SelectedDates)}\nOnly these dates were included in this submission.\n");
+        if(receipt.Status=="reopened") text.AppendLine($"Original submission result: {receipt.Message}\n");
         if(receipt.ReviewedWarnings.Count>0) text.AppendLine($"Warnings acknowledged: {receipt.WarningsAcknowledgedAtUtc:g}\n{string.Join("\n",receipt.ReviewedWarnings)}\n");
         foreach(var result in receipt.Rows) text.AppendLine($"{result.Status.ToUpperInvariant()}  {result.Row.Date:yyyy-MM-dd}  {result.Row.Hours:0.00} h  {result.Row.Description}\n{(result.RecordId.HasValue?$"Quickbase record #{result.RecordId} · ":"")}{result.Message}\n");
         foreach(var result in receipt.Rows.Where(r=>r.DeletionConfirmedAtUtc.HasValue))
@@ -363,7 +406,8 @@ public partial class MainWindow : Window
             var session=_store.LoadSession(receipt.SessionId)??throw new InvalidOperationException("The original source session is missing.");
             using var api=MakeApi(session.Settings); StatusText.Text="Checking Quickbase against the original submission…";
             var result=await new SubmissionService(api,_store).ReconcileAsync(session,receipt,ct);
-            HistoryGrid.ItemsSource=_store.LoadReceipts(_settings.ProfileKey); ReceiptDetails.Text=ReceiptText(result); StatusText.Text=result.Message;
+            var history=_store.LoadReceipts(_settings.ProfileKey); HistoryGrid.ItemsSource=history;
+            HistoryGrid.SelectedItem=history.Single(r=>r.SubmissionId==result.SubmissionId); StatusText.Text=result.DisplayMessage;
         });
     }
     private async void RecoverDeleted_Click(object sender,RoutedEventArgs e)
@@ -415,6 +459,23 @@ public partial class MainWindow : Window
     {
         if(!_smoke) throw new InvalidOperationException("Synthetic UI states are only available in smoke mode.");
         History_Click(this,new RoutedEventArgs());
+    }
+    internal string SmokeDateSelection(ReadSession session,ProposalEnvelope proposal,DateOnly selected)
+    {
+        if(!_smoke) throw new InvalidOperationException("Synthetic date checks require smoke mode.");
+        PresentSession(session); ShowDay_Click(this,new RoutedEventArgs());
+        bool asked=false;
+        AcceptProposal(JsonSerializer.Serialize(proposal,JsonDefaults.Options),(_,_)=>{ asked=true; return new[]{selected}; });
+        if(!asked||_validation is not { IsValid:true }||_validation.Rows.Any(r=>r.Date!=selected)||_selectedDates?.Single()!=selected||ProposalDatesPanel.Visibility!=Visibility.Visible||WriteButton.IsEnabled)
+            throw new InvalidOperationException("Date choice did not restrict the reviewed day or preserve demo protection.");
+        AcceptProposal(JsonSerializer.Serialize(proposal,JsonDefaults.Options),(_,_)=>session.Days.Select(d=>d.Date).ToArray());
+        if(_validation is not null||WriteButton.IsEnabled||VerifiedBadge.Visibility==Visibility.Visible)
+            throw new InvalidOperationException("Keeping all dates incorrectly accepted an incomplete proposal.");
+        AcceptProposal(JsonSerializer.Serialize(proposal,JsonDefaults.Options),(_,_)=>null);
+        if(_proposal is not null||_selectedDates is not null||WriteButton.IsEnabled||ProposalDatesPanel.Visibility!=Visibility.Collapsed)
+            throw new InvalidOperationException("Cancelling date selection retained an approval.");
+        AcceptProposal(JsonSerializer.Serialize(proposal,JsonDefaults.Options),(_,_)=>new[]{selected});
+        return "PASS: partial-date import prompts, limits review/totals to the selected day, rejects incomplete full-range coverage and clears approval on cancel\n";
     }
     public string SmokeSummary()
     {

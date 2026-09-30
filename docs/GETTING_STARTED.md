@@ -46,6 +46,8 @@ The agent produces `timekeeper-proposal.json`. Download it, then drag the downlo
 
 Timekeeper checks the file against the retained read session. A validation error must be resolved before writing. Warnings require your explicit acknowledgment. **Data verified** means the app's checks passed and you acknowledged any warnings; review the proposed project and description choices yourself as well.
 
+If you read several dates but asked Copilot to prepare only one, version 0.4.3 or later asks **Which dates do you want to submit?** on import. Leave just the intended date checked and choose **Continue with selected dates**. You can also select all dates; the proposal must then account for every source on all those dates. Cancelling clears the proposed submission. The review identifies the included and excluded dates, and **Change dates** lets you revise the selection before writing. Totals, automatic additions and Quickbase checks apply only to the selected dates. Excluded days receive no new rows and do not need invented `already_recorded` links. A receipt records your date selection; read again before preparing another submission from the original range.
+
 ## Review and write
 
 Review every date, project, assignment, task, category, description, and number of hours. Select a row and choose **View selected row details**, or double-click the row, to see complete descriptions, reference IDs, and Toggl source IDs. The table separates work from automatic additions. Timekeeper computes the hours and additions; the agent cannot invent extra source time.

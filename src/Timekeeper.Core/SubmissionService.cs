@@ -5,20 +5,21 @@ namespace Timekeeper.Core;
 /// <summary>One reviewed row per request. Every possible side effect has a durable pending journal first.</summary>
 public sealed class SubmissionService(TimecardApi api, SessionStore store)
 {
-    public async Task<SubmissionReceipt> SubmitAsync(ReadSession session, ProposalEnvelope proposal, IReadOnlyList<VerifiedRow> reviewedRows, CancellationToken ct = default, bool warningsAcknowledged = false)
+    public async Task<SubmissionReceipt> SubmitAsync(ReadSession session, ProposalEnvelope proposal, IReadOnlyList<VerifiedRow> reviewedRows, CancellationToken ct = default, bool warningsAcknowledged = false, IReadOnlyCollection<DateOnly>? selectedDates = null)
     {
         using var localLock = store.AcquireSubmissionLock();
         if (session.Demo) throw new InvalidOperationException("Demo sessions cannot write to Quickbase.");
         if (!Same(session.Settings, api.Settings)) throw new InvalidOperationException("Account or policy settings changed. Read the day again before submitting.");
         if (reviewedRows.Count == 0) throw new InvalidOperationException("There are no new rows to submit.");
-        var validation = Rules.Validate(session, proposal);
+        var scope = ProposalScope.Select(session, proposal, selectedDates);
+        var validation = Rules.Validate(scope.Session, scope.Proposal);
         if (!validation.IsValid) throw new InvalidOperationException("The proposal is no longer valid: " + string.Join(" ", validation.Errors));
         if (validation.Warnings.Count > 0 && !warningsAcknowledged)
             throw new InvalidOperationException("Review and acknowledge every proposal warning before writing to Quickbase.");
         if (!SameRows(reviewedRows, validation.Rows)) throw new InvalidOperationException("The reviewed rows changed. Verify and review the proposal again.");
         var history = store.LoadReceipts(session.Settings.ProfileKey);
-        var recovered = CheckHistory(session, reviewedRows, history);
-        await CheckFreshAsync(session, reviewedRows, ct);
+        var recovered = CheckHistory(scope.Session, reviewedRows, history);
+        await CheckFreshAsync(scope.Session, reviewedRows, ct);
         await CheckRecoveredStillAbsentAsync(recovered, ct);
 
         // Preserve the exact baseline needed for recovery before writing any receipt or remote row.
@@ -26,6 +27,7 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
         var receipt = new SubmissionReceipt
         {
             SessionId = session.SessionId, ProfileKey = session.Settings.ProfileKey,
+            SelectedDates = selectedDates?.Order().ToList(),
             ReviewedWarnings = validation.Warnings.ToList(),
             WarningsAcknowledgedAtUtc = validation.Warnings.Count > 0 ? DateTimeOffset.UtcNow : null,
             Rows = reviewedRows.Select(r => new RowOutcome { Row = r, Status = "not_sent", Message = "Not sent." }).ToList()
@@ -41,7 +43,7 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
             // Detect edits by another window/tool between individual writes, accounting for our known creates.
             try
             {
-                await CheckExistingDuringSubmissionAsync(session, receipt, receipt.Rows[i].Row.Date, ct);
+                await CheckExistingDuringSubmissionAsync(scope.Session, receipt, receipt.Rows[i].Row.Date, ct);
                 await CheckRecoveredStillAbsentAsync(recovered, ct);
             }
             catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or InvalidDataException or OperationCanceledException)

@@ -172,7 +172,7 @@ public static class Rules
             if (!group.Descriptions.Contains(row.Description.Trim(), StringComparer.Ordinal)) group.Descriptions.Add(row.Description.Trim());
         }
         foreach (var id in entries.Keys)
-            if (!covered.Contains(id)) errors.Add($"Source entry {id} is missing. Every source must be mapped exactly once or linked to an existing Quickbase record.");
+            if (!covered.Contains(id)) errors.Add($"Source entry {id} on {entries[id].Date:yyyy-MM-dd} is missing. Every source on the selected dates must be mapped exactly once or linked to an existing Quickbase record.");
         if (errors.Count > 0) return result;
 
         foreach (var group in groups.Values)

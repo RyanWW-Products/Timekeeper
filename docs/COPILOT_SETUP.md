@@ -2,7 +2,7 @@
 
 One owner creates or updates the agent in Microsoft 365 Copilot's **Agent Builder** and shares its chat link with the team. Team members use that shared agent; they do not create agents. Each person still uses their own Timekeeper settings, API tokens and authorized Copilot account. This owner guide, agent instructions and knowledge file stay in the source repository and are not included in the team installer.
 
-The current agent materials target Timekeeper **0.4.2**, exchange schema **1**:
+The current agent materials target Timekeeper **0.4.3**, exchange schema **1**:
 
 - [COPILOT_AGENT_INSTRUCTIONS.txt](COPILOT_AGENT_INSTRUCTIONS.txt): paste the full text into the agent's **Instructions** field.
 - [COPILOT_AGENT_KNOWLEDGE.txt](COPILOT_AGENT_KNOWLEDGE.txt): upload as one file under **Knowledge**. This replaces the historical `Timecards Setup Guide.txt` for the Python/batch-file system.
@@ -36,7 +36,7 @@ Microsoft lists `.json` among [supported Copilot file formats](https://support.m
 - Ask the agent to return a synthetic proposal and check it in Timekeeper.
 - Include an ambiguous assignment and confirm the agent asks instead of guessing.
 - Include existing time and confirm it requests explicit confirmation before claiming a source entry is already recorded.
-- Check that the proposal preserves the session and employee IDs, references every source entry exactly once, and omits invented hours or automatic Timecards/Misc internal rows.
+- Check that the proposal preserves the session and employee IDs, references every source entry on the requested dates exactly once, and omits invented hours or automatic Timecards/Misc internal rows.
 - Verify a nine-hour weekday keeps all work; the application should add the configured Timecards amount without capping the day at eight hours.
 - Ask how to set up the app. The answer should use Settings and automatic user ID discovery, with no Python, batch files, manual employee ID lookup or clock-time cutoff.
 - Ask about rewriting intentionally deleted entries. It should direct the user to **Recover deleted entries** in Submission history and require a fresh export, never a deleted-record `already_recorded` link or erased history.

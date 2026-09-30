@@ -149,4 +149,10 @@ public sealed record SubmissionReceipt
     public List<string> ReviewedWarnings { get; init; } = [];
     public DateTimeOffset? WarningsAcknowledgedAtUtc { get; init; }
     public List<RowOutcome> Rows { get; init; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<DateOnly>? SelectedDates { get; init; }
+    [JsonIgnore]
+    public string DisplayMessage => Status == "reopened"
+        ? "Deletion confirmed. Read the affected dates again to prepare replacements. Original submission results are retained below."
+        : Message;
 }

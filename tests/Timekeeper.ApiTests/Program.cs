@@ -670,6 +670,60 @@ await Check("legacy receipts load without a deletion field and audit survives se
     var saved = f.Store.LoadReceipts().Single(); True(saved.Rows[0].DeletionConfirmedAtUtc.HasValue);
     True(JsonSerializer.Serialize(saved, JsonDefaults.Options).Contains("deletion_confirmed_at_utc"));
 });
+await Check("explicit single-day selection submits only that day and retains the full original baseline", async () =>
+{
+    using var f = new Fixture(); await f.CreatedDay();
+    var (s, p) = await f.TwoDateRead(); var selected = Fixture.Day.AddDays(1);
+    var scope = ProposalScope.Select(s, p, [selected]); var validation = Rules.Validate(scope.Session, scope.Proposal);
+    True(validation.IsValid); Equal(8m, validation.Rows.Sum(r => r.Hours));
+    await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(s, p, validation.Rows));
+    Equal(3, f.Server.WriteCount); f.Server.ExistingReadDates.Clear();
+    var result = await f.Service.SubmitAsync(s, p, validation.Rows, selectedDates: [selected]);
+    Equal("complete", result.Status); Equal(6, f.Server.WriteCount); Equal(selected, result.SelectedDates!.Single());
+    True(result.Rows.All(r => r.Row.Date == selected)); True(f.Server.ExistingReadDates.All(d => d == selected));
+    Equal(8m, f.Server.Existing.Where(r => r.Date == Fixture.Day).Sum(r => r.Hours));
+    Equal(8m, f.Server.Existing.Where(r => r.Date == selected).Sum(r => r.Hours));
+    Equal(2, f.Store.LoadSession(s.SessionId)!.Days.Count);
+    Equal(selected, f.Store.LoadReceipts().Single(r => r.SubmissionId == result.SubmissionId).SelectedDates!.Single());
+});
+await Check("changing excluded source descriptions does not block the chosen day", async () =>
+{
+    using var f = new Fixture(); var (s, p) = await f.TwoDateRead(); var selected = Fixture.Day.AddDays(1);
+    var scope = ProposalScope.Select(s, p, [selected]); f.SetTwoDateEntries(firstDescription: "Changed excluded work");
+    var result = await f.Service.SubmitAsync(s, p, Rules.Validate(scope.Session, scope.Proposal).Rows, selectedDates: [selected]);
+    Equal("complete", result.Status); Equal(3, f.Server.WriteCount); True(f.Server.Existing.All(r => r.Date == selected));
+});
+await Check("changed selected sources and changed selected scope still block writes", async () =>
+{
+    using var f = new Fixture(); var (s, p) = await f.TwoDateRead(); var selected = Fixture.Day.AddDays(1);
+    var scope = ProposalScope.Select(s, p, [selected]); var rows = Rules.Validate(scope.Session, scope.Proposal).Rows;
+    await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(s, p, rows, selectedDates: [Fixture.Day]));
+    f.SetTwoDateEntries(secondDescription: "Changed selected work");
+    await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(s, p, rows, selectedDates: [selected])); Equal(0, f.Server.WriteCount);
+});
+await Check("uncertain writes on an excluded date stay untouched while selected-date uncertainty blocks", async () =>
+{
+    foreach (bool onSelected in new[] { false, true })
+    {
+        using var f = new Fixture(); var (s, p) = await f.TwoDateRead(); var selected = Fixture.Day.AddDays(1);
+        var prior = new SubmissionReceipt { SessionId = "older", ProfileKey = s.Settings.ProfileKey, Status = "unknown",
+            Rows = [new() { Status = "unknown", Row = new() { Date = onSelected ? selected : Fixture.Day, SourceEntryIds = [onSelected ? 123456789013 : 123456789012] } }] };
+        f.Store.SaveReceipt(prior); var scope = ProposalScope.Select(s, p, [selected]); var rows = Rules.Validate(scope.Session, scope.Proposal).Rows;
+        if (onSelected) { await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(s, p, rows, selectedDates: [selected])); Equal(0, f.Server.WriteCount); }
+        else { var result = await f.Service.SubmitAsync(s, p, rows, selectedDates: [selected]); Equal("complete", result.Status); Equal(3, f.Server.WriteCount); }
+        Equal("unknown", f.Store.LoadReceipts().Single(r => r.SubmissionId == prior.SubmissionId).Status);
+    }
+});
+await Check("selected-day pending outcomes reconcile against the retained full session", async () =>
+{
+    using var f = new Fixture(); var (s, p) = await f.TwoDateRead(); var selected = Fixture.Day.AddDays(1);
+    var scope = ProposalScope.Select(s, p, [selected]); f.Server.WriteMode = "commit-timeout";
+    var receipt = await f.Service.SubmitAsync(s, p, Rules.Validate(scope.Session, scope.Proposal).Rows, selectedDates: [selected]);
+    Equal("unknown", receipt.Status); Equal(1, f.Server.WriteCount); f.Server.ExistingReadDates.Clear();
+    var reconciled = await f.Service.ReconcileAsync(s, receipt);
+    Equal("created", reconciled.Rows[0].Status); Equal(1, f.Server.WriteCount); Equal(selected, reconciled.SelectedDates!.Single());
+    True(f.Server.ExistingReadDates.All(d => d == selected)); Equal(2, f.Store.LoadSession(s.SessionId)!.Days.Count);
+});
 Console.WriteLine($"{passed} API/storage/submission tests passed; {failures.Count} failed.");
 foreach (var failure in failures) Console.Error.WriteLine(failure);
 return failures.Count == 0 ? 0 : 1;
@@ -704,6 +758,22 @@ sealed class Fixture : IDisposable
         Service = new SubmissionService(Api, Store);
     }
     public Task<ReadSession> Read() => Api.ReadAsync(Day, Day);
+    public void SetTwoDateEntries(string firstDescription = "First work", string secondDescription = "Second work")
+    {
+        Server.EntriesResponse = new[]
+        {
+            new { id = 123456789012L, workspace_id = 55, start = "2026-09-28T13:00:00Z", stop = "2026-09-28T20:00:00Z", duration = 25200, description = firstDescription, project_name = "Internal", billable = true },
+            new { id = 123456789013L, workspace_id = 55, start = "2026-09-29T13:00:00Z", stop = "2026-09-29T20:00:00Z", duration = 25200, description = secondDescription, project_name = "Internal", billable = true }
+        };
+    }
+    public async Task<(ReadSession, ProposalEnvelope)> TwoDateRead()
+    {
+        Server.FilterExistingDates = true; SetTwoDateEntries();
+        var session = await Api.ReadAsync(Day, Day.AddDays(1));
+        var proposal = new ProposalEnvelope { SessionId = session.SessionId, EmployeeId = Settings.EmployeeId,
+            Rows = [new() { Date = Day.AddDays(1), SourceEntryIds = [123456789013], Project = 100, Task = 1, Category = 10, Description = "Second day work" }] };
+        return (session, proposal);
+    }
     public async Task<(ReadSession Session, SubmissionReceipt Receipt)> CreatedDay()
     {
         var session = await Read(); var proposal = Proposal(session);
@@ -732,6 +802,8 @@ sealed class FakeApi : HttpMessageHandler
     public string RecordIdQueryWhere = "";
     public List<object>? RecordIdRows;
     public int? RecordIdDeclaredTotal;
+    public bool FilterExistingDates;
+    public List<DateOnly> ExistingReadDates = [];
     public int? ExistingHoursScale;
     public HttpStatusCode ExistingReadStatus = HttpStatusCode.OK;
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -767,8 +839,11 @@ sealed class FakeApi : HttpMessageHandler
                 var idRows = RecordIdRows ?? Existing.Where(e => requested.Contains(e.RecordId)).Select(e => Row((3, e.RecordId))).ToList();
                 return Json(new { data = idRows.Skip(skip).Take(1000).ToArray(), metadata = new { totalRecords = RecordIdDeclaredTotal ?? idRows.Count } });
             }
+            DateOnly? existingDate = null;
             if (table == "bd3bsxtbp")
             {
+                var dateMatch = System.Text.RegularExpressions.Regex.Match(root.GetProperty("where").GetString()!, @"\{7\.EX\.'([^']+)'\}");
+                existingDate = DateOnly.Parse(dateMatch.Groups[1].Value); ExistingReadDates.Add(existingDate.Value);
                 BeforeExistingRead?.Invoke();
                 if (ExistingReadStatus != HttpStatusCode.OK) return new(ExistingReadStatus) { Content = new StringContent("TOP-SECRET-QB private response") };
             }
@@ -781,7 +856,7 @@ sealed class FakeApi : HttpMessageHandler
                 "bd3bsxtbn" => [Row((3, 1), (7, "Work"), (11, true), (17, ChangeTaskCategory ? 20 : 10)), Row((3, 44), (7, "Internal work"), (11, true), (17, 10))],
                 "bd3bsxtbj" => [Row((3, 100), (6, "Internal"))],
                 "biqs87fvg" => [],
-                "bd3bsxtbp" => Existing.Select(e => Row((3, e.RecordId), (7, e.Date.ToString("yyyy-MM-dd")), (10, ReadHours(e.Hours)), (11, e.Project), (16, e.Task), (22, e.Category), (24, new { id = "123.test", email = "person@example.com" }), (19, e.Description), (73, e.Assignment))).ToList(),
+                "bd3bsxtbp" => Existing.Where(e => !FilterExistingDates || e.Date == existingDate).Select(e => Row((3, e.RecordId), (7, e.Date.ToString("yyyy-MM-dd")), (10, ReadHours(e.Hours)), (11, e.Project), (16, e.Task), (22, e.Category), (24, new { id = "123.test", email = "person@example.com" }), (19, e.Description), (73, e.Assignment))).ToList(),
                 _ => throw new Exception("Unexpected table")
             };
             if (RowsByTable.TryGetValue(table!, out var overrideRows)) rows = overrideRows;

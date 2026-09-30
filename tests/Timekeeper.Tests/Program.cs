@@ -318,6 +318,72 @@ Test("Export contains complete schema references and policy without credentials"
     Equal(doc.RootElement.GetProperty("session_data").GetProperty("reference").GetProperty("assignments").GetArrayLength(), 2);
 });
 
+ReadSession TwoDates()
+{
+    var session = Session(); var first = session.Days[0]; var entry = first.Entries[0];
+    return session with { Days = [first, new DaySnapshot { Date = first.Date.AddDays(1), Entries = [entry with { Id = 2001, Start = entry.Start.AddDays(1), Stop = entry.Stop!.Value.AddDays(1) }] }] };
+}
+Test("partial-date proposals offer a choice without automatically accepting omitted days", () =>
+{
+    var s = TwoDates(); var day = s.Days[1].Date; var full = Proposal(s);
+    var p = full with { Rows = full.Rows.Where(r => r.Date == day).ToList() };
+    True(ProposalScope.NeedsChoice(s, p), "Expected a date choice.");
+    Reject(Rules.Validate(s, p), s.Days[0].Date.ToString("yyyy-MM-dd"));
+    var selected = ProposalScope.Select(s, p, [day]); var result = Rules.Validate(selected.Session, selected.Proposal); Valid(result);
+    Equal(result.Rows.Sum(r => r.Hours), 8m); True(result.Rows.All(r => r.Date == day), "Excluded day gained rows.");
+    Equal(selected.Session.SessionId, s.SessionId); Equal(selected.Session.GeneratedAtUtc, s.GeneratedAtUtc);
+    Equal(s.Days.Count, 2); Equal(p.Rows.Count, 1);
+    True(!ProposalScope.NeedsChoice(s, full), "Full coverage should not interrupt import.");
+});
+Test("selecting all or a missing date still requires every source on those dates", () =>
+{
+    var s = TwoDates(); var p = Proposal(s); p = p with { Rows = [p.Rows[1]] };
+    var both = ProposalScope.Select(s, p, s.Days.Select(d => d.Date).ToArray()); Reject(Rules.Validate(both.Session, both.Proposal), "missing");
+    var first = ProposalScope.Select(s, p, [s.Days[0].Date]); Reject(Rules.Validate(first.Session, first.Proposal), "missing");
+});
+Test("date selection rejects empty repeated and unknown dates", () =>
+{
+    var s = TwoDates(); var p = Proposal(s);
+    foreach (DateOnly[] dates in new DateOnly[][] { [], [s.Days[0].Date, s.Days[0].Date], [s.Days[1].Date.AddDays(10)] })
+        Throws<InvalidOperationException>(() => ProposalScope.Select(s, p, dates));
+    Throws<InvalidOperationException>(() => ProposalScope.Select(s, p with { Rows = [p.Rows[0] with { Date = s.Days[0].Date.AddDays(-1) }] }, [s.Days[0].Date]));
+});
+Test("date choice preserves wrong identity stale data and wrong-day source rejection", () =>
+{
+    var s = TwoDates(); var day = s.Days[1].Date; var p = Proposal(s); p = p with { Rows = [p.Rows[1]] };
+    foreach (var wrong in new[] { p with { SessionId = "foreign" }, p with { EmployeeId = "foreign" }, p with { SchemaVersion = 9 } })
+    {
+        True(!ProposalScope.NeedsChoice(s, wrong), "Identity errors must not offer scope recovery.");
+        var selected = ProposalScope.Select(s, wrong, [day]); True(!Rules.Validate(selected.Session, selected.Proposal).IsValid, "Identity was bypassed.");
+    }
+    var stale = ProposalScope.Select(s with { GeneratedAtUtc = DateTimeOffset.UtcNow.AddHours(-25) }, p, [day]); Reject(Rules.Validate(stale.Session, stale.Proposal), "24 hours");
+    var cross = ProposalScope.Select(s, p with { Rows = [p.Rows[0] with { SourceEntryIds = [1001] }] }, [day]); Reject(Rules.Validate(cross.Session, cross.Proposal), "unknown");
+});
+Test("already-recorded links on excluded dates are removed without inventing any links", () =>
+{
+    var s = TwoDates(); var first = s.Days[0];
+    s = s with { Days = [first with { Existing = [new(8001, first.Date, 7m, 100, 60, 20, 501, "Work")] }, s.Days[1]] };
+    var p = Proposal(s); p = p with { Rows = [p.Rows[1]], AlreadyRecorded = [new() { SourceEntryId = 1001, ExistingRecordId = 8001 }] };
+    var selected = ProposalScope.Select(s, p, [s.Days[1].Date]); Valid(Rules.Validate(selected.Session, selected.Proposal));
+    Equal(selected.Proposal.AlreadyRecorded.Count, 0); Equal(p.AlreadyRecorded.Count, 1);
+    var unknown = ProposalScope.Select(s, p with { AlreadyRecorded = [new() { SourceEntryId = 999999, ExistingRecordId = 8001 }] }, [s.Days[1].Date]);
+    Reject(Rules.Validate(unknown.Session, unknown.Proposal), "unknown");
+});
+Test("excluding a date never relaxes coverage within the selected date", () =>
+{
+    var s = TwoDates(); var day = s.Days[1]; var entry = day.Entries[0];
+    s = s with { Days = [s.Days[0], day with { Entries = [entry, entry with { Id = 2002 }] }] };
+    var p = Proposal(s); p = p with { Rows = [p.Rows[1]] }; var selected = ProposalScope.Select(s, p, [day.Date]);
+    Reject(Rules.Validate(selected.Session, selected.Proposal), "2002");
+});
+Test("reopened receipt separates its current guidance from its original failure", () =>
+{
+    var receipt = new SubmissionReceipt { Status = "reopened", Message = "Original failure." };
+    True(receipt.DisplayMessage.StartsWith("Deletion confirmed."), "Recovery guidance is missing.");
+    Equal(receipt.Message, "Original failure.");
+    True(!JsonSerializer.Serialize(receipt, JsonDefaults.Options).Contains("display_message"), "Display-only guidance must not change the saved schema.");
+});
+
 var failed = 0;
 foreach (var (name, run) in tests)
 {

@@ -116,6 +116,9 @@
                 <Border x:Name="VerifiedBadge" Grid.Column="1" VerticalAlignment="Top" Background="{DynamicResource SuccessSoft}" BorderBrush="{DynamicResource VerificationLine}" BorderThickness="1" Padding="12,6" CornerRadius="6" Visibility="Collapsed"><TextBlock Text="✓  Data verified" Foreground="{DynamicResource Success}" FontWeight="SemiBold" FontSize="12"/></Border>
               </Grid>
               <TextBlock x:Name="ValidationMessage" Text="The app checks the returned file and calculates your time before you submit." Foreground="{DynamicResource Muted}" Margin="20,0,20,14" FontSize="12"/>
+              <Border x:Name="ProposalDatesPanel" Visibility="Collapsed" Background="{DynamicResource AccentSoft}" CornerRadius="6" Padding="12" Margin="20,0,20,14">
+                <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="ProposalDatesText" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,12,0"/><Button x:Name="ChangeProposalDatesButton" Grid.Column="1" Content="Change dates" Click="ChangeProposalDates_Click"/></Grid>
+              </Border>
               <DataGrid x:Name="ReviewGrid" FrozenColumnCount="2" MinHeight="100" MaxHeight="320" Visibility="Collapsed" ScrollViewer.HorizontalScrollBarVisibility="Auto" MouseDoubleClick="RowDetails_Click" ToolTip="Double-click a row to inspect its full description and field IDs.">
                 <DataGrid.Columns>
                   <DataGridTextColumn Header="Date" Binding="{Binding Date, StringFormat=yyyy-MM-dd}" ElementStyle="{StaticResource TableText}" Width="110" MinWidth="110"/>
@@ -132,7 +135,7 @@
               <TextBlock x:Name="WarningsText" Margin="20,0,20,12" Foreground="{DynamicResource Warning}" FontSize="12" Visibility="Collapsed"/>
               <CheckBox x:Name="AcknowledgeWarnings" Margin="20,0,20,16" Visibility="Collapsed" Checked="Approval_Changed" Unchecked="Approval_Changed"><TextBlock Text="I reviewed the warnings and confirmed the existing-record matches and fill time." TextWrapping="Wrap" FontSize="12"/></CheckBox>
               <Border BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="20,16">
-                <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="WriteHint" Text="Nothing is sent until you click Write to Quickbase." VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource Muted}" Margin="0,0,18,0"/><Button x:Name="WriteButton" Grid.Column="1" Content="Write to Quickbase" Style="{StaticResource Primary}" IsEnabled="False" Click="Write_Click"/></Grid>
+                <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="WriteHint" TextWrapping="Wrap" Text="Nothing is sent until you click Write to Quickbase." VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource Muted}" Margin="0,0,18,0"/><Button x:Name="WriteButton" Grid.Column="1" Content="Write to Quickbase" Style="{StaticResource Primary}" IsEnabled="False" Click="Write_Click"/></Grid>
               </Border>
             </StackPanel>
           </Border>
@@ -144,7 +147,7 @@
         <TextBlock Text="Every submission has a saved receipt. Select one to review its result." Foreground="{DynamicResource Muted}" Margin="0,0,0,18"/>
         <Border Grid.Row="1" Style="{StaticResource Card}" Padding="0,8">
           <Grid>
-            <DataGrid x:Name="HistoryGrid" SelectionChanged="History_SelectionChanged"><DataGrid.Columns><DataGridTextColumn Header="Started (local)" Binding="{Binding StartedAtUtc.LocalDateTime, StringFormat=yyyy-MM-dd HH:mm}" ElementStyle="{StaticResource TableText}" Width="170" MinWidth="170"/><DataGridTextColumn Header="Status" Binding="{Binding Status}" ElementStyle="{StaticResource TableText}" Width="115" MinWidth="115"/><DataGridTextColumn Header="Rows" Binding="{Binding Rows.Count}" ElementStyle="{StaticResource TableNumber}" Width="70" MinWidth="70"/><DataGridTextColumn Header="Message" Binding="{Binding Message}" ElementStyle="{StaticResource TableText}" Width="*" MinWidth="190"/></DataGrid.Columns></DataGrid>
+            <DataGrid x:Name="HistoryGrid" SelectionChanged="History_SelectionChanged"><DataGrid.Columns><DataGridTextColumn Header="Started (local)" Binding="{Binding StartedAtUtc.LocalDateTime, StringFormat=yyyy-MM-dd HH:mm}" ElementStyle="{StaticResource TableText}" Width="170" MinWidth="170"/><DataGridTextColumn Header="Status" Binding="{Binding Status}" ElementStyle="{StaticResource TableText}" Width="115" MinWidth="115"/><DataGridTextColumn Header="Rows" Binding="{Binding Rows.Count}" ElementStyle="{StaticResource TableNumber}" Width="70" MinWidth="70"/><DataGridTextColumn Header="Message" Binding="{Binding DisplayMessage}" ElementStyle="{StaticResource TableText}" Width="*" MinWidth="190"/></DataGrid.Columns></DataGrid>
             <StackPanel x:Name="HistoryEmpty" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="30"><TextBlock Text="No submissions yet" FontFamily="{StaticResource DisplayFont}" FontSize="25" TextAlignment="Center" Margin="0,0,0,12"/><TextBlock Text="Submission receipts will appear here.&#x0a;Start by reading your timecards." TextAlignment="Center" Foreground="{DynamicResource Muted}" FontSize="13"/></StackPanel>
           </Grid>
         </Border>
