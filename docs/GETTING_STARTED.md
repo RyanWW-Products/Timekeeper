@@ -66,6 +66,17 @@ Choose **Write to Quickbase** only after reviewing the rows. Wait for the result
 
 If a request times out or its outcome is unclear, select its receipt in **Submission history**, then choose **Check selected result** to reconcile. Do not repeatedly click Write or send the same proposal through another installation to see whether it works. Reconciliation checks Quickbase; if it cannot prove the result, inspect the records with your administrator before proceeding.
 
+## Rewrite entries you intentionally deleted from Quickbase
+
+Timekeeper remembers successful writes even after a Quickbase record is deleted. Keep that history; use the recovery action in version 0.4.2 or later to allow replacements.
+
+1. Open **Submission history**, select the receipt containing the deleted work entry, and choose **Recover deleted entries**. Resolve any Pending/Unknown results with **Check selected result** first.
+2. Timekeeper checks the original record IDs, including records moved to another date or employee. Select only entries you intentionally deleted, then choose **Confirm deletion & allow rewrite**. Records that still exist cannot be released. A permissions change can hide a record, so verify it was actually deleted if unsure.
+3. Open **Timecards**, choose **Read dates** for the affected day, and upload this new export to Copilot. Discard the previous proposal. Tell Copilot you recovered the deleted entries and want replacements. Do not mark a deleted record as `already_recorded`; use that link only for matching records still present in the new export.
+4. Review the new work and recalculated Timecards/Misc internal additions, then choose **Write to Quickbase**. To rewrite a whole day, confirm in Quickbase that the old day is empty before this fresh read. Otherwise the remaining records still count toward the day's total.
+
+Recovery does not delete or write Quickbase records. The original creation results and a dated deletion confirmation remain in the receipt. Timekeeper checks the old IDs again before a replacement submission and stops if they reappear. Recover each relevant receipt if the day includes entries from multiple submissions. Do not erase receipt files or use another installation to bypass the history.
+
 ## Update Timekeeper
 
 Open **Updates** in the sidebar and choose **Check for updates**. If a newer version is available, review its notes and choose **Download and install**. Timekeeper verifies the download, closes, and opens the Windows installer. Complete that installer and reopen Timekeeper; your settings and history remain in place. Finish any active read or write first. Cancelling the download leaves your installed app unchanged.

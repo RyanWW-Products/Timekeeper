@@ -67,6 +67,13 @@ public partial class App : Application
                 window.ShowSmokeHistory();
                 ((DataGrid)window.FindName("HistoryGrid")).SelectedIndex=0;
                 RenderWindow(window,Path.Combine(output,"timekeeper-history.png"),(int)window.Width,(int)window.Height);
+                if (((Button)window.FindName("RecoverDeletedButton")).IsEnabled) throw new InvalidOperationException("Demo history enabled live deletion recovery.");
+                var recovery=new DeletionRecoveryWindow(window,receipt.Rows.Where(r=>r.Row.Kind=="work").ToList(),smoke:true);
+                File.AppendAllText(report,recovery.SmokeSummary());
+                RenderWindow(recovery,Path.Combine(output,"timekeeper-deletion-recovery.png"),(int)recovery.Width,(int)recovery.Height);
+                Appearance.Apply(new("Dark", "Theme color", 120, "Compact"));
+                RenderWindow(recovery,Path.Combine(output,"theme-dark-deletion-recovery-120.png"),(int)recovery.Width,(int)recovery.Height);
+                Appearance.Apply(new()); recovery.Close();
 
                 var settingsWindow=new SettingsWindow(window,new AppSettings(),store,false);
                 File.AppendAllText(report,settingsWindow.SmokeSummary());

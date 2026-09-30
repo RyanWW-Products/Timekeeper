@@ -17,8 +17,9 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
             throw new InvalidOperationException("Review and acknowledge every proposal warning before writing to Quickbase.");
         if (!SameRows(reviewedRows, validation.Rows)) throw new InvalidOperationException("The reviewed rows changed. Verify and review the proposal again.");
         var history = store.LoadReceipts(session.Settings.ProfileKey);
-        CheckHistory(session, reviewedRows, history);
+        var recovered = CheckHistory(session, reviewedRows, history);
         await CheckFreshAsync(session, reviewedRows, ct);
+        await CheckRecoveredStillAbsentAsync(recovered, ct);
 
         // Preserve the exact baseline needed for recovery before writing any receipt or remote row.
         store.SaveSession(session);
@@ -38,7 +39,11 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
                 break;
             }
             // Detect edits by another window/tool between individual writes, accounting for our known creates.
-            try { await CheckExistingDuringSubmissionAsync(session, receipt, receipt.Rows[i].Row.Date, ct); }
+            try
+            {
+                await CheckExistingDuringSubmissionAsync(session, receipt, receipt.Rows[i].Row.Date, ct);
+                await CheckRecoveredStillAbsentAsync(recovered, ct);
+            }
             catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or InvalidDataException or OperationCanceledException)
             {
                 receipt.Message = $"Stopped before row {i + 1} ({receipt.Rows[i].Row.Date:yyyy-MM-dd}): {ex.Message}\nThis row and all remaining rows were not sent. Read again and tell Copilot which entries this receipt confirms were created.";
@@ -88,6 +93,7 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
         var baseline = store.LoadSession(saved.SessionId) ?? throw new InvalidOperationException("The original session baseline is missing.");
         await api.TestAsync(ct);
         var uncertain = saved.Rows.Where(r => r.Status is "pending" or "unknown").ToList();
+        if (uncertain.Count == 0) return saved;
         var claimed = store.LoadReceipts(receipt.ProfileKey).SelectMany(r => r.Rows).Where(r => r.RecordId.HasValue).Select(r => r.RecordId!.Value).ToHashSet();
         foreach (var group in uncertain.GroupBy(r => r.Row.Date))
         {
@@ -117,7 +123,62 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
         return saved;
     }
 
-    private static void CheckHistory(ReadSession session, IReadOnlyList<VerifiedRow> rows, List<SubmissionReceipt> history)
+    public async Task<IReadOnlyList<RowOutcome>> FindMissingCreatedEntriesAsync(ReadSession session, SubmissionReceipt receipt, CancellationToken ct = default)
+    {
+        using var localLock = store.AcquireSubmissionLock();
+        var saved = LoadRecoveryReceipt(session, receipt);
+        var candidates = saved.Rows.Where(CanRecover).ToList();
+        if (candidates.Count == 0) return [];
+        await api.TestAsync(ct);
+        var found = await api.ReadTimecardRecordIdsAsync(candidates.Select(r => r.RecordId!.Value), ct);
+        return candidates.Where(r => !found.Contains(r.RecordId!.Value)).ToList();
+    }
+
+    public async Task<SubmissionReceipt> ConfirmDeletedEntriesAsync(ReadSession session, SubmissionReceipt receipt, IReadOnlyCollection<string> rowIds, bool userConfirmed, CancellationToken ct = default)
+    {
+        using var localLock = store.AcquireSubmissionLock();
+        if (!userConfirmed || rowIds.Count == 0 || rowIds.Distinct().Count() != rowIds.Count)
+            throw new InvalidOperationException("Select the entries you intentionally deleted and confirm before allowing a rewrite.");
+        var saved = LoadRecoveryReceipt(session, receipt);
+        var selected = saved.Rows.Where(r => rowIds.Contains(r.Row.RowId)).ToList();
+        if (selected.Count != rowIds.Count || selected.Any(r => !CanRecover(r)))
+            throw new InvalidOperationException("Only confirmed created work entries from this saved receipt can be recovered. Check the receipt again.");
+        await api.TestAsync(ct);
+        await CheckRecoveredStillAbsentAsync(selected, ct);
+        ct.ThrowIfCancellationRequested();
+        var confirmedAt = DateTimeOffset.UtcNow;
+        foreach (var row in selected) row.DeletionConfirmedAtUtc = confirmedAt;
+        // Preserve the original result, message, IDs and finish time; append only the deletion audit.
+        saved.Status = "reopened";
+        store.SaveReceipt(saved);
+        return saved;
+    }
+
+    private SubmissionReceipt LoadRecoveryReceipt(ReadSession session, SubmissionReceipt receipt)
+    {
+        if (session.Demo || !Same(session.Settings, api.Settings) || receipt.ProfileKey != api.Settings.ProfileKey || receipt.SessionId != session.SessionId)
+            throw new InvalidOperationException("Use the original session and account to recover deleted entries.");
+        var saved = store.LoadReceipts(api.Settings.ProfileKey).SingleOrDefault(r => r.SubmissionId == receipt.SubmissionId)
+            ?? throw new InvalidOperationException("The original submission receipt is missing.");
+        var baseline = store.LoadSession(saved.SessionId) ?? throw new InvalidOperationException("The original session baseline is missing.");
+        if (baseline.Demo || saved.SessionId != session.SessionId || !Same(baseline.Settings, api.Settings))
+            throw new InvalidOperationException("The saved receipt does not match the original account and session.");
+        if (saved.Rows.Any(r => r.Status is "pending" or "unknown"))
+            throw new InvalidOperationException("This receipt has an unknown write outcome. Check the selected result before recovering deleted entries.");
+        return saved;
+    }
+
+    private static bool CanRecover(RowOutcome row) => row.Status == "created" && row.RecordId > 0 && row.Row.Kind == "work" && row.Row.SourceEntryIds.Count > 0 && row.DeletionConfirmedAtUtc is null;
+
+    private async Task CheckRecoveredStillAbsentAsync(IReadOnlyList<RowOutcome> rows, CancellationToken ct)
+    {
+        if (rows.Count == 0) return;
+        var found = await api.ReadTimecardRecordIdsAsync(rows.Select(r => r.RecordId ?? throw new InvalidDataException("A recovered entry is missing its original record ID.")), ct);
+        if (found.Count > 0)
+            throw new InvalidOperationException($"Quickbase record #{found.Min()} still exists or has been restored. It cannot be rewritten. Check that record, then read the day again.");
+    }
+
+    private static List<RowOutcome> CheckHistory(ReadSession session, IReadOnlyList<VerifiedRow> rows, List<SubmissionReceipt> history)
     {
         if (history.Any(r => r.SessionId == session.SessionId)) throw new InvalidOperationException("This session already has a submission receipt. Reconcile it if needed, then read the day again. A session cannot be submitted twice.");
         var dates = session.Days.Select(d => d.Date).ToHashSet();
@@ -126,8 +187,18 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
         var sourceIds = rows.SelectMany(r => r.SourceEntryIds).ToHashSet();
         if (history.SelectMany(r => r.Rows).Where(r => r.Status is "pending" or "unknown").SelectMany(r => r.Row.SourceEntryIds).Any(sourceIds.Contains))
             throw new InvalidOperationException("A Toggl entry has an unresolved earlier write, even if its date has since changed. Reconcile that receipt before submitting.");
-        if (history.SelectMany(r => r.Rows).Where(r => r.Status == "created").SelectMany(r => r.Row.SourceEntryIds).Any(sourceIds.Contains))
-            throw new InvalidOperationException("A Toggl entry in this proposal has already been written by Timekeeper. Read again and mark it as already recorded.");
+        var priorCreates = history.SelectMany(r => r.Rows).Where(r => r.Status == "created" && r.Row.SourceEntryIds.Any(sourceIds.Contains)).ToList();
+        var blocked = priorCreates.FirstOrDefault(r => r.DeletionConfirmedAtUtc is null);
+        if (blocked is not null)
+            throw new InvalidOperationException($"A Toggl entry in this proposal was already written as Quickbase record #{blocked.RecordId} ({blocked.Row.Date:yyyy-MM-dd}). If it still exists, read again and mark it as already recorded. If you intentionally deleted it, open Submission history, select its receipt, and choose Recover deleted entries.");
+        foreach (var row in priorCreates)
+        {
+            if (row.RecordId is not > 0 || row.Row.Kind != "work" || row.DeletionConfirmedAtUtc > DateTimeOffset.UtcNow)
+                throw new InvalidDataException("A saved deletion confirmation is invalid. Restore the receipt before writing.");
+            if (session.GeneratedAtUtc <= row.DeletionConfirmedAtUtc)
+                throw new InvalidOperationException("Read the day again after recovering deleted entries, then request a new Copilot proposal before writing.");
+        }
+        return priorCreates;
     }
 
     private async Task CheckFreshAsync(ReadSession session, IReadOnlyList<VerifiedRow> rows, CancellationToken ct)
@@ -208,11 +279,12 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
     private static void Finish(SubmissionReceipt receipt)
     {
         receipt.FinishedAtUtc = DateTimeOffset.UtcNow;
-        receipt.Status = receipt.Rows.Any(r => r.Status is "pending" or "unknown") ? "unknown" : receipt.Rows.All(r => r.Status == "created") ? "complete" : "partial";
+        receipt.Status = receipt.Rows.Any(r => r.Status is "pending" or "unknown") ? "unknown" : receipt.Rows.Any(r => r.DeletionConfirmedAtUtc.HasValue) ? "reopened" : receipt.Rows.All(r => r.Status == "created") ? "complete" : "partial";
         if (string.IsNullOrEmpty(receipt.Message)) receipt.Message = receipt.Status switch
         {
             "complete" => "Every row was confirmed created in Quickbase.",
             "unknown" => "At least one row has an unknown outcome. Reconcile before another write on these dates.",
+            "reopened" => "Deletion was confirmed for selected entries. Read the day again to prepare their replacements. The original creation results remain below.",
             _ => "Only rows marked created were confirmed. Review the receipt and read again before preparing remaining work."
         };
     }

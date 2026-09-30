@@ -1,6 +1,6 @@
 TIMEKEEPER AGENT KNOWLEDGE
-For the Windows application 0.4.0; exchange/proposal schema 1
-Updated 2026-09-28
+For the Windows application 0.4.2; exchange/proposal schema 1
+Updated 2026-09-30
 
 PURPOSE AND AUTHORITY
 
@@ -68,7 +68,7 @@ Every source ID appears exactly once: either in one row's source_entry_ids, or i
 
 Existing Quickbase time is context, not new work to return. Similar descriptions or equal hours do not prove the same work was already recorded. The user explicitly confirms which Toggl source is covered by which supplied existing record before an already_recorded link is used. The dates must match. Several sources may link to one existing record only when their combined rounded hours do not exceed its hours. Timekeeper also requires acknowledgment of these links.
 
-If equal-hour work is actually additional work, retain it as new work and have the user review the app's possible-duplicate warning. Previously confirmed submitted sources cannot be resubmitted by this installation.
+If equal-hour work is actually additional work, retain it as new work and have the user review the app's possible-duplicate warning. Previously confirmed submitted sources stay blocked unless the user explicitly completes the deleted-entry recovery workflow below. Recovery preserves the original receipt and requires a new export.
 
 HOURS AND AUTOMATIC ADDITIONS
 
@@ -150,3 +150,11 @@ Updates > Check for updates finds published releases. Download and install prese
 Appearance offers Ivory, Dark, Slate, Forest and Sand; theme/accent, interface size and spacing preferences are separate from account settings. Save appearance keeps the choice; Cancel restores the previous one. Appearance changes do not change hours or matching rules.
 
 END OF TIMEKEEPER KNOWLEDGE
+
+INTENTIONALLY DELETED QUICKBASE ENTRIES
+
+If the user deleted a record created by Timekeeper and wants to replace it, the old receipt still blocks that source. In version 0.4.2 or later, open Submission history, select the original receipt, and choose Recover deleted entries. The app checks the original record IDs without restricting date or employee, so a moved or reassigned record is still present. Only known Created work entries can be recovered; resolve Pending/Unknown outcomes first.
+
+The user selects entries they intentionally deleted and chooses Confirm deletion & allow rewrite. A permission change can also hide a record, so absence alone is not proof of deletion. The app rechecks absence and saves a dated confirmation while retaining the original creation result and record ID. This action never writes or deletes Quickbase records.
+
+Then read the day again and upload the fresh export. Do not reuse the old proposal or mark a deleted record as already_recorded. Match the recovered sources as new work, use already_recorded only for confirmed matching records still present in the fresh export, and let the app recalculate Timecards/Misc internal. For a whole-day rewrite, the user first verifies the old day is empty in Quickbase; this agent never deletes records. The app checks recovered IDs again before replacements and blocks them if restored. Never suggest erasing receipt files or bypassing history from another installation.

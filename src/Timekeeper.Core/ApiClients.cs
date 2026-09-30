@@ -201,6 +201,26 @@ public sealed class TimecardApi : IDisposable
         }).OrderBy(r => r.RecordId).ToList();
     }
 
+    internal async Task<HashSet<int>> ReadTimecardRecordIdsAsync(IEnumerable<int> recordIds, CancellationToken ct)
+    {
+        var ids = recordIds.Distinct().ToArray();
+        if (ids.Any(id => id <= 0)) throw new InvalidDataException("A saved Quickbase record ID is invalid. Restore the receipt before recovery.");
+        var found = new HashSet<int>();
+        foreach (var batch in ids.Chunk(100))
+        {
+            // Do not filter by date or employee: an edited/moved record is still an existing write.
+            var where = string.Join("OR", batch.Select(id => $"{{3.EX.'{id}'}}"));
+            var rows = await QueryAllAsync(settings.TimecardsTable, [3], where, ct);
+            foreach (var row in rows)
+            {
+                var id = RecordId(row, settings.TimecardsTable, 3, "Record ID");
+                if (!batch.Contains(id)) throw new InvalidDataException("Quickbase returned a record outside the deletion check. No entries were released for rewriting.");
+                found.Add(id);
+            }
+        }
+        return found;
+    }
+
     public async Task<ReferenceData> ReadReferenceAsync(CancellationToken ct = default)
     {
         var categories = (await QueryAllAsync(settings.CategoriesTable, [3, 6], null, ct)).Select(r => new CategoryRecord(RecordId(r, settings.CategoriesTable, 3, "Record ID"), CellString(r, 6))).ToList();

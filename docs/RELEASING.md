@@ -4,7 +4,7 @@ Source and Windows releases live at `RyanWW-Products/Timekeeper`. The app checks
 
 For each release:
 
-1. Update `Directory.Build.props`, the default version in `scripts/build.ps1` and `installer/Timekeeper.iss`, and release notes. The UI version comes from the compiled assembly.
+1. Update `Directory.Build.props`, the fallback version in `installer/Timekeeper.iss`, and release notes. `scripts/build.ps1` reads the current version from `Directory.Build.props` unless explicitly overridden. The UI version comes from the compiled assembly. Each build also refreshes the local `installer/Timekeeper-Setup.exe` copy and its checksum with the newly compiled release.
 2. Commit reviewed changes, run the Windows checks, and push the commit plus its matching version tag to GitHub.
 3. From that clean checkout, run `./scripts/publish-release.ps1 -Version 0.2.0 -NotesFile ./docs/releases/0.2.0.md`, substituting the new version and notes. This builds, tests, renders the published UI, uploads the installer and SHA256SUMS.txt to a draft, and publishes it only after the upload succeeds. The developer needs .NET 10, Inno Setup 6 and authenticated GitHub CLI access.
 4. Verify the release's installer asset has a `sha256:` digest in GitHub's release API and check from an older installed app before broad distribution.

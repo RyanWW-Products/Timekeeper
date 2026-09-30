@@ -1,6 +1,8 @@
 **/bin/
 **/obj/
 artifacts/
+installer/*.exe
+installer/SHA256SUMS.txt
 .dotnet/
 .vs/
 *.user

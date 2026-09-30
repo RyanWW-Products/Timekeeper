@@ -133,6 +133,9 @@ public sealed record RowOutcome
     public string Status { get; set; } = "pending";
     public int? RecordId { get; set; }
     public string Message { get; set; } = "";
+    // Keep the original create and record ID as an audit trail when a user confirms deletion.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? DeletionConfirmedAtUtc { get; set; }
 }
 public sealed record SubmissionReceipt
 {

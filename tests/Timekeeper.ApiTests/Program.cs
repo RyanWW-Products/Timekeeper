@@ -499,6 +499,177 @@ await Check("Toggl cap rejects potentially truncated day", async () =>
     using var f = new Fixture(); f.Server.EntryCount = 1000;
     await Throws<InvalidDataException>(() => f.Read());
 });
+await Check("intentional deletion can be recovered and rewritten only through a fresh proposal", async () =>
+{
+    using var f = new Fixture(); var (original, receipt) = await f.CreatedDay();
+    var finished = receipt.FinishedAtUtc; var message = receipt.Message;
+    f.Server.Existing.Clear();
+    var stale = await f.Read();
+    var missing = await f.Service.FindMissingCreatedEntriesAsync(original, receipt);
+    Equal(1, missing.Count); Equal<int?>(501, missing[0].RecordId); Equal(3, f.Server.WriteCount);
+    var recovered = await f.Service.ConfirmDeletedEntriesAsync(original, receipt, [missing[0].Row.RowId], true);
+    Equal("reopened", recovered.Status); Equal(finished, recovered.FinishedAtUtc); Equal(message, recovered.Message);
+    Equal("created", recovered.Rows[0].Status); Equal<int?>(501, recovered.Rows[0].RecordId);
+    True(recovered.Rows[0].DeletionConfirmedAtUtc.HasValue); Equal(3, f.Server.WriteCount);
+    True(f.Store.LoadReceipts().Single().Rows[0].DeletionConfirmedAtUtc.HasValue);
+    await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(stale, f.Proposal(stale), Rules.Validate(stale, f.Proposal(stale)).Rows));
+    await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(original, f.Proposal(original), Rules.Validate(original, f.Proposal(original)).Rows));
+    var fresh = await f.Read(); var p = f.Proposal(fresh);
+    var replacement = await f.Service.SubmitAsync(fresh, p, Rules.Validate(fresh, p).Rows);
+    Equal("complete", replacement.Status); Equal(6, f.Server.WriteCount); Equal(8m, f.Server.Existing.Sum(r => r.Hours));
+    Equal(2, f.Store.LoadReceipts().Count);
+    var next = await f.Read(); var np = f.Proposal(next);
+    await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(next, np, Rules.Validate(next, np).Rows, warningsAcknowledged: true));
+    Equal(6, f.Server.WriteCount);
+});
+await Check("deleted first row of a partial day can be replaced with corrected source hours", async () =>
+{
+    using var f = new Fixture();
+    object Entries(int seconds) => new[]
+    {
+        new { id = 123456789012L, workspace_id = 55, start = "2026-09-28T13:00:00Z", stop = DateTimeOffset.Parse("2026-09-28T13:00:00Z").AddSeconds(seconds).ToString("O"), duration = seconds, description = "First work", project_name = "Internal", billable = false },
+        new { id = 123456789013L, workspace_id = 55, start = "2026-09-28T17:00:00Z", stop = "2026-09-28T19:50:00Z", duration = 10200, description = "Second work", project_name = "Internal", billable = false }
+    };
+    f.Server.EntriesResponse = Entries(10800);
+    var s = await f.Read(); var p = f.Proposal(s);
+    p.Rows.Add(new() { Date = Fixture.Day, SourceEntryIds = [123456789013], Project = 100, Task = 44, Category = 10, Description = "Second work" });
+    f.Server.BeforeExistingRead = () => { if (f.Server.WriteCount == 1) f.Server.ExistingReadStatus = HttpStatusCode.ServiceUnavailable; };
+    var partial = await f.Service.SubmitAsync(s, p, Rules.Validate(s, p).Rows);
+    Equal("partial", partial.Status); Equal(1, f.Server.WriteCount);
+    f.Server.BeforeExistingRead = null; f.Server.ExistingReadStatus = HttpStatusCode.OK;
+    f.Server.Existing.Clear(); f.Server.EntriesResponse = Entries(11700);
+    await f.Service.ConfirmDeletedEntriesAsync(s, partial, [partial.Rows[0].Row.RowId], true);
+    var fresh = await f.Read(); var replacement = p with { SessionId = fresh.SessionId };
+    var validation = Rules.Validate(fresh, replacement); True(validation.IsValid); Equal(4, validation.Rows.Count);
+    True(validation.Rows.Select(r => r.Hours).SequenceEqual(new[] { 3.25m, 2.83m, 0.17m, 1.75m }));
+    var result = await f.Service.SubmitAsync(fresh, replacement, validation.Rows);
+    Equal("complete", result.Status); Equal(5, f.Server.WriteCount); Equal(8m, f.Server.Existing.Sum(r => r.Hours));
+    var original = f.Store.LoadReceipts().Single(r => r.SubmissionId == partial.SubmissionId);
+    Equal(3m, original.Rows[0].Row.Hours); True(original.Rows.Skip(1).All(r => r.Status == "not_sent"));
+});
+await Check("deleted record remains blocked until explicitly confirmed", async () =>
+{
+    using var f = new Fixture(); var (s, r) = await f.CreatedDay(); f.Server.Existing.Clear();
+    var missing = await f.Service.FindMissingCreatedEntriesAsync(s, r); Equal(1, missing.Count);
+    var fresh = await f.Read(); var p = f.Proposal(fresh);
+    await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(fresh, p, Rules.Validate(fresh, p).Rows));
+    True(f.Store.LoadReceipts().Single().Rows.All(row => row.DeletionConfirmedAtUtc is null)); Equal(3, f.Server.WriteCount);
+});
+await Check("recovery checks record IDs without date or employee restrictions", async () =>
+{
+    using var f = new Fixture(); var (s, r) = await f.CreatedDay();
+    f.Server.Existing[0] = f.Server.Existing[0] with { Date = Fixture.Day.AddDays(1), Description = "Moved record" };
+    Equal(0, (await f.Service.FindMissingCreatedEntriesAsync(s, r)).Count);
+    Equal("{3.EX.'501'}", f.Server.RecordIdQueryWhere);
+    await Throws<InvalidOperationException>(() => f.Service.ConfirmDeletedEntriesAsync(s, r, [r.Rows[0].Row.RowId], true));
+    Equal(3, f.Server.WriteCount);
+});
+await Check("record restored between discovery and confirmation blocks recovery", async () =>
+{
+    using var f = new Fixture(); var (s, r) = await f.CreatedDay(); var old = f.Server.Existing[0]; f.Server.Existing.Clear();
+    Equal(1, (await f.Service.FindMissingCreatedEntriesAsync(s, r)).Count); f.Server.Existing.Add(old);
+    await Throws<InvalidOperationException>(() => f.Service.ConfirmDeletedEntriesAsync(s, r, [r.Rows[0].Row.RowId], true));
+    True(f.Store.LoadReceipts().Single().Rows[0].DeletionConfirmedAtUtc is null); Equal(3, f.Server.WriteCount);
+});
+await Check("restored record blocks a later rewrite even outside the selected date", async () =>
+{
+    using var f = new Fixture(); var (s, r) = await f.CreatedDay(); var old = f.Server.Existing[0]; f.Server.Existing.Clear();
+    await f.Service.ConfirmDeletedEntriesAsync(s, r, [r.Rows[0].Row.RowId], true);
+    var fresh = await f.Read(); var p = f.Proposal(fresh);
+    // Visible only to the global ID query, representing a moved/reassigned record.
+    f.Server.RecordIdRows = [FakeApi.Row((3, old.RecordId))];
+    await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(fresh, p, Rules.Validate(fresh, p).Rows));
+    Equal(3, f.Server.WriteCount); Equal(1, f.Store.LoadReceipts().Count);
+});
+await Check("restored record between replacement writes halts remaining rows", async () =>
+{
+    using var f = new Fixture(); var (s, r) = await f.CreatedDay(); f.Server.Existing.Clear();
+    await f.Service.ConfirmDeletedEntriesAsync(s, r, [r.Rows[0].Row.RowId], true);
+    var fresh = await f.Read(); var p = f.Proposal(fresh);
+    f.Server.BeforeRecordIdRead = () => { if (f.Server.WriteCount == 4) f.Server.RecordIdRows = [FakeApi.Row((3, 501))]; };
+    var result = await f.Service.SubmitAsync(fresh, p, Rules.Validate(fresh, p).Rows);
+    Equal("partial", result.Status); Equal(4, f.Server.WriteCount); True(result.Message.Contains("#501"));
+    True(result.Rows.Skip(1).All(row => row.Status == "not_sent"));
+});
+await Check("empty unconfirmed duplicate foreign and automatic selections cannot release sources", async () =>
+{
+    using var f = new Fixture(); var (s, r) = await f.CreatedDay(); f.Server.Existing.Clear();
+    var id = r.Rows[0].Row.RowId;
+    await Throws<InvalidOperationException>(() => f.Service.ConfirmDeletedEntriesAsync(s, r, [id], false));
+    foreach (string[] selection in new string[][] { [], [id, id], ["foreign-row"], [r.Rows[1].Row.RowId] })
+        await Throws<InvalidOperationException>(() => f.Service.ConfirmDeletedEntriesAsync(s, r, selection, true));
+    True(f.Store.LoadReceipts().Single().Rows.All(row => row.DeletionConfirmedAtUtc is null)); Equal(3, f.Server.WriteCount);
+});
+await Check("unknown and pending receipts cannot be released with caller-edited statuses", async () =>
+{
+    foreach (var status in new[] { "pending", "unknown" })
+    {
+        using var f = new Fixture(); var (s, r) = await f.CreatedDay(); f.Server.Existing.Clear();
+        r.Rows[1].Status = status; f.Store.SaveReceipt(r); r.Rows[1].Status = "created";
+        await Throws<InvalidOperationException>(() => f.Service.FindMissingCreatedEntriesAsync(s, r));
+        await Throws<InvalidOperationException>(() => f.Service.ConfirmDeletedEntriesAsync(s, r, [r.Rows[0].Row.RowId], true));
+        True(f.Store.LoadReceipts().Single().Rows[0].DeletionConfirmedAtUtc is null);
+    }
+});
+await Check("recovery rejects wrong account session demo and missing baseline", async () =>
+{
+    using var f = new Fixture(); var (s, r) = await f.CreatedDay(); f.Server.Existing.Clear();
+    foreach (var altered in new[] { s with { Demo = true }, s with { SessionId = "another" }, s with { Settings = s.Settings with { EmployeeId = "other.user" } } })
+        await Throws<InvalidOperationException>(() => f.Service.FindMissingCreatedEntriesAsync(altered, r));
+    f.Store.SaveSession(s with { Demo = true });
+    await Throws<InvalidOperationException>(() => f.Service.FindMissingCreatedEntriesAsync(s, r));
+    File.Delete(Path.Combine(f.Store.RootPath, "sessions", s.SessionId + ".json"));
+    await Throws<InvalidOperationException>(() => f.Service.ConfirmDeletedEntriesAsync(s, r, [r.Rows[0].Row.RowId], true));
+    Equal(3, f.Server.WriteCount);
+});
+await Check("recovery query failures never confirm deletion", async () =>
+{
+    foreach (var status in new[] { HttpStatusCode.Forbidden, HttpStatusCode.TooManyRequests, HttpStatusCode.ServiceUnavailable })
+    {
+        using var f = new Fixture(); var (s, r) = await f.CreatedDay(); f.Server.Existing.Clear();
+        f.Server.ExistingReadStatus = status;
+        await Throws<HttpRequestException>(() => f.Service.FindMissingCreatedEntriesAsync(s, r));
+        await Throws<HttpRequestException>(() => f.Service.ConfirmDeletedEntriesAsync(s, r, [r.Rows[0].Row.RowId], true));
+        True(f.Store.LoadReceipts().Single().Rows[0].DeletionConfirmedAtUtc is null); Equal(3, f.Server.WriteCount);
+    }
+});
+await Check("unexpected malformed and incomplete recovery query results fail closed", async () =>
+{
+    foreach (var mode in new[] { "unexpected", "malformed", "incomplete" })
+    {
+        using var f = new Fixture(); var (s, r) = await f.CreatedDay(); f.Server.Existing.Clear();
+        f.Server.RecordIdRows = mode == "unexpected" ? [FakeApi.Row((3, 999))] : mode == "malformed" ? [FakeApi.Row((3, 501.5m))] : [];
+        if (mode == "incomplete") f.Server.RecordIdDeclaredTotal = 1;
+        if (mode == "malformed") await Throws<QuickbaseDataException>(() => f.Service.ConfirmDeletedEntriesAsync(s, r, [r.Rows[0].Row.RowId], true));
+        else await Throws<InvalidDataException>(() => f.Service.ConfirmDeletedEntriesAsync(s, r, [r.Rows[0].Row.RowId], true));
+        True(f.Store.LoadReceipts().Single().Rows[0].DeletionConfirmedAtUtc is null); Equal(3, f.Server.WriteCount);
+    }
+});
+await Check("identity mismatch cannot confirm deletion", async () =>
+{
+    using var f = new Fixture(); var (s, r) = await f.CreatedDay(); f.Server.Existing.Clear(); f.Server.WrongIdentity = true;
+    await Throws<InvalidOperationException>(() => f.Service.ConfirmDeletedEntriesAsync(s, r, [r.Rows[0].Row.RowId], true));
+    True(f.Store.LoadReceipts().Single().Rows[0].DeletionConfirmedAtUtc is null); Equal(3, f.Server.WriteCount);
+});
+await Check("journal replacement failure leaves original duplicate protection intact", async () =>
+{
+    using var f = new Fixture(); var (s, r) = await f.CreatedDay(); f.Server.Existing.Clear();
+    var path = Path.Combine(f.Store.RootPath, "receipts", r.SubmissionId + ".json");
+    using (var locked = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+        await Throws<UnauthorizedAccessException>(() => f.Service.ConfirmDeletedEntriesAsync(s, r, [r.Rows[0].Row.RowId], true));
+    True(f.Store.LoadReceipts().Single().Rows[0].DeletionConfirmedAtUtc is null);
+    var fresh = await f.Read(); var p = f.Proposal(fresh);
+    await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(fresh, p, Rules.Validate(fresh, p).Rows)); Equal(3, f.Server.WriteCount);
+});
+await Check("legacy receipts load without a deletion field and audit survives serialization", async () =>
+{
+    using var f = new Fixture(); var (s, r) = await f.CreatedDay();
+    True(!JsonSerializer.Serialize(r, JsonDefaults.Options).Contains("deletion_confirmed_at_utc"));
+    Equal(3, f.Store.LoadReceipts().Single().Rows.Count); f.Server.Existing.Clear();
+    await f.Service.ConfirmDeletedEntriesAsync(s, r, [r.Rows[0].Row.RowId], true);
+    var saved = f.Store.LoadReceipts().Single(); True(saved.Rows[0].DeletionConfirmedAtUtc.HasValue);
+    True(JsonSerializer.Serialize(saved, JsonDefaults.Options).Contains("deletion_confirmed_at_utc"));
+});
 Console.WriteLine($"{passed} API/storage/submission tests passed; {failures.Count} failed.");
 foreach (var failure in failures) Console.Error.WriteLine(failure);
 return failures.Count == 0 ? 0 : 1;
@@ -533,6 +704,12 @@ sealed class Fixture : IDisposable
         Service = new SubmissionService(Api, Store);
     }
     public Task<ReadSession> Read() => Api.ReadAsync(Day, Day);
+    public async Task<(ReadSession Session, SubmissionReceipt Receipt)> CreatedDay()
+    {
+        var session = await Read(); var proposal = Proposal(session);
+        var receipt = await Service.SubmitAsync(session, proposal, Rules.Validate(session, proposal).Rows);
+        return (session, receipt);
+    }
     public ProposalEnvelope Proposal(ReadSession s) => new() { SessionId = s.SessionId, EmployeeId = Settings.EmployeeId, Rows = [new() { Date = Day, SourceEntryIds = [123456789012], Project = 100, Task = 1, Category = 10, Description = "Work completed" }] };
     public void Dispose() { Api.Dispose(); Server.Dispose(); Directory.Delete(Store.RootPath, true); }
 }
@@ -551,6 +728,10 @@ sealed class FakeApi : HttpMessageHandler
     public int WriteCount, CategoryQueries, CategoryPageSize = 1000, EntryCount = 1, EntryQueries, CurrentQueries;
     public List<ExistingTimecard> Existing = [];
     public Action? BeforeWrite, BeforeExistingRead;
+    public Action? BeforeRecordIdRead;
+    public string RecordIdQueryWhere = "";
+    public List<object>? RecordIdRows;
+    public int? RecordIdDeclaredTotal;
     public int? ExistingHoursScale;
     public HttpStatusCode ExistingReadStatus = HttpStatusCode.OK;
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -577,6 +758,15 @@ sealed class FakeApi : HttpMessageHandler
         if (url.AbsolutePath.EndsWith("/records/query"))
         {
             var root = body.RootElement; var table = root.GetProperty("from").GetString(); var skip = root.GetProperty("options").GetProperty("skip").GetInt32();
+            if (table == "bd3bsxtbp" && body.RootElement.GetProperty("select").GetArrayLength() == 1)
+            {
+                BeforeRecordIdRead?.Invoke();
+                if (ExistingReadStatus != HttpStatusCode.OK) return new(ExistingReadStatus) { Content = new StringContent("TOP-SECRET") };
+                RecordIdQueryWhere = body.RootElement.GetProperty("where").GetString()!;
+                var requested = System.Text.RegularExpressions.Regex.Matches(RecordIdQueryWhere, @"\{3\.EX\.'(\d+)'\}").Select(m => int.Parse(m.Groups[1].Value)).ToHashSet();
+                var idRows = RecordIdRows ?? Existing.Where(e => requested.Contains(e.RecordId)).Select(e => Row((3, e.RecordId))).ToList();
+                return Json(new { data = idRows.Skip(skip).Take(1000).ToArray(), metadata = new { totalRecords = RecordIdDeclaredTotal ?? idRows.Count } });
+            }
             if (table == "bd3bsxtbp")
             {
                 BeforeExistingRead?.Invoke();

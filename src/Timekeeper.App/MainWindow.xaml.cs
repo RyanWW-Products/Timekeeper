@@ -98,6 +98,9 @@ public partial class MainWindow : Window
         RowDetailsButton.IsEnabled=!_busy&&_validation is { IsValid:true }&&_validation.Rows.Count>0;
         ExportCard.Cursor=!_busy&&_exportPath!=null?Cursors.Hand:Cursors.Arrow;
         ReconcileButton.IsEnabled=ExportReceiptButton.IsEnabled=!_busy&&HistoryGrid.SelectedItem is SubmissionReceipt;
+        RecoverDeletedButton.IsEnabled=!_busy&&!_smoke&&HistoryGrid.SelectedItem is SubmissionReceipt selected
+            &&!selected.Rows.Any(r=>r.Status is "pending" or "unknown")
+            &&selected.Rows.Any(r=>r.Status=="created"&&r.RecordId>0&&r.Row.Kind=="work"&&r.Row.SourceEntryIds.Count>0&&r.DeletionConfirmedAtUtc is null);
         WriteButton.IsEnabled=!_busy&&_session is { Demo:false }&&_proposal!=null&&_validation is { IsValid:true }&&_validation.Rows.Count>0&&(_validation.Warnings.Count==0||AcknowledgeWarnings.IsChecked==true);
     }
     private void ResetReview()
@@ -348,6 +351,8 @@ public partial class MainWindow : Window
         var text=new StringBuilder($"{receipt.Status.ToUpperInvariant()} · {receipt.StartedAtUtc.LocalDateTime:g}\n{receipt.Message}\nSubmission: {receipt.SubmissionId}\n\n");
         if(receipt.ReviewedWarnings.Count>0) text.AppendLine($"Warnings acknowledged: {receipt.WarningsAcknowledgedAtUtc:g}\n{string.Join("\n",receipt.ReviewedWarnings)}\n");
         foreach(var result in receipt.Rows) text.AppendLine($"{result.Status.ToUpperInvariant()}  {result.Row.Date:yyyy-MM-dd}  {result.Row.Hours:0.00} h  {result.Row.Description}\n{(result.RecordId.HasValue?$"Quickbase record #{result.RecordId} · ":"")}{result.Message}\n");
+        foreach(var result in receipt.Rows.Where(r=>r.DeletionConfirmedAtUtc.HasValue))
+            text.AppendLine($"DELETION CONFIRMED  Record #{result.RecordId} · {result.DeletionConfirmedAtUtc!.Value.LocalDateTime:g}\nThe user confirmed this record was intentionally deleted; Quickbase did not return its ID. Its sources may be included in a fresh proposal. The original creation result above is retained.\n");
         return text.ToString();
     }
     private async void Reconcile_Click(object sender,RoutedEventArgs e)
@@ -359,6 +364,33 @@ public partial class MainWindow : Window
             using var api=MakeApi(session.Settings); StatusText.Text="Checking Quickbase against the original submission…";
             var result=await new SubmissionService(api,_store).ReconcileAsync(session,receipt,ct);
             HistoryGrid.ItemsSource=_store.LoadReceipts(_settings.ProfileKey); ReceiptDetails.Text=ReceiptText(result); StatusText.Text=result.Message;
+        });
+    }
+    private async void RecoverDeleted_Click(object sender,RoutedEventArgs e)
+    {
+        if(!RecoverDeletedButton.IsEnabled||HistoryGrid.SelectedItem is not SubmissionReceipt receipt) return;
+        await RunAsync(async ct=>
+        {
+            var session=_store.LoadSession(receipt.SessionId)??throw new InvalidOperationException("The original source session is missing.");
+            using var api=MakeApi(session.Settings);
+            var service=new SubmissionService(api,_store);
+            StatusText.Text="Checking the original Quickbase record IDs…";
+            var missing=await service.FindMissingCreatedEntriesAsync(session,receipt,ct);
+            if(missing.Count==0)
+            {
+                new TextDialog(this,"No deleted entries found","The eligible work records in this receipt still exist in Quickbase. Read the day again and have Copilot mark matching sources as already recorded. A record with a changed date or employee still counts as an existing record.").ShowDialog();
+                StatusText.Text="No entries were released for rewriting."; return;
+            }
+            var dialog=new DeletionRecoveryWindow(this,missing);
+            if(dialog.ShowDialog()!=true) { StatusText.Text="Recovery cancelled. The receipt is unchanged."; return; }
+            StatusText.Text="Rechecking selected record IDs and saving your deletion confirmation…";
+            var result=await service.ConfirmDeletedEntriesAsync(session,receipt,dialog.SelectedRowIds,true,ct);
+            ResetSource();
+            var history=_store.LoadReceipts(_settings.ProfileKey); HistoryGrid.ItemsSource=history;
+            HistoryGrid.SelectedItem=history.Single(r=>r.SubmissionId==result.SubmissionId);
+            StartDate.SelectedDate=session.Days.Min(d=>d.Date).ToDateTime(TimeOnly.MinValue);
+            EndDate.SelectedDate=session.Days.Max(d=>d.Date).ToDateTime(TimeOnly.MinValue);
+            StatusText.Text="Deletion confirmed. Open Timecards, choose Read dates, and send the new export to Copilot to prepare replacement entries.";
         });
     }
     private void ExportReceipt_Click(object sender,RoutedEventArgs e)

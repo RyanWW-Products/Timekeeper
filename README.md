@@ -8,7 +8,7 @@ Choose **Appearance** in the sidebar for Ivory, Dark, Slate, Forest or Sand them
 
 ## Get started
 
-1. Download and run the Windows installer from [Releases](https://github.com/RyanWW-Products/Timekeeper/releases/latest), or use the local build in `artifacts/installer`.
+1. Download and run the Windows installer from [Releases](https://github.com/RyanWW-Products/Timekeeper/releases/latest), or use the latest local build at `installer/Timekeeper-Setup.exe`.
 2. Open Timekeeper from the Start menu, enter your work email and API credentials in Settings, and choose **Test connections**. The app discovers your Quickbase user ID automatically.
 3. Use **Open Copilot** for the preconfigured shared Timekeeper agent and follow [Getting started](docs/GETTING_STARTED.md). Team members do not create agents; the owner grants them access in Microsoft 365.
 
@@ -44,7 +44,7 @@ If local PowerShell policy disables direct script execution, this invocation app
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/build.ps1
 ```
 
-The script runs the console test projects when present, publishes a self-contained `win-x64` application to `artifacts/publish`, and compiles the installer to `artifacts/installer`. It does not install or launch the application. The generated publish folder is replaced each build. To select another compiler location or an available .NET 10 runtime patch:
+The script uses the version in `Directory.Build.props`, runs the console test projects when present, publishes a self-contained `win-x64` application to `artifacts/publish`, and compiles the installer to `artifacts/installer`. It also refreshes `installer/Timekeeper-Setup.exe` and its SHA-256 file with that same build, so a new installation starts on the current version. Generated installers stay out of Git; downloadable installers are attached to releases. The script does not install or launch the application. The generated publish folder is replaced each build. To select another compiler location or an available .NET 10 runtime patch:
 
 ```powershell
 ./scripts/build.ps1 -InnoSetupCompiler 'C:\Tools\Inno Setup 6\ISCC.exe' -RuntimeFrameworkVersion '10.0.11'

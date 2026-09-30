@@ -2,8 +2,8 @@
 param(
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Release',
-    [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')]
-    [string]$Version = '0.4.1',
+    [ValidatePattern('^(|\d+\.\d+\.\d+(\.\d+)?)$')]
+    [string]$Version = '',
     [string]$DotnetPath = 'dotnet',
     [string]$InnoSetupCompiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
     [ValidatePattern('^(|10\.0\.\d+)$')]
@@ -18,6 +18,11 @@ $publishDirectory = Join-Path $artifactDirectory 'publish'
 $installerDirectory = Join-Path $artifactDirectory 'installer'
 $appProject = Join-Path $workspaceDirectory 'src\Timekeeper.App\Timekeeper.App.csproj'
 $installerScript = Join-Path $workspaceDirectory 'installer\Timekeeper.iss'
+if (-not $Version) {
+    [xml]$buildProperties = Get-Content -LiteralPath (Join-Path $workspaceDirectory 'Directory.Build.props') -Raw
+    $Version = [string]$buildProperties.Project.PropertyGroup.Version
+    if ($Version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') { throw 'Directory.Build.props must contain a valid release version.' }
+}
 
 function Invoke-Checked {
     param([string]$Executable, [string[]]$Arguments)
@@ -93,7 +98,15 @@ try {
     }
     $hash = (Get-FileHash -LiteralPath $setupPath -Algorithm SHA256).Hash.ToLowerInvariant()
     "$hash  $([IO.Path]::GetFileName($setupPath))" | Set-Content -LiteralPath (Join-Path $installerDirectory 'SHA256SUMS.txt') -Encoding ascii
+    # Refresh the easy-to-find local installer with this build, never an older packaged app.
+    $localSetupPath = Join-Path $workspaceDirectory 'installer\Timekeeper-Setup.exe'
+    Copy-Item -LiteralPath $setupPath -Destination $localSetupPath -Force
+    if ((Get-FileHash -LiteralPath $localSetupPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $hash) {
+        throw 'The installer folder copy did not match the compiled installer.'
+    }
+    "$hash  Timekeeper-Setup.exe" | Set-Content -LiteralPath (Join-Path $workspaceDirectory 'installer\SHA256SUMS.txt') -Encoding ascii
     Write-Host "Installer ready: $setupPath"
+    Write-Host "Local copy ready: $localSetupPath"
     Write-Host 'Unsigned local build. The installer was compiled, not installed or launched.'
 }
 finally {
