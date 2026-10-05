@@ -382,9 +382,18 @@ public partial class MainWindow : Window
             var dialog=new ProposalDatesWindow(this,session,proposal,previous);
             return dialog.ShowDialog()==true?dialog.SelectedDates:null;
         },true,emailProposal:_session.EmailWorkbook is null?null:_proposal);
-        foreach(var row in _reviewRows)
-            if(billing.TryGetValue(ReviewIdentity(row.Row),out var index)) row.BillingIndex=index;
+        RestoreBillingChoices(billing);
         UpdateEnabled();
+    }
+    private void RestoreBillingChoices(IReadOnlyDictionary<string,int> billing)
+    {
+        _refreshingBilling=true;
+        try
+        {
+            foreach(var row in _reviewRows)
+                if(billing.TryGetValue(ReviewIdentity(row.Row),out var index)) row.BillingIndex=index;
+        }
+        finally { _refreshingBilling=false; }
     }
     private static string ReviewIdentity(VerifiedRow row)=>JsonSerializer.Serialize(row with { RowId="",BillableOverride=null },JsonDefaults.Options);
     private void ImportError(string message)
@@ -606,6 +615,11 @@ public partial class MainWindow : Window
         _reviewRows[0].BillingIndex=2;
         if(_reviewRows[0].Row.BillableOverride!=false||_proposal!.Rows.Any(r=>r.BillableOverride!=false)||WriteButton.IsEnabled)
             throw new InvalidOperationException("Non-billable review selection was lost or enabled a demo write.");
+        var automaticRows=Enumerable.Range(0,2).Select(i=>new VerifiedRow { Date=session.Days[0].Date.AddDays(i),Kind="timecards",Hours=0.17m,Description="Timecards" }).ToList();
+        _reviewRows=automaticRows.Select(r=>new ReviewRow(r,true,BillingChanged)).ToList();
+        RestoreBillingChoices(automaticRows.ToDictionary(ReviewIdentity,_=>2));
+        if(_reviewRows.Count!=2||_reviewRows.Any(r=>r.Row.BillableOverride!=false))
+            throw new InvalidOperationException("Restoring date selections lost automatic-row billing overrides.");
         // Leave both indicator states visible in the screenshot.
         PresentSession(session); AcceptProposal("",emailProposal:EmailSmoke.Proposal(session));
         return "PASS: email mappings reach review without Toggl; no automatic fill by default\nPASS: billing edits keep assignment/task and regroup confirmed minutes; demo writes stay disabled\n";
