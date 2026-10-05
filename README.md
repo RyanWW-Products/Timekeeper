@@ -1,6 +1,6 @@
 # Timekeeper
 
-Timekeeper is a Windows application for turning Toggl entries into reviewed Quickbase timecards. It exports a real file for a Microsoft 365 Copilot agent, validates the returned proposal locally, shows the exact rows, and writes only after the user chooses **Write to Quickbase**.
+Timekeeper is a Windows application for turning Toggl entries or confirmed email activities into reviewed Quickbase timecards. It validates imported files locally, shows the exact rows, and writes only after the user chooses **Write to Quickbase**.
 
 The installed application includes its .NET runtime. End users do not need Python, a terminal, or a separate .NET installation.
 
@@ -21,6 +21,10 @@ Record time in Toggl, stop running timers, and choose **Read today's data** in T
 The first release uses your browser for Microsoft 365 sign-in and chat. Embedded Microsoft 365 sign-in/chat is not implemented. File generation and attachment support depend on your tenant; JSON text can be pasted back into Timekeeper when Copilot cannot create a downloadable proposal.
 
 The team owner maintains the shared agent using the repository's [owner guide](docs/COPILOT_SETUP.md), [agent instructions](docs/COPILOT_AGENT_INSTRUCTIONS.txt) and [knowledge file](docs/COPILOT_AGENT_KNOWLEDGE.txt). Paste the instructions into the agent's Instructions field and upload the knowledge file under Knowledge. Agent creation is not part of the installed team's setup flow.
+
+For short, fragmented work, the shared email agent reconstructs a day from the employee's available mail and asks them to confirm activity and minutes in chat. Download its Excel workbook, choose **Import email Excel**, match activities to live Quickbase assignments and tasks, then review. Toggl is optional for this workflow. The [email agent instructions](docs/Timekeeper%20Email%20Export%20Agent%20Instructions.txt) and [email import guide](docs/EMAIL_IMPORT.md) define the workbook contract and setup. A personal PDF is optional and is not submission input. Email time uses confirmed minutes, with five-minute rounding after grouping and no automatic additions by default; both are configurable.
+
+Each review row has **Quickbase default / Billable / Non-billable** choices and a gray, green or dim red indicator. An override changes billing while retaining the assignment and task. Quickbase must expose a writable **Billable Override** field and permit the employee to modify it. Timekeeper checks permissions before sending overrides and confirms the saved billing result. It stops if the requested billing cannot be confirmed without replaying a created record.
 
 ## Time policy
 

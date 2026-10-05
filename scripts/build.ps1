@@ -62,7 +62,7 @@ if (-not (Test-Path -LiteralPath $InnoSetupCompiler -PathType Leaf)) {
 
 Push-Location -LiteralPath $workspaceDirectory
 try {
-    foreach ($testProject in @('tests\Timekeeper.Tests\Timekeeper.Tests.csproj', 'tests\Timekeeper.ApiTests\Timekeeper.ApiTests.csproj', 'tests\Timekeeper.UpdateTests\Timekeeper.UpdateTests.csproj')) {
+    foreach ($testProject in @('tests\Timekeeper.Tests\Timekeeper.Tests.csproj', 'tests\Timekeeper.ApiTests\Timekeeper.ApiTests.csproj', 'tests\Timekeeper.Email.Tests\Timekeeper.Email.Tests.csproj', 'tests\Timekeeper.UpdateTests\Timekeeper.UpdateTests.csproj')) {
         if (Test-Path -LiteralPath $testProject -PathType Leaf) {
             Write-Host "Running $testProject"
             Invoke-Checked $DotnetPath @('run', '--project', $testProject, '--configuration', $Configuration)

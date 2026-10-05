@@ -34,7 +34,8 @@ internal sealed class ProposalDatesWindow : Window
                 .Concat(proposal.AlreadyRecorded.Select(r => r.SourceEntryId)).ToHashSet();
             var content = new StackPanel();
             content.Children.Add(new TextBlock { Text = day.Date.ToString("dddd, MMMM d, yyyy"), FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
-            content.Children.Add(new TextBlock { Text = $"{day.Entries.Count(e => covered.Contains(e.Id))} of {day.Entries.Count} Toggl entries in this proposal · {day.Existing.Sum(r => r.Hours):0.00} h already in Quickbase", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 7, 0, 0) });
+            var sourceText = session.EmailWorkbook is null ? $"{day.Entries.Count(e => covered.Contains(e.Id))} of {day.Entries.Count} Toggl entries in this proposal" : $"{session.EmailWorkbook.Activities.Count(a => a.Date == day.Date)} email activities";
+            content.Children.Add(new TextBlock { Text = $"{sourceText} · {day.Existing.Sum(r => r.Hours):0.00} h already in Quickbase", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 7, 0, 0) });
             var check = new CheckBox { Content = content, IsChecked = selected.Contains(day.Date), HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Top };
             _choices.Add((day.Date, check));
             dates.Children.Add(new Border { Style = (Style)FindResource("Card"), Padding = new Thickness(16), Margin = new Thickness(0, 0, 0, 10), Child = check });

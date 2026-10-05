@@ -8,7 +8,7 @@ using System.Text.RegularExpressions;
 namespace Timekeeper.Core;
 
 /// <summary>API transport. Authentication is never placed in URLs, returned errors, or saved files.</summary>
-public sealed class TimecardApi : IDisposable
+public sealed partial class TimecardApi : IDisposable
 {
     private readonly AppSettings settings;
     private readonly Credentials credentials;
@@ -31,10 +31,10 @@ public sealed class TimecardApi : IDisposable
     private TimecardApi(AppSettings settings, Credentials credentials, HttpClient? http, bool allowMissingEmployeeId)
     {
         ValidateSettings(settings, allowMissingEmployeeId);
-        if (string.IsNullOrWhiteSpace(credentials.TogglToken) || string.IsNullOrWhiteSpace(credentials.QuickbaseToken)
+        if (string.IsNullOrWhiteSpace(credentials.QuickbaseToken)
             || credentials.TogglToken.Contains('\r') || credentials.TogglToken.Contains('\n')
             || credentials.QuickbaseToken.Contains('\r') || credentials.QuickbaseToken.Contains('\n'))
-            throw new ArgumentException("Both API tokens are required and must be single-line values.");
+            throw new ArgumentException("A Quickbase user token is required. API tokens must be single-line values.");
         this.settings = settings;
         this.credentials = credentials;
         ownsHttp = http is null;
@@ -64,6 +64,12 @@ public sealed class TimecardApi : IDisposable
             throw new InvalidOperationException("Toggl did not return a valid account email. Check the Toggl API token.");
         await VerifyQuickbaseIdentityAsync(ct);
         return $"Verified Toggl account: {email}. Quickbase account: {settings.Email}. Confirm both accounts are yours.";
+    }
+
+    public async Task<string> TestQuickbaseAsync(CancellationToken ct = default)
+    {
+        await VerifyQuickbaseIdentityAsync(ct);
+        return $"Verified Quickbase account: {settings.Email}. Confirm this account is yours.";
     }
 
     /// <summary>Resolve only the token's current user during setup. No supplied employee ID is trusted or changed.</summary>
@@ -108,7 +114,7 @@ public sealed class TimecardApi : IDisposable
             throw new InvalidOperationException("The Quickbase token belongs to a different work email. Correct the email or token before continuing.");
         var displayName = parts[2].Trim();
         if (string.IsNullOrEmpty(displayName) || displayName.Length > 256 || displayName.Any(c => char.IsControl(c) || char.GetUnicodeCategory(c) == UnicodeCategory.Format)
-            || displayName.Contains(credentials.QuickbaseToken, StringComparison.Ordinal) || displayName.Contains(credentials.TogglToken, StringComparison.Ordinal)) displayName = email;
+            || displayName.Contains(credentials.QuickbaseToken, StringComparison.Ordinal) || (credentials.TogglToken.Length > 0 && displayName.Contains(credentials.TogglToken, StringComparison.Ordinal))) displayName = email;
         return new QuickbaseIdentity(id, email, displayName);
     }
 
@@ -131,6 +137,24 @@ public sealed class TimecardApi : IDisposable
             days.Add(new DaySnapshot { Date = date, Entries = entries, Existing = existing });
         }
         return new ReadSession { Settings = settings, Reference = reference, Days = days };
+    }
+
+    public async Task<ReadSession> ReadEmailBaselineAsync(EmailWorkbook workbook, IProgress<string>? progress = null, CancellationToken ct = default)
+    {
+        var errors = EmailWorkbookReader.Validate(workbook, settings);
+        if (errors.Count > 0) throw new InvalidDataException(string.Join("\n", errors));
+        progress?.Report("Verifying your Quickbase identity...");
+        await TestQuickbaseAsync(ct);
+        progress?.Report("Reading Quickbase tasks, categories, and assignments...");
+        var reference = await ReadReferenceAsync(ct);
+        var days = new List<DaySnapshot>();
+        for (var offset = 0; offset <= workbook.Metadata.PeriodEnd.DayNumber - workbook.Metadata.PeriodStart.DayNumber; offset++)
+        {
+            var date = workbook.Metadata.PeriodStart.AddDays(offset);
+            progress?.Report($"Reading existing Quickbase time for {date:yyyy-MM-dd}...");
+            days.Add(new DaySnapshot { Date = date, Existing = await ReadExistingAsync(date, ct) });
+        }
+        return new ReadSession { Settings = settings, Reference = reference, Days = days, EmailWorkbook = workbook };
     }
 
     internal Task<List<TimeEntry>> ReadEntriesAsync(DateOnly date, CancellationToken ct) => ReadEntriesRangeAsync(date, date, ct);
@@ -189,7 +213,9 @@ public sealed class TimecardApi : IDisposable
     public async Task<List<ExistingTimecard>> ReadExistingAsync(DateOnly date, CancellationToken ct = default)
     {
         // Use relation IDs, not display-name lookup fields 12/18/23 from the legacy script.
-        var raw = await QueryAllAsync(settings.TimecardsTable, [3, 7, 10, 11, 16, 19, 22, 24, 73], $"{{7.EX.'{date:yyyy-MM-dd}'}}AND{{24.TV.'{settings.Email}'}}", ct);
+        var billing = await ReadBillingCapabilitiesAsync(ct: ct);
+        int[] fields = billing.BillableFieldId is int billingId ? [3, 7, 10, 11, 16, 19, 22, 24, 73, billingId] : [3, 7, 10, 11, 16, 19, 22, 24, 73];
+        var raw = await QueryAllAsync(settings.TimecardsTable, fields, $"{{7.EX.'{date:yyyy-MM-dd}'}}AND{{24.TV.'{settings.Email}'}}", ct);
         return raw.Select(r =>
         {
             if (!DateOnly.TryParse(CellString(r, 7), CultureInfo.InvariantCulture, DateTimeStyles.None, out var recordDate) || recordDate != date)
@@ -197,7 +223,8 @@ public sealed class TimecardApi : IDisposable
             var employee = Cell(r, 24);
             if (String(employee, "id") != settings.EmployeeId)
                 throw FieldError(r, settings.TimecardsTable, 24, "Employee", "the verified Quickbase user; check the employee field mapping");
-            return new ExistingTimecard(RecordId(r, settings.TimecardsTable, 3, "Record ID"), recordDate, Hours(r), RecordId(r, settings.TimecardsTable, 11, "Project"), RecordId(r, settings.TimecardsTable, 16, "Task"), RecordId(r, settings.TimecardsTable, 22, "Category"), OptionalRecordId(r, settings.TimecardsTable, 73, "Assignment"), CellString(r, 19));
+            return new ExistingTimecard(RecordId(r, settings.TimecardsTable, 3, "Record ID"), recordDate, Hours(r), RecordId(r, settings.TimecardsTable, 11, "Project"), RecordId(r, settings.TimecardsTable, 16, "Task"), RecordId(r, settings.TimecardsTable, 22, "Category"), OptionalRecordId(r, settings.TimecardsTable, 73, "Assignment"), CellString(r, 19))
+            { Billable = billing.BillableFieldId is int fieldId ? BillingValue(Cell(r, fieldId)) : null };
         }).OrderBy(r => r.RecordId).ToList();
     }
 
@@ -237,7 +264,7 @@ public sealed class TimecardApi : IDisposable
             .Select(r => new ProjectRecord(RecordId(r, settings.ProjectsTable, 3, "Record ID"), CellString(r, 6))).ToList();
         // Multiple annual project matches must be selected explicitly in settings, never guessed.
         var internalProject = projects.Count == 1 ? projects[0] : null;
-        return new ReferenceData { Tasks = tasks.OrderBy(t => t.Id).ToList(), Categories = categories.OrderBy(c => c.Id).ToList(), Assignments = assignments.OrderBy(a => a.Id).ToList(), InternalProject = internalProject };
+        return new ReferenceData { Tasks = tasks.OrderBy(t => t.Id).ToList(), Categories = categories.OrderBy(c => c.Id).ToList(), Assignments = assignments.OrderBy(a => a.Id).ToList(), InternalProject = internalProject, Billing = await ReadBillingCapabilitiesAsync(ct: ct) };
     }
 
     public async Task<List<AssignmentRecord>> FindAssignmentsAsync(string query, CancellationToken ct = default)
@@ -309,6 +336,9 @@ public sealed class TimecardApi : IDisposable
 
     internal async Task<RowOutcome> CreateRowAsync(VerifiedRow row, CancellationToken ct)
     {
+        var billing = await ReadBillingCapabilitiesAsync(ct: ct);
+        if (row.BillableOverride.HasValue && !billing.CanOverride)
+            return new RowOutcome { Row = row, Status = "failed", Message = billing.Message + " This row was not sent." };
         var data = new Dictionary<string, object>
         {
             ["7"] = new { value = row.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) }, ["10"] = new { value = row.Hours },
@@ -316,7 +346,9 @@ public sealed class TimecardApi : IDisposable
             ["22"] = new { value = row.Category }, ["24"] = new { value = new { id = settings.EmployeeId } }
         };
         if (row.Assignment.HasValue) data["73"] = new { value = row.Assignment.Value };
-        using var request = QuickbaseRequest("records", new { to = settings.TimecardsTable, data = new[] { data }, fieldsToReturn = new[] { 3 } });
+        if (row.BillableOverride is bool billable) data[billing.OverrideFieldId!.Value.ToString(CultureInfo.InvariantCulture)] = new { value = billable ? "Billable" : "NonBillable" };
+        int[] fieldsToReturn = billing.BillableFieldId is int billingId ? [3, billingId] : [3];
+        using var request = QuickbaseRequest("records", new { to = settings.TimecardsTable, data = new[] { data }, fieldsToReturn });
         try
         {
             using var response = await SendAsync(request, ct);
@@ -332,7 +364,8 @@ public sealed class TimecardApi : IDisposable
                 ? ids.EnumerateArray().Select(value => TryRecordId(value, out int id) && id > 0 ? id : throw new InvalidDataException("Quickbase returned an invalid created record ID.")).ToArray() : [];
             var hasErrors = meta.TryGetProperty("lineErrors", out var errors) && errors.ValueKind == JsonValueKind.Object && errors.EnumerateObject().Any();
             var updated = meta.TryGetProperty("updatedRecordIds", out var updates) && updates.ValueKind == JsonValueKind.Array && updates.GetArrayLength() > 0;
-            if (created.Length == 1 && created[0] > 0 && !hasErrors && !updated) return new RowOutcome { Row = row, Status = "created", RecordId = created[0], Message = "Created in Quickbase." };
+            if (created.Length == 1 && created[0] > 0 && !hasErrors && !updated)
+                return await CreatedWithBillingAsync(row, created[0], document.RootElement, billing, ct);
             var thisRowRejected = hasErrors && errors.EnumerateObject().Count() == 1 && errors.TryGetProperty("1", out var rowError)
                 && rowError.ValueKind == JsonValueKind.Array && rowError.GetArrayLength() > 0;
             if (created.Length == 0 && thisRowRejected && !updated) return new RowOutcome { Row = row, Status = "failed", Message = "Quickbase rejected this row with a line error. Review the selected fields and permissions." };
@@ -353,6 +386,7 @@ public sealed class TimecardApi : IDisposable
     }
     private async Task<JsonDocument> TogglGetAsync(string route, CancellationToken ct)
     {
+        if (string.IsNullOrWhiteSpace(credentials.TogglToken)) throw new InvalidOperationException("A Toggl API token is required to read Toggl. Email workbook imports only need Quickbase credentials.");
         using var request = new HttpRequestMessage(HttpMethod.Get, TogglBase + route);
         request.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes(credentials.TogglToken + ":api_token")));
         using var response = await SendAsync(request, ct);

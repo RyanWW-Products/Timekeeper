@@ -724,6 +724,8 @@ await Check("selected-day pending outcomes reconcile against the retained full s
     Equal("created", reconciled.Rows[0].Status); Equal(1, f.Server.WriteCount); Equal(selected, reconciled.SelectedDates!.Single());
     True(f.Server.ExistingReadDates.All(d => d == selected)); Equal(2, f.Store.LoadSession(s.SessionId)!.Days.Count);
 });
+await BillingApiTests.Run(Check);
+await SubmissionBillingEmailTests.Run(Check);
 Console.WriteLine($"{passed} API/storage/submission tests passed; {failures.Count} failed.");
 foreach (var failure in failures) Console.Error.WriteLine(failure);
 return failures.Count == 0 ? 0 : 1;
@@ -809,6 +811,7 @@ sealed class FakeApi : HttpMessageHandler
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var url = request.RequestUri!;
+        if (url.AbsolutePath == "/v1/fields") return Json(Array.Empty<object>());
         if (url.AbsolutePath == "/v1/formula/run")
         {
             IdentityRequestJson = await request.Content!.ReadAsStringAsync(cancellationToken);

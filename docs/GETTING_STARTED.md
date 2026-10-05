@@ -5,7 +5,7 @@ Timekeeper runs on 64-bit Windows. Install the supplied setup program, then open
 ## One-time setup
 
 1. Open **Settings**. Enter your Quickbase sign-in email. You do not need to look up or enter a Quickbase employee/user ID; Timekeeper detects it from your token.
-2. Enter your Toggl API token and Quickbase user token in the application. Keep these out of Copilot chat, exported files, and screenshots.
+2. Enter your Quickbase user token and, if you use Toggl, your Toggl API token. Email imports do not require a Toggl account. Keep tokens out of Copilot chat, exported files, and screenshots.
 3. Check the Quickbase realm, table configuration, internal project, internal task, and timezone against your organization's setup. The supplied schema defaults come from the reference workflow and may need adjustment for another Quickbase app.
 4. Review your time policy. Defaults are 0.17 Timecards hours and an eight-hour weekday target. These are per-user preferences.
 5. Choose **Test connections**. Timekeeper detects your Quickbase identity internally and checks that the token's account matches your Quickbase sign-in email. Check the displayed Toggl and Quickbase accounts, select the checkbox confirming they belong to you, then choose **Save settings**. Changed credentials or settings require another connection test before saving.
@@ -50,6 +50,8 @@ If you read several dates but asked Copilot to prepare only one, version 0.4.3 o
 
 ## Review and write
 
+Each row includes a **Billing** dropdown: **Quickbase default**, **Billable** (green light) or **Non-billable** (dim red light). Default shows gray because the final status depends on Quickbase's project/task rules. Changing billing keeps the project, assignment and task. If override access cannot be confirmed, explicit choices are unavailable; ask your Quickbase administrator for Modify access to the Timecards **Billable Override** field. A returned record with an unconfirmed or mismatched override is retained in history and must be checked in Quickbase, not submitted again.
+
 Review every date, project, assignment, task, category, description, and number of hours. Select a row and choose **View selected row details**, or double-click the row, to see complete descriptions, reference IDs, and Toggl source IDs. The table separates work from automatic additions. Timekeeper computes the hours and additions; the agent cannot invent extra source time.
 
 A **possible duplicate** warning means a new row resembles existing Quickbase time. Equal hours alone do not prove it is the same work. If it is additional work, confirm that and acknowledge the warning checkbox. If the source was already recorded, ask Copilot to return the matching `already_recorded` link instead. Review and acknowledge those links too. Timekeeper records your acknowledgment with the submission. It blocks source entries already confirmed as written by this installation.
@@ -78,6 +80,18 @@ Timekeeper remembers successful writes even after a Quickbase record is deleted.
 4. Review the new work and recalculated Timecards/Misc internal additions, then choose **Write to Quickbase**. To rewrite a whole day, confirm in Quickbase that the old day is empty before this fresh read. Otherwise the remaining records still count toward the day's total.
 
 Recovery does not delete or write Quickbase records. The original creation results and a dated deletion confirmation remain in the receipt. Timekeeper checks the old IDs again before a replacement submission and stops if they reappear. Recover each relevant receipt if the day includes entries from multiple submissions. Do not erase receipt files or use another installation to bypass the history.
+
+## Import a day reconstructed from email
+
+1. Open your team's shared email export agent in Microsoft 365. Ask it to review the desired day in your timezone. Answer its questions about work performed, estimated minutes, matter and billing. Incoming messages alone do not prove work was performed.
+2. Download its `.xlsx` file. The optional PDF is for personal review only.
+3. Choose **Import email Excel** in Timekeeper, or drop the workbook in the file area. If it contains several dates, choose the dates to include.
+4. In **Match your activities**, select each activity's Quickbase assignment and task. Use **Find assignment** if needed. For work already in Quickbase, select the matching record under **Already in Quickbase?**. Confirm the activities are yours and choose **Review timecards**.
+5. Review the hours and billing dropdowns, acknowledge any estimates or existing-time warnings, and choose **Write to Quickbase**. Keep the receipt. Reimport a fresh workbook/baseline to prepare remaining work after a partial result; map successful activities to their existing records.
+
+Email imports use confirmed minutes and round up once per date/assignment/task/billing group, defaulting to five minutes. **Settings → Time policy → Email imports** offers no additional rounding, five minutes or fifteen minutes, and an option to apply your normal Timecards/fill settings. Automatic additions are off for email imports by default. Worked hours above the target are retained.
+
+The workbook email and timezone must match your verified account and settings. Timekeeper uses stable message/event IDs to prevent resubmission on this installation, including files regenerated with new descriptions or grouping. Check for records created manually or on another computer as well. After intentionally deleting an email-based record, use the same recovery action above, then import the workbook again instead of reading Toggl.
 
 ## Update Timekeeper
 

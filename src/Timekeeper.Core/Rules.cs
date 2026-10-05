@@ -12,6 +12,7 @@ public static class Rules
     {
         var errors = new List<string>();
         if (settings is null) return ["Settings are missing."];
+        if (settings.EmailRoundingMinutes is not (0 or 5 or 15)) errors.Add("Email rounding must be 0, 5 or 15 minutes per grouped timecard.");
         if (string.IsNullOrWhiteSpace(settings.Realm) ||
             !Regex.IsMatch(settings.Realm, @"\A[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.quickbase\.com\z"))
             errors.Add("Enter your Quickbase realm, such as company.quickbase.com, without a URL or path.");
@@ -51,9 +52,12 @@ public static class Rules
 
     public static ValidationResult Validate(ReadSession session, ProposalEnvelope proposal, DateTimeOffset? now = null)
     {
+        if (session?.EmailWorkbook is not null) return EmailRules.Validate(session, proposal, now);
         var result = new ValidationResult();
         var errors = result.Errors;
         var warnings = result.Warnings;
+        if (proposal is not null && ((proposal.EmailAlreadyRecorded?.Count ?? 0) > 0 || proposal.Rows?.Any(r => r?.SourceActivityIds?.Count > 0) == true))
+            errors.Add("Email activity cannot be included in a Toggl proposal. Import the email workbook separately.");
         if (session is null || proposal is null) { errors.Add("The source session and returned proposal are required."); return result; }
         if (session.Settings is null || session.Reference is null || session.Days is null || proposal.Rows is null || proposal.AlreadyRecorded is null)
         { errors.Add("The source session or proposal contains a null collection or settings object."); return result; }
@@ -130,7 +134,7 @@ public static class Rules
         foreach (var (recordId, seconds) in linkedSeconds)
             if (Hours(seconds) > existing[recordId].Hours) errors.Add($"Sources linked to Quickbase record {recordId} exceed its recorded hours.");
 
-        var groups = new Dictionary<(DateOnly Date, int Project, int? Assignment, int Task), WorkGroup>();
+        var groups = new Dictionary<(DateOnly Date, int Project, int? Assignment, int Task, bool? Billable), WorkGroup>();
         foreach (var row in proposal.Rows)
         {
             if (row is null || row.SourceEntryIds is null) { errors.Add("A proposal row or source ID list is null."); continue; }
@@ -165,7 +169,7 @@ public static class Rules
             if (row.Hours is decimal supplied && (supplied <= 0 || supplied > 24 || supplied != Hours(seconds)))
                 errors.Add($"Hours supplied for {row.Date}, task {row.Task} do not match the locally calculated {Hours(seconds):0.00} hours.");
             if (errors.Count != rowErrorCount) continue;
-            var key = (row.Date, row.Project, row.Assignment, row.Task);
+            var key = (row.Date, row.Project, row.Assignment, row.Task, row.BillableOverride);
             if (!groups.TryGetValue(key, out var group)) groups[key] = group = new WorkGroup(row);
             group.Seconds += seconds;
             group.Ids.AddRange(row.SourceEntryIds);
@@ -189,7 +193,7 @@ public static class Rules
                 Assignment = row.Assignment, AssignmentName = assignment?.Name ?? "Internal",
                 Task = row.Task, TaskName = task.Name, Category = task.CategoryId,
                 CategoryName = categories[task.CategoryId].Name, Description = description,
-                SourceEntryIds = group.Ids.Order().ToList(), Kind = "work"
+                SourceEntryIds = group.Ids.Order().ToList(), Kind = "work", BillableOverride = row.BillableOverride
             };
             if (verified.Hours <= 0 || verified.Hours > 24) errors.Add($"Grouped hours for {row.Date}, task {row.Task} must be greater than zero and no more than 24.");
             var duplicate = days[row.Date].Existing.FirstOrDefault(c => c.Project == row.Project && c.Task == row.Task && c.Assignment == row.Assignment && c.Hours == verified.Hours);

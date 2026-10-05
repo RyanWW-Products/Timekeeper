@@ -211,6 +211,16 @@
       <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem"><Border CornerRadius="4" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border></ControlTemplate></Setter.Value></Setter>
       <Style.Triggers><Trigger Property="IsSelected" Value="True"><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Background" Value="{DynamicResource AccentSoft}"/></Trigger><Trigger Property="IsHighlighted" Value="True"><Setter Property="Background" Value="{DynamicResource AccentSoft}"/></Trigger></Style.Triggers>
     </Style>
+    <Style TargetType="ListBox">
+      <Setter Property="Background" Value="{DynamicResource Surface}"/><Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Line}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Padding" Value="5"/>
+    </Style>
+    <Style TargetType="ListBoxItem">
+      <Setter Property="Foreground" Value="{DynamicResource Ink}"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="Padding" Value="10,9"/><Setter Property="Margin" Value="0,0,0,3"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border></ControlTemplate></Setter.Value></Setter>
+      <Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource RowHover}"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="{DynamicResource AccentSoft}"/><Setter Property="FontWeight" Value="SemiBold"/></Trigger></Style.Triggers>
+    </Style>
     <Style x:Key="ThemedCalendarDay" TargetType="CalendarDayButton" BasedOn="{StaticResource {x:Type Button}}">
       <Setter Property="Padding" Value="3"/><Setter Property="MinHeight" Value="30"/><Setter Property="MinWidth" Value="32"/><Setter Property="Margin" Value="1"/><Setter Property="FontWeight" Value="Normal"/><Setter Property="FontSize" Value="12"/>
       <Setter Property="BorderBrush" Value="Transparent"/>

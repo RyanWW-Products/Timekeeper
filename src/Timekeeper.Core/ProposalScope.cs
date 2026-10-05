@@ -8,6 +8,7 @@ public sealed record ProposalScope(ReadSession Session, ProposalEnvelope Proposa
         var linkedIds = proposal.AlreadyRecorded.Select(r => r.SourceEntryId).ToHashSet();
         return proposal.Rows.Select(r => r.Date)
             .Concat(session.Days.Where(d => d.Entries.Any(e => linkedIds.Contains(e.Id))).Select(d => d.Date))
+            .Concat(session.EmailWorkbook?.Activities.Where(a => proposal.EmailAlreadyRecorded.Any(l => l.ActivityId == a.ActivityId)).Select(a => a.Date) ?? [])
             .Distinct().Order().ToList();
     }
 
@@ -26,9 +27,11 @@ public sealed record ProposalScope(ReadSession Session, ProposalEnvelope Proposa
         if (proposal.Rows.Any(row => !session.Days.Any(d => d.Date == row.Date)))
             throw new InvalidOperationException("The proposal contains a date outside the original read. Correct the proposal before choosing dates.");
         var excludedIds = session.Days.Where(d => !selectedDates.Contains(d.Date)).SelectMany(d => d.Entries).Select(e => e.Id).ToHashSet();
+        var excludedActivities = session.EmailWorkbook?.Activities.Where(a => !selectedDates.Contains(a.Date)).Select(a => a.ActivityId).ToHashSet() ?? [];
         // Unknown links stay in the proposal so ordinary validation rejects them. Never infer a match.
         return new(session with { Days = session.Days.Where(d => selectedDates.Contains(d.Date)).ToList() },
             proposal with { Rows = proposal.Rows.Where(r => selectedDates.Contains(r.Date)).ToList(),
-                AlreadyRecorded = proposal.AlreadyRecorded.Where(r => !excludedIds.Contains(r.SourceEntryId)).ToList() });
+                AlreadyRecorded = proposal.AlreadyRecorded.Where(r => !excludedIds.Contains(r.SourceEntryId)).ToList(),
+                EmailAlreadyRecorded = proposal.EmailAlreadyRecorded.Where(r => !excludedActivities.Contains(r.ActivityId)).ToList() });
     }
 }

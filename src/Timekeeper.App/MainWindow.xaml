@@ -49,7 +49,7 @@
         <StackPanel Margin="0,0,18,0">
           <TextBlock x:Name="PageEyebrow" Text="TOGGL / QUICKBASE" Style="{StaticResource SectionLabel}" Foreground="{DynamicResource Accent}"/>
           <TextBlock x:Name="PageTitle" Text="Timecards" FontFamily="{StaticResource DisplayFont}" FontSize="31" Margin="0,6,0,6"/>
-          <TextBlock x:Name="PageSubtitle" Text="Read Toggl entries, review the proposal, and submit to Quickbase." Foreground="{DynamicResource Muted}" FontSize="13"/>
+          <TextBlock x:Name="PageSubtitle" Text="Read Toggl time or import an email workbook, review, and submit to Quickbase." Foreground="{DynamicResource Muted}" FontSize="13" TextWrapping="Wrap"/>
         </StackPanel>
         <Button Grid.Column="1" Content="Try a sample day ↗" Style="{StaticResource Quiet}" Click="Demo_Click" VerticalAlignment="Top" FontSize="12" Margin="0,15,0,0"/>
       </Grid>
@@ -61,6 +61,7 @@
           <Border Style="{StaticResource Card}" Padding="18,13" Margin="{DynamicResource SectionGap}">
             <WrapPanel VerticalAlignment="Center">
               <Button x:Name="ReadTodayButton" Content="Read today's data" Style="{StaticResource Primary}" Click="ReadToday_Click" Margin="0,0,24,6" VerticalAlignment="Bottom"/>
+              <Button x:Name="EmailImportButton" Content="Import email Excel" Click="EmailImport_Click" Margin="0,0,24,6" VerticalAlignment="Bottom"/>
               <WrapPanel>
               <StackPanel Margin="0,0,10,6"><TextBlock Text="From" Foreground="{DynamicResource Muted}" FontSize="11" Margin="1,0,0,5"/><DatePicker x:Name="StartDate" Width="140" AutomationProperties.Name="Read from date"/></StackPanel>
               <StackPanel Margin="0,0,12,6"><TextBlock Text="Through" Foreground="{DynamicResource Muted}" FontSize="11" Margin="1,0,0,5"/><DatePicker x:Name="EndDate" Width="140" AutomationProperties.Name="Read through date"/></StackPanel>
@@ -70,7 +71,7 @@
           </Border>
           <Border Style="{StaticResource Card}" Padding="0" Margin="{DynamicResource SectionGap}">
             <UniformGrid Columns="4" Grid.IsSharedSizeScope="True">
-              <Border Padding="20,14" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto" SharedSizeGroup="MetricLabels"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><TextBlock Text="Tracked in Toggl" Style="{StaticResource MetricLabel}"/><TextBlock Grid.Row="1" x:Name="TrackedMetric" Text="—" Style="{StaticResource MetricValue}"/></Grid></Border>
+              <Border Padding="20,14" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto" SharedSizeGroup="MetricLabels"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><TextBlock x:Name="TrackedLabel" Text="Tracked in Toggl" Style="{StaticResource MetricLabel}"/><TextBlock Grid.Row="1" x:Name="TrackedMetric" Text="—" Style="{StaticResource MetricValue}"/></Grid></Border>
               <Border Padding="20,14" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto" SharedSizeGroup="MetricLabels"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><TextBlock Text="Already in Quickbase" Style="{StaticResource MetricLabel}"/><TextBlock Grid.Row="1" x:Name="ExistingMetric" Text="—" Style="{StaticResource MetricValue}"/></Grid></Border>
               <Border Padding="20,14" Background="{DynamicResource AccentSoft}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto" SharedSizeGroup="MetricLabels"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><TextBlock Text="Ready to add" Style="{StaticResource MetricLabel}" Foreground="{DynamicResource Accent}"/><TextBlock Grid.Row="1" x:Name="ReadyMetric" Text="—" Style="{StaticResource MetricValue}" Foreground="{DynamicResource Accent}"/></Grid></Border>
               <Border Padding="20,14"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto" SharedSizeGroup="MetricLabels"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><TextBlock Text="Weekday fill target" Style="{StaticResource MetricLabel}"/><TextBlock Grid.Row="1" x:Name="TargetMetric" Text="8.00 h" Style="{StaticResource MetricValue}"/></Grid></Border>
@@ -102,7 +103,7 @@
                   <StackPanel>
                     <Grid Width="38" Height="39" HorizontalAlignment="Center" Margin="0,0,0,10"><Path Data="M 19,2 L 19,24 M 12,17 L 19,24 L 26,17 M 3,25 L 3,34 L 35,34 L 35,25" Stroke="{DynamicResource Muted}" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/></Grid>
                     <TextBlock Text="Drop Copilot's file here" FontFamily="{StaticResource DisplayFont}" FontSize="19" TextAlignment="Center" Margin="0,0,0,7"/>
-                    <TextBlock Text="Download the proposal, then drag it here." TextAlignment="Center" FontSize="12" Foreground="{DynamicResource Muted}" MinHeight="34"/>
+                    <TextBlock Text="Toggl JSON proposal or email Excel workbook." TextAlignment="Center" FontSize="12" Foreground="{DynamicResource Muted}" MinHeight="34"/>
                   </StackPanel>
                 </Border>
                 <WrapPanel Grid.Row="2"><Button x:Name="ImportButton" Content="Open file" Click="Import_Click" IsEnabled="False" FontSize="12" Padding="12,8" Margin="0,0,8,0"/><Button x:Name="PasteButton" Content="Paste" Click="Paste_Click" IsEnabled="False" Style="{StaticResource Quiet}" FontSize="12" Padding="9,8" Margin="0,0,5,0"/><Button x:Name="FindButton" Content="Find assignment" Click="Find_Click" IsEnabled="False" Style="{StaticResource Quiet}" FontSize="12" Padding="9,8"/></WrapPanel>
@@ -123,6 +124,21 @@
                 <DataGrid.Columns>
                   <DataGridTextColumn Header="Date" Binding="{Binding Date, StringFormat=yyyy-MM-dd}" ElementStyle="{StaticResource TableText}" Width="110" MinWidth="110"/>
                   <DataGridTextColumn Header="Hours" Binding="{Binding Hours, StringFormat=F2}" ElementStyle="{StaticResource TableNumber}" Width="72" MinWidth="72"/>
+                  <DataGridTemplateColumn Header="Billing" Width="205" MinWidth="205">
+                    <DataGridTemplateColumn.CellStyle><Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}"><Setter Property="Padding" Value="4,2"/></Style></DataGridTemplateColumn.CellStyle>
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="3,0">
+                          <Ellipse Width="9" Height="9" Fill="{Binding BillingLight}" Margin="0,0,9,0" ToolTip="{Binding BillingLabel}" AutomationProperties.Name="{Binding BillingLabel}"/>
+                          <ComboBox Width="165" Height="30" MinHeight="30" SelectedIndex="{Binding BillingIndex, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding BillingHint}" AutomationProperties.Name="Timecard billing status" FontSize="11" Padding="7,4">
+                            <ComboBoxItem Content="Quickbase default"/>
+                            <ComboBoxItem Content="Billable" IsEnabled="{Binding CanOverride}"/>
+                            <ComboBoxItem Content="Non-billable" IsEnabled="{Binding CanOverride}"/>
+                          </ComboBox>
+                        </StackPanel>
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
                   <DataGridTextColumn Header="Project" Binding="{Binding ProjectName}" ElementStyle="{StaticResource TableText}" Width="150" MinWidth="150"/>
                   <DataGridTextColumn Header="Assignment" Binding="{Binding AssignmentName}" ElementStyle="{StaticResource TableText}" Width="145" MinWidth="145"/>
                   <DataGridTextColumn Header="Task" Binding="{Binding TaskName}" ElementStyle="{StaticResource TableText}" Width="110" MinWidth="110"/>
@@ -130,10 +146,11 @@
                   <DataGridTextColumn Header="Description" Binding="{Binding Description}" ElementStyle="{StaticResource TableText}" Width="*" MinWidth="185"/>
                 </DataGrid.Columns>
               </DataGrid>
+              <TextBlock x:Name="BillingNotice" Visibility="Collapsed" TextWrapping="Wrap" Margin="20,10,20,0" FontSize="12" Foreground="{DynamicResource Muted}"/>
               <Button x:Name="RowDetailsButton" Content="View selected row details ↗" Click="RowDetails_Click" Style="{StaticResource Quiet}" HorizontalAlignment="Left" FontSize="12" Margin="10,6,20,0" Padding="10,6" IsEnabled="False"/>
               <TextBlock x:Name="DailyTotals" Margin="20,9,20,14" FontFamily="{StaticResource MonoFont}" FontSize="12"/>
               <TextBlock x:Name="WarningsText" Margin="20,0,20,12" Foreground="{DynamicResource Warning}" FontSize="12" Visibility="Collapsed"/>
-              <CheckBox x:Name="AcknowledgeWarnings" Margin="20,0,20,16" Visibility="Collapsed" Checked="Approval_Changed" Unchecked="Approval_Changed"><TextBlock Text="I reviewed the warnings and confirmed the existing-record matches and fill time." TextWrapping="Wrap" FontSize="12"/></CheckBox>
+              <CheckBox x:Name="AcknowledgeWarnings" Margin="20,0,20,16" Visibility="Collapsed" Checked="Approval_Changed" Unchecked="Approval_Changed"><TextBlock Text="I reviewed the warnings, confirmed these hours, and checked for existing timecards." TextWrapping="Wrap" FontSize="12"/></CheckBox>
               <Border BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Padding="20,16">
                 <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="WriteHint" TextWrapping="Wrap" Text="Nothing is sent until you click Write to Quickbase." VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource Muted}" Margin="0,0,18,0"/><Button x:Name="WriteButton" Grid.Column="1" Content="Write to Quickbase" Style="{StaticResource Primary}" IsEnabled="False" Click="Write_Click"/></Grid>
               </Border>

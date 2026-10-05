@@ -5,6 +5,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Timekeeper.ApiTests/Timekeeper.ApiTests.csproj" />
+    <Project Path="tests/Timekeeper.Email.Tests/Timekeeper.Email.Tests.csproj" />
     <Project Path="tests/Timekeeper.Tests/Timekeeper.Tests.csproj" />
     <Project Path="tests/Timekeeper.UpdateTests/Timekeeper.UpdateTests.csproj" />
   </Folder>

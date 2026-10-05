@@ -89,6 +89,19 @@ public partial class App : Application
                 RenderWindow(dateReview,Path.Combine(output,"timekeeper-selected-date-review.png"),(int)dateReview.Width,(int)dateReview.Height);
                 dateReview.Close();
 
+                var emailSession=EmailSmoke.Session();
+                var emailWindow=new EmailImportWindow(window,emailSession,null,smoke:true);
+                File.AppendAllText(report,emailWindow.SmokeSummary());
+                RenderWindow(emailWindow,Path.Combine(output,"timekeeper-email-mapping.png"),(int)emailWindow.Width,(int)emailWindow.Height);
+                var emailReview=new MainWindow(new SessionStore(Path.Combine(output,"email-review-data")),true);
+                File.AppendAllText(report,emailReview.SmokeEmailReview(emailSession,emailWindow.Proposal));
+                ((ScrollViewer)emailReview.FindName("WorkScroll")).ScrollToEnd();
+                RenderWindow(emailReview,Path.Combine(output,"timekeeper-email-review.png"),1380,1050);
+                Appearance.Apply(new("Dark","Theme color",120,"Compact"));
+                RenderWindow(emailWindow,Path.Combine(output,"theme-dark-email-mapping-120.png"),(int)emailWindow.Width,(int)emailWindow.Height);
+                RenderWindow(emailReview,Path.Combine(output,"theme-dark-email-review-120.png"),1040,720);
+                Appearance.Apply(new()); emailWindow.Close(); emailReview.Close();
+
                 var settingsWindow=new SettingsWindow(window,new AppSettings(),store,false);
                 File.AppendAllText(report,settingsWindow.SmokeSummary());
                 RenderWindow(settingsWindow,Path.Combine(output,"timekeeper-settings.png"),(int)settingsWindow.Width,850);

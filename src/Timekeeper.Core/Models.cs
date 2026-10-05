@@ -31,6 +31,8 @@ public sealed record AppSettings
     public decimal TargetHours { get; init; } = 8m;
     public bool AddTimecards { get; init; } = true;
     public bool FillWeekdays { get; init; } = true;
+    public bool EmailApplyDailyDefaults { get; init; }
+    public int EmailRoundingMinutes { get; init; } = 5;
     public string CopilotUrl { get; init; } = SharedCopilotUrl;
     public string TimecardsTable { get; init; } = "bd3bsxtbp";
     public string TasksTable { get; init; } = "bd3bsxtbn";
@@ -53,7 +55,11 @@ public sealed record AssignmentRecord(int Id, string Name, int ProjectId, string
     public int? CategoryId { get; init; }
 }
 public sealed record TimeEntry(long Id, long WorkspaceId, DateTimeOffset Start, DateTimeOffset? Stop, long DurationSeconds, string Description, string Project, bool Running, bool Billable);
-public sealed record ExistingTimecard(int RecordId, DateOnly Date, decimal Hours, int Project, int Task, int Category, int? Assignment, string Description);
+public sealed record ExistingTimecard(int RecordId, DateOnly Date, decimal Hours, int Project, int Task, int Category, int? Assignment, string Description)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? Billable { get; init; }
+}
 
 public sealed record ReferenceData
 {
@@ -61,6 +67,8 @@ public sealed record ReferenceData
     public List<CategoryRecord> Categories { get; init; } = [];
     public List<AssignmentRecord> Assignments { get; init; } = [];
     public ProjectRecord? InternalProject { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BillingCapabilities? Billing { get; init; }
 }
 public sealed record DaySnapshot
 {
@@ -77,6 +85,8 @@ public sealed record ReadSession
     public ReferenceData Reference { get; init; } = new();
     public List<DaySnapshot> Days { get; init; } = [];
     public bool Demo { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public EmailWorkbook? EmailWorkbook { get; init; }
 }
 
 public sealed record ProposalEnvelope
@@ -86,6 +96,7 @@ public sealed record ProposalEnvelope
     public string EmployeeId { get; init; } = "";
     public List<ProposalRow> Rows { get; init; } = [];
     public List<RecordedEntryLink> AlreadyRecorded { get; init; } = [];
+    public List<RecordedActivityLink> EmailAlreadyRecorded { get; init; } = [];
 }
 public sealed record ProposalRow
 {
@@ -97,6 +108,9 @@ public sealed record ProposalRow
     public int Category { get; init; }
     public string Description { get; init; } = "";
     public decimal? Hours { get; init; }
+    public List<string> SourceActivityIds { get; init; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? BillableOverride { get; init; }
 }
 public sealed record RecordedEntryLink
 {
@@ -119,6 +133,10 @@ public sealed record VerifiedRow
     public string Description { get; init; } = "";
     public string Kind { get; init; } = "work";
     public List<long> SourceEntryIds { get; init; } = [];
+    public List<string> SourceActivityIds { get; init; } = [];
+    public List<string> EmailEvidenceKeys { get; init; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? BillableOverride { get; init; }
 }
 public sealed record ValidationResult
 {
@@ -133,6 +151,8 @@ public sealed record RowOutcome
     public string Status { get; set; } = "pending";
     public int? RecordId { get; set; }
     public string Message { get; set; } = "";
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? ActualBillable { get; set; }
     // Keep the original create and record ID as an audit trail when a user confirms deletion.
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public DateTimeOffset? DeletionConfirmedAtUtc { get; set; }

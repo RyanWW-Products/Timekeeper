@@ -20,6 +20,8 @@ public partial class MainWindow : Window
     private ReadSession? _session;
     private ProposalEnvelope? _proposal;
     private ValidationResult? _validation;
+    private List<ReviewRow> _reviewRows = [];
+    private bool _refreshingBilling;
     private IReadOnlyCollection<DateOnly>? _selectedDates;
     private string? _exportPath;
     private CancellationTokenSource? _cancellation;
@@ -75,7 +77,7 @@ public partial class MainWindow : Window
     {
         var profile=settings??_settings;
         var credentials=CredentialVault.Load(profile);
-        if(string.IsNullOrWhiteSpace(credentials.TogglToken)||string.IsNullOrWhiteSpace(credentials.QuickbaseToken)) throw new InvalidOperationException("Open Settings to save and test your API tokens.");
+        if(string.IsNullOrWhiteSpace(credentials.QuickbaseToken)) throw new InvalidOperationException("Open Settings to save and test your Quickbase token.");
         return new TimecardApi(profile,credentials);
     }
     private async Task RunAsync(Func<CancellationToken,Task> action, bool cancellable=false)
@@ -94,7 +96,9 @@ public partial class MainWindow : Window
     private void UpdateEnabled()
     {
         ReadTodayButton.IsEnabled=ReadRangeButton.IsEnabled=!_busy;
-        ImportButton.IsEnabled=PasteButton.IsEnabled=FindButton.IsEnabled=!_busy&&_session!=null;
+        ImportButton.IsEnabled=EmailImportButton.IsEnabled=!_busy;
+        PasteButton.IsEnabled=FindButton.IsEnabled=!_busy&&_session is { EmailWorkbook:null };
+        ReviewGrid.IsEnabled=!_busy;
         SaveExportButton.IsEnabled=!_busy&&_exportPath!=null;
         RowDetailsButton.IsEnabled=!_busy&&_validation is { IsValid:true }&&_validation.Rows.Count>0;
         ChangeProposalDatesButton.IsEnabled=!_busy&&_proposal is not null;
@@ -102,14 +106,14 @@ public partial class MainWindow : Window
         ReconcileButton.IsEnabled=ExportReceiptButton.IsEnabled=!_busy&&HistoryGrid.SelectedItem is SubmissionReceipt;
         RecoverDeletedButton.IsEnabled=!_busy&&!_smoke&&HistoryGrid.SelectedItem is SubmissionReceipt selected
             &&!selected.Rows.Any(r=>r.Status is "pending" or "unknown")
-            &&selected.Rows.Any(r=>r.Status=="created"&&r.RecordId>0&&r.Row.Kind=="work"&&r.Row.SourceEntryIds.Count>0&&r.DeletionConfirmedAtUtc is null);
-        WriteButton.IsEnabled=!_busy&&_session is { Demo:false }&&_proposal!=null&&_validation is { IsValid:true }&&_validation.Rows.Count>0&&(_validation.Warnings.Count==0||AcknowledgeWarnings.IsChecked==true);
+            &&selected.Rows.Any(r=>r.Status=="created"&&r.RecordId>0&&r.Row.Kind=="work"&&(r.Row.SourceEntryIds.Count>0||r.Row.EmailEvidenceKeys.Count>0)&&r.DeletionConfirmedAtUtc is null);
+        WriteButton.IsEnabled=!_busy&&_session is { Demo:false }&&_proposal!=null&&_validation is { IsValid:true }&&_validation.Rows.Count>0&&(_validation.Warnings.Count==0||AcknowledgeWarnings.IsChecked==true)&&_reviewRows.All(r=>r.Row.BillableOverride is null||r.CanOverride);
     }
     private void ResetReview()
     {
         _selectedDates=null; ProposalDatesPanel.Visibility=Visibility.Collapsed;
         if(_session is not null) UpdateMetrics(_session);
-        _proposal=null; _validation=null; ReviewGrid.ItemsSource=null; ReviewGrid.Visibility=VerifiedBadge.Visibility=WarningsText.Visibility=AcknowledgeWarnings.Visibility=Visibility.Collapsed;
+        _proposal=null; _validation=null; _reviewRows=[]; ReviewGrid.ItemsSource=null; ReviewGrid.Visibility=VerifiedBadge.Visibility=WarningsText.Visibility=AcknowledgeWarnings.Visibility=BillingNotice.Visibility=Visibility.Collapsed;
         AcknowledgeWarnings.IsChecked=false; ReviewTitle.Text="Waiting for your proposal"; ValidationMessage.Text="The app checks the returned file and calculates your time before you submit."; ValidationMessage.Foreground=(Brush)FindResource("Muted"); DailyTotals.Text=""; ReadyMetric.Text="—"; WriteHint.Text="Nothing is sent until you click Write to Quickbase."; UpdateEnabled();
     }
     private void ResetSource()
@@ -147,18 +151,27 @@ public partial class MainWindow : Window
         _session=session; ResetReview();
         var start=session.Days.Min(d=>d.Date); var end=session.Days.Max(d=>d.Date);
         StartDate.SelectedDate=start.ToDateTime(TimeOnly.MinValue); EndDate.SelectedDate=end.ToDateTime(TimeOnly.MinValue);
-        _exportPath=_store.GetExportPath(session);
-        WriteExport(_exportPath,ProposalExchange.Export(session));
-        ExportTitle.Text="Drag this file to Copilot";
-        ExportDetail.Text=$"{start:MMM d}{(start==end?"":$" – {end:MMM d}")} · {session.Days.Sum(d=>d.Entries.Count)} entries · JSON file\nOr save it and attach it in your agent.";
-        TrackedMetric.Text=$"{session.Days.Sum(d=>d.Entries.Where(e=>!e.Running).Sum(e=>e.DurationSeconds/3600m)):0.00} h";
+        if (session.EmailWorkbook is null)
+        {
+            _exportPath=_store.GetExportPath(session);
+            WriteExport(_exportPath,ProposalExchange.Export(session));
+            ExportTitle.Text="Drag this file to Copilot";
+            ExportDetail.Text=$"{start:MMM d}{(start==end?"":$" – {end:MMM d}")} · {session.Days.Sum(d=>d.Entries.Count)} entries · JSON file\nOr save it and attach it in your agent.";
+        }
+        else
+        {
+            _exportPath=null; ExportTitle.Text="Email workbook imported";
+            ExportDetail.Text=$"{start:MMM d}{(start==end?"":$" – {end:MMM d}")} · {session.EmailWorkbook.Activities.Count} activities\nReview the matched timecards below.";
+        }
+        UpdateMetrics(session);
         ExistingMetric.Text=$"{session.Days.Sum(d=>d.Existing.Sum(e=>e.Hours)):0.00} h";
-        TargetMetric.Text=$"{session.Settings.TargetHours:0.00} h";
         DemoBanner.Visibility=session.Demo?Visibility.Visible:Visibility.Collapsed;
         var source=new StringBuilder();
         foreach(var day in session.Days)
         {
-            source.AppendLine($"{day.Date:dddd, MMMM d} · {day.Entries.Count} Toggl entries");
+            source.AppendLine($"{day.Date:dddd, MMMM d}");
+            if(session.EmailWorkbook is not null)
+                foreach(var activity in session.EmailWorkbook.Activities.Where(a=>a.Date==day.Date)) source.AppendLine($"  {activity.ActivityId}   {activity.Minutes} confirmed minutes   {activity.TimeBasis}\n  {activity.Description}");
             foreach(var entry in day.Entries) source.AppendLine($"  #{entry.Id}   {(entry.Running?"RUNNING":$"{entry.DurationSeconds/3600m:0.00} h")}   {entry.Description}");
             source.AppendLine($"Already in Quickbase: {day.Existing.Sum(r=>r.Hours):0.00} h");
             foreach(var card in day.Existing) source.AppendLine($"  Record #{card.RecordId}   {card.Hours:0.00} h   {card.Description}   [project {card.Project}, task {card.Task}]");
@@ -201,7 +214,7 @@ public partial class MainWindow : Window
     }
     private void Import_DragOver(object sender,DragEventArgs e)
     {
-        e.Effects=!_busy&&_session!=null&&(e.Data.GetDataPresent(DataFormats.FileDrop)||e.Data.GetDataPresent(DataFormats.UnicodeText))?DragDropEffects.Copy:DragDropEffects.None; e.Handled=true;
+        e.Effects=!_busy&&(e.Data.GetDataPresent(DataFormats.FileDrop)||(_session is {EmailWorkbook:null}&&e.Data.GetDataPresent(DataFormats.UnicodeText)))?DragDropEffects.Copy:DragDropEffects.None; e.Handled=true;
         ImportCard.Background=(Brush)FindResource(e.Effects==DragDropEffects.Copy?"AccentSoft":"SurfaceMuted");
         ImportCard.BorderBrush=(Brush)FindResource(e.Effects==DragDropEffects.Copy?"Accent":"Line");
     }
@@ -211,27 +224,89 @@ public partial class MainWindow : Window
     }
     private void Import_Drop(object sender,DragEventArgs e)
     {
-        Import_DragLeave(sender,e); e.Handled=true; if(_busy||_session is null) return;
+        Import_DragLeave(sender,e); e.Handled=true; if(_busy) return;
         if(e.Data.GetData(DataFormats.FileDrop) is string[] files)
         { if(files.Length==1) ImportFile(files[0]); else StatusText.Text="Drop one proposal file at a time."; }
         else if(e.Data.GetData(DataFormats.UnicodeText) is string text) AcceptProposal(text);
     }
     private void Import_Click(object sender,RoutedEventArgs e)
     {
-        if(_busy||_session is null) return;
-        var dialog=new OpenFileDialog { Title="Open Copilot's returned proposal",Filter="Copilot proposal|*.json;*.txt",Multiselect=false };
+        if(_busy) return;
+        var dialog=new OpenFileDialog { Title="Open Copilot's file",Filter="Timekeeper files|*.xlsx;*.json;*.txt|Email workbook|*.xlsx|Toggl proposal|*.json;*.txt",Multiselect=false };
         if(dialog.ShowDialog(this)==true) ImportFile(dialog.FileName);
     }
     private void ImportFile(string path)
     {
+        if(Path.GetExtension(path).Equals(".xlsx",StringComparison.OrdinalIgnoreCase)) { _=ImportEmailAsync(path); return; }
         ResetReview();
         try
         {
+            if(_session is null) throw new FormatException("Read your Toggl time first, or import an email .xlsx workbook.");
+            if(_session.EmailWorkbook is not null) throw new FormatException("Import the email workbook again to change its activities or mappings.");
             if(!new[]{".json",".txt"}.Contains(Path.GetExtension(path),StringComparer.OrdinalIgnoreCase)) throw new FormatException("Download Copilot's JSON file first, then drop the saved file here.");
             if(new FileInfo(path).Length>2_000_000) throw new FormatException("The proposal is too large. The limit is 2 MB.");
             AcceptProposal(File.ReadAllText(path));
         }
         catch(Exception ex) { ImportError(ex.Message); }
+    }
+    private void EmailImport_Click(object sender,RoutedEventArgs e)
+    {
+        if(_busy) return;
+        var dialog=new OpenFileDialog { Title="Import email activities", Filter="Email activity workbook|*.xlsx", Multiselect=false };
+        if(dialog.ShowDialog(this)==true) _=ImportEmailAsync(dialog.FileName);
+    }
+    private async Task ImportEmailAsync(string path)
+    {
+        if(_busy||!Configured()) return;
+        ShowDay_Click(this,new RoutedEventArgs()); ResetSource();
+        await RunAsync(async ct=>
+        {
+            StatusText.Text="Checking the email workbook…";
+            var workbook=EmailWorkbookReader.Read(path);
+            using var api=MakeApi();
+            var session=await api.ReadEmailBaselineAsync(workbook,new Progress<string>(text=>StatusText.Text=text),ct);
+            var fullSession=session;
+            IReadOnlyCollection<DateOnly>? importDates=null;
+            if(session.Days.Count>1)
+            {
+                var outline=new ProposalEnvelope { SessionId=session.SessionId,EmployeeId=session.Settings.EmployeeId,Rows=workbook.Activities.Select(a=>new ProposalRow { Date=a.Date }).ToList() };
+                var dates=new ProposalDatesWindow(this,session,outline);
+                if(dates.ShowDialog()!=true) { StatusText.Text="Email import cancelled. Nothing was submitted."; return; }
+                importDates=dates.SelectedDates;
+                session=session with { Days=session.Days.Where(d=>dates.SelectedDates.Contains(d.Date)).ToList() };
+            }
+            var dialog=new EmailImportWindow(this,session,api);
+            if(dialog.ShowDialog()!=true) { StatusText.Text="Email import cancelled. Nothing was submitted."; return; }
+            fullSession=fullSession with { Reference=dialog.Session.Reference };
+            _store.SaveSession(fullSession); PresentSession(fullSession);
+            AcceptProposal("",(_,_)=>importDates,forceDateChoice:importDates is not null,emailProposal:dialog.Proposal);
+        },true);
+    }
+    private void BillingChanged()
+    {
+        if(_refreshingBilling||_session is null||_proposal is null) return;
+        _refreshingBilling=true;
+        try
+        {
+            var choices=_reviewRows.ToList();
+            var dates=_selectedDates?.ToArray();
+            var updated=_proposal with { Rows=_proposal.Rows.Select(p=>
+            {
+                var choice=choices.FirstOrDefault(r=>r.Row.Kind=="work"&&(p.SourceEntryIds.Any(r.Row.SourceEntryIds.Contains)||p.SourceActivityIds.Any(r.Row.SourceActivityIds.Contains)));
+                return choice is null?p:p with { BillableOverride=choice.Row.BillableOverride,Hours=null };
+            }).ToList() };
+            // Billing defines an email rounding group. Recalculate after changes so two groups
+            // that now share billing cannot retain inflated separately-rounded hours.
+            AcceptProposal(JsonSerializer.Serialize(updated,JsonDefaults.Options),(_,_)=>dates??_session.Days.Select(d=>d.Date).ToArray(),dates is not null,emailProposal:_session.EmailWorkbook is null?null:updated);
+            foreach(var row in _reviewRows.Where(r=>r.Row.Kind!="work"))
+            {
+                var previous=choices.FirstOrDefault(r=>r.Row.Kind==row.Row.Kind&&r.Row.Date==row.Row.Date);
+                if(previous is not null) row.BillingIndex=previous.BillingIndex;
+            }
+            AcknowledgeWarnings.IsChecked=false;
+            StatusText.Text="Billing updated and hours recalculated. Review the rows and totals before writing.";
+        }
+        finally { _refreshingBilling=false; UpdateEnabled(); }
     }
     private void Paste_Click(object sender,RoutedEventArgs e)
     {
@@ -239,12 +314,13 @@ public partial class MainWindow : Window
         var dialog=new TextDialog(this,"Paste Copilot's proposal","",true);
         if(dialog.ShowDialog()==true) AcceptProposal(dialog.Value);
     }
-    private void AcceptProposal(string json, Func<ReadSession,ProposalEnvelope,IReadOnlyCollection<DateOnly>?>? chooseDates=null, bool forceDateChoice=false)
+    private void AcceptProposal(string json, Func<ReadSession,ProposalEnvelope,IReadOnlyCollection<DateOnly>?>? chooseDates=null, bool forceDateChoice=false, ProposalEnvelope? emailProposal=null)
     {
         ResetReview(); if(_session is null) return;
         try
         {
-            _proposal=ProposalExchange.Parse(json);
+            if(emailProposal is not null && _session.EmailWorkbook is null) throw new InvalidOperationException("Email mappings require an imported workbook.");
+            _proposal=emailProposal??ProposalExchange.Parse(json);
             if(forceDateChoice||ProposalScope.NeedsChoice(_session,_proposal))
             {
                 _selectedDates=(chooseDates??ChooseProposalDates)(_session,_proposal);
@@ -261,7 +337,10 @@ public partial class MainWindow : Window
                 ProposalDatesText.Text="Reviewing: "+DateList(included)+(excluded.Count>0?". Excluded: "+DateList(excluded)+".":". All dates from this read are included.");
                 ProposalDatesPanel.Visibility=Visibility.Visible;
             }
-            ReviewGrid.ItemsSource=_validation.Rows; ReviewGrid.SelectedIndex=_validation.Rows.Count>0?0:-1; ReviewGrid.Visibility=Visibility.Visible;
+            _reviewRows=_validation.Rows.Select(r=>new ReviewRow(r,_session.Reference.Billing?.CanOverride==true,BillingChanged)).ToList();
+            ReviewGrid.ItemsSource=_reviewRows; ReviewGrid.SelectedIndex=_validation.Rows.Count>0?0:-1; ReviewGrid.Visibility=Visibility.Visible;
+            BillingNotice.Text=_session.Reference.Billing?.CanOverride==true ? "Billing changes keep the same project, assignment and task. Green = billable; dim red = non-billable; gray = Quickbase default." : (_session.Reference.Billing?.Message??"Billing override access has not been confirmed. Read or import again to check permissions.")+" Quickbase default uses normal project/task rules. A requested override must be cleared or permission granted before writing.";
+            BillingNotice.Visibility=Visibility.Visible;
             ReviewTitle.Text=_validation.Rows.Count==0?"Everything is already accounted for":$"{_validation.Rows.Count} timecards ready for your review";
             VerifiedBadge.Visibility=Visibility.Visible;
             ValidationMessage.Text="Source entries, relationships and calculated hours checked. Review the assignment choices and descriptions below.";
@@ -282,7 +361,10 @@ public partial class MainWindow : Window
     private static string DateList(IEnumerable<DateOnly> dates)=>string.Join(", ",dates.Order().Select(d=>d.ToString("MMM d, yyyy")));
     private void UpdateMetrics(ReadSession session)
     {
-        TrackedMetric.Text=$"{session.Days.Sum(d=>d.Entries.Where(e=>!e.Running).Sum(e=>e.DurationSeconds/3600m)):0.00} h";
+        TrackedLabel.Text=session.EmailWorkbook is null?"Tracked in Toggl":"Confirmed email time";
+        var hours=session.EmailWorkbook is null?session.Days.Sum(d=>d.Entries.Where(e=>!e.Running).Sum(e=>e.DurationSeconds/3600m)):session.EmailWorkbook.Activities.Where(a=>session.Days.Any(d=>d.Date==a.Date)).Sum(a=>a.Minutes/60m);
+        TrackedMetric.Text=$"{hours:0.00} h";
+        TargetMetric.Text=session.EmailWorkbook is not null && (!session.Settings.EmailApplyDailyDefaults||!session.Settings.FillWeekdays)?"Off":$"{session.Settings.TargetHours:0.00} h";
         ExistingMetric.Text=$"{session.Days.Sum(d=>d.Existing.Sum(e=>e.Hours)):0.00} h";
     }
     private IReadOnlyCollection<DateOnly>? ChooseProposalDates(ReadSession session,ProposalEnvelope proposal)
@@ -294,12 +376,17 @@ public partial class MainWindow : Window
     {
         if(_busy||_session is null||_proposal is null) return;
         var previous=_selectedDates;
+        var billing=_reviewRows.ToDictionary(r=>ReviewIdentity(r.Row),r=>r.BillingIndex);
         AcceptProposal(JsonSerializer.Serialize(_proposal,JsonDefaults.Options),(session,proposal)=>
         {
             var dialog=new ProposalDatesWindow(this,session,proposal,previous);
             return dialog.ShowDialog()==true?dialog.SelectedDates:null;
-        },true);
+        },true,emailProposal:_session.EmailWorkbook is null?null:_proposal);
+        foreach(var row in _reviewRows)
+            if(billing.TryGetValue(ReviewIdentity(row.Row),out var index)) row.BillingIndex=index;
+        UpdateEnabled();
     }
+    private static string ReviewIdentity(VerifiedRow row)=>JsonSerializer.Serialize(row with { RowId="",BillableOverride=null },JsonDefaults.Options);
     private void ImportError(string message)
     {
         _validation=null; _proposal=null; VerifiedBadge.Visibility=ReviewGrid.Visibility=Visibility.Collapsed;
@@ -313,7 +400,7 @@ public partial class MainWindow : Window
     private async void Write_Click(object sender,RoutedEventArgs e)
     {
         if(!WriteButton.IsEnabled||_session is null||_proposal is null||_validation is null) return;
-        var session=_session; var proposal=_proposal; var rows=_validation.Rows.ToList(); var warningsAcknowledged=AcknowledgeWarnings.IsChecked==true; var selectedDates=_selectedDates?.ToArray();
+        var session=_session; var proposal=_proposal; var rows=_reviewRows.Select(r=>r.Row).ToList(); var warningsAcknowledged=AcknowledgeWarnings.IsChecked==true; var selectedDates=_selectedDates?.ToArray();
         await RunAsync(async ct=>
         {
             _writing=true; StatusText.Text="Rechecking current data, then writing the reviewed rows…";
@@ -362,13 +449,15 @@ public partial class MainWindow : Window
     }
     private void RowDetails_Click(object sender,RoutedEventArgs e)
     {
-        if(ReviewGrid.SelectedItem is not VerifiedRow row) { StatusText.Text="Select a row in the review table first."; return; }
-        new TextDialog(this,"Timecard details",$"Date: {row.Date:yyyy-MM-dd}\nHours: {row.Hours:0.00}\nType: {row.Kind}\n\nProject: {row.ProjectName} (ID {row.Project})\nAssignment: {row.AssignmentName} (ID {row.Assignment?.ToString()??"none"})\nTask: {row.TaskName} (ID {row.Task})\nCategory: {row.CategoryName} (ID {row.Category})\n\nDescription:\n{row.Description}\n\nToggl source IDs: {string.Join(", ",row.SourceEntryIds)}").ShowDialog();
+        if(ReviewGrid.SelectedItem is not ReviewRow review) { StatusText.Text="Select a row in the review table first."; return; }
+        var row=review.Row;
+        var sources=row.SourceActivityIds.Count>0?$"Email activity IDs: {string.Join(", ",row.SourceActivityIds)}":$"Toggl source IDs: {string.Join(", ",row.SourceEntryIds)}";
+        new TextDialog(this,"Timecard details",$"Date: {row.Date:yyyy-MM-dd}\nHours: {row.Hours:0.00}\nType: {row.Kind}\nBilling requested: {review.BillingLabel}\n\nProject: {row.ProjectName} (ID {row.Project})\nAssignment: {row.AssignmentName} (ID {row.Assignment?.ToString()??"none"})\nTask: {row.TaskName} (ID {row.Task})\nCategory: {row.CategoryName} (ID {row.Category})\n\nDescription:\n{row.Description}\n\n{sources}").ShowDialog();
     }
     private void ShowDay_Click(object sender,RoutedEventArgs e)
     {
         if(HistoryPanel.Visibility==Visibility.Visible) WorkScroll.ScrollToTop();
-        WorkScroll.Visibility=Visibility.Visible; HistoryPanel.Visibility=Visibility.Collapsed; PageEyebrow.Text="TOGGL / QUICKBASE"; PageTitle.Text="Timecards"; PageSubtitle.Text="Read Toggl entries, review the proposal, and submit to Quickbase.";
+        WorkScroll.Visibility=Visibility.Visible; HistoryPanel.Visibility=Visibility.Collapsed; PageEyebrow.Text="TOGGL + EMAIL / QUICKBASE"; PageTitle.Text="Timecards"; PageSubtitle.Text="Read Toggl time or import an email workbook, review, and submit to Quickbase.";
         DayNav.Tag="Active"; HistoryNav.Tag=null;
         if(!_busy) StatusText.Text=_validation is { IsValid:true }?"Proposal checked. Review the rows before writing.":_session is not null?"Your time is ready. Send the file to Copilot to continue.":"Ready · Set up your accounts, or explore a sample day.";
     }
@@ -393,7 +482,7 @@ public partial class MainWindow : Window
         if(receipt.SelectedDates is not null) text.AppendLine($"Selected dates: {DateList(receipt.SelectedDates)}\nOnly these dates were included in this submission.\n");
         if(receipt.Status=="reopened") text.AppendLine($"Original submission result: {receipt.Message}\n");
         if(receipt.ReviewedWarnings.Count>0) text.AppendLine($"Warnings acknowledged: {receipt.WarningsAcknowledgedAtUtc:g}\n{string.Join("\n",receipt.ReviewedWarnings)}\n");
-        foreach(var result in receipt.Rows) text.AppendLine($"{result.Status.ToUpperInvariant()}  {result.Row.Date:yyyy-MM-dd}  {result.Row.Hours:0.00} h  {result.Row.Description}\n{(result.RecordId.HasValue?$"Quickbase record #{result.RecordId} · ":"")}{result.Message}\n");
+        foreach(var result in receipt.Rows) text.AppendLine($"{result.Status.ToUpperInvariant()}  {result.Row.Date:yyyy-MM-dd}  {result.Row.Hours:0.00} h  {result.Row.Description}\n{(result.RecordId.HasValue?$"Quickbase record #{result.RecordId} · ":"")}{result.Message}\nBilling requested: {(result.Row.BillableOverride is null?"Quickbase default":result.Row.BillableOverride.Value?"Billable":"Non-billable")}; confirmed: {(result.ActualBillable is null?"unavailable":result.ActualBillable.Value?"Billable":"Non-billable")}\n");
         foreach(var result in receipt.Rows.Where(r=>r.DeletionConfirmedAtUtc.HasValue))
             text.AppendLine($"DELETION CONFIRMED  Record #{result.RecordId} · {result.DeletionConfirmedAtUtc!.Value.LocalDateTime:g}\nThe user confirmed this record was intentionally deleted; Quickbase did not return its ID. Its sources may be included in a fresh proposal. The original creation result above is retained.\n");
         return text.ToString();
@@ -434,7 +523,7 @@ public partial class MainWindow : Window
             HistoryGrid.SelectedItem=history.Single(r=>r.SubmissionId==result.SubmissionId);
             StartDate.SelectedDate=session.Days.Min(d=>d.Date).ToDateTime(TimeOnly.MinValue);
             EndDate.SelectedDate=session.Days.Max(d=>d.Date).ToDateTime(TimeOnly.MinValue);
-            StatusText.Text="Deletion confirmed. Open Timecards, choose Read dates, and send the new export to Copilot to prepare replacement entries.";
+            StatusText.Text=session.EmailWorkbook is null?"Deletion confirmed. Open Timecards, choose Read dates, and send the new export to Copilot to prepare replacement entries.":"Deletion confirmed. Open Timecards and import the email workbook again to prepare replacement entries with fresh Quickbase data.";
         });
     }
     private void ExportReceipt_Click(object sender,RoutedEventArgs e)
@@ -502,5 +591,23 @@ public partial class MainWindow : Window
         }
         PresentSession(original); AcceptProposal(JsonSerializer.Serialize(DemoData.CreateProposal(original),JsonDefaults.Options));
         return summary;
+    }
+    internal string SmokeEmailReview(ReadSession session,ProposalEnvelope mappedProposal)
+    {
+        if(!_smoke||!session.Demo) throw new InvalidOperationException("Email smoke requires synthetic data.");
+        PresentSession(session); ShowDay_Click(this,new RoutedEventArgs());
+        AcceptProposal("",emailProposal:mappedProposal);
+        if(_validation is not {IsValid:true}||_reviewRows.Count!=2||WriteButton.IsEnabled||_exportPath is not null||TargetMetric.Text!="Off")
+            throw new InvalidOperationException("Email mappings did not reach review independently of the Toggl JSON parser.");
+        var originalHours=_reviewRows.Sum(r=>r.Hours);
+        _reviewRows[1].BillingIndex=1;
+        if(_reviewRows.Count!=1||_reviewRows[0].Row.SourceActivityIds.Count!=2||_reviewRows[0].Hours!=0.08m||_reviewRows[0].Hours>=originalHours||_reviewRows[0].Row.Assignment!=501||_reviewRows[0].Row.Task!=60)
+            throw new InvalidOperationException("Billing changes did not preserve mappings and recompute grouped email hours.");
+        _reviewRows[0].BillingIndex=2;
+        if(_reviewRows[0].Row.BillableOverride!=false||_proposal!.Rows.Any(r=>r.BillableOverride!=false)||WriteButton.IsEnabled)
+            throw new InvalidOperationException("Non-billable review selection was lost or enabled a demo write.");
+        // Leave both indicator states visible in the screenshot.
+        PresentSession(session); AcceptProposal("",emailProposal:EmailSmoke.Proposal(session));
+        return "PASS: email mappings reach review without Toggl; no automatic fill by default\nPASS: billing edits keep assignment/task and regroup confirmed minutes; demo writes stay disabled\n";
     }
 }
