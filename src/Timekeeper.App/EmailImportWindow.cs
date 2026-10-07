@@ -22,11 +22,10 @@ internal sealed class EmailImportWindow : Window
     private readonly ComboBox _assignment = new() { MinWidth = 260 }, _task = new(), _existing = new();
     private readonly TextBlock _details = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 14) };
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 12, 0, 10) };
-    private readonly TextBox _search = new();
-    private readonly Button _find = new() { Content = "Find assignment", Margin = new Thickness(8, 0, 0, 0) };
+    private readonly Button _find = new() { Content = "Find assignment", HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 10, 0, 0) };
     private readonly Button _continue = new() { Content = "Review timecards" };
     private readonly CheckBox _confirm = new() { Content = "These activities and confirmed minutes are mine.", Margin = new Thickness(0, 12, 0, 12) };
-    private bool _loading, _searching;
+    private bool _loading;
     public ReadSession Session { get; private set; }
     public ProposalEnvelope Proposal { get; private set; } = new();
 
@@ -66,17 +65,16 @@ internal sealed class EmailImportWindow : Window
         var body = new Grid(); body.ColumnDefinitions.Add(new() { Width = new GridLength(0.85, GridUnitType.Star) }); body.ColumnDefinitions.Add(new() { Width = new GridLength(1.3, GridUnitType.Star) });
         _activities.ItemsSource = _mappings; _activities.SelectionChanged += (_, _) => Present(); body.Children.Add(_activities);
         var editor = new StackPanel(); editor.Children.Add(_details);
-        Add(editor, "Already in Quickbase?", _existing); Add(editor, "Assignment and project", _assignment); Add(editor, "Task", _task);
-        var searchPanel = new Grid { Margin = new Thickness(0, 18, 0, 0) }; searchPanel.ColumnDefinitions.Add(new()); searchPanel.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-        _search.ToolTip = "Words from the assignment, project or client"; searchPanel.Children.Add(_search); Grid.SetColumn(_find, 1); searchPanel.Children.Add(_find); editor.Children.Add(searchPanel);
-        editor.Children.Add(new TextBlock { Text = "Search includes assignments beyond your usual list. Select only an assignment appropriate for your work. No match? Cancel and resolve the case or task before importing again.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 0), FontSize = 12 });
+        Add(editor, "Already in Quickbase?", _existing); Add(editor, "Assignment and project", _assignment);
+        editor.Children.Add(_find);
+        editor.Children.Add(new TextBlock { Text = "Find and select an assignment beyond your usual list.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0), FontSize = 12 });
+        Add(editor, "Task", _task);
         var scroll = new ScrollViewer { Content = editor, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }; Grid.SetColumn(scroll, 1); body.Children.Add(scroll); Grid.SetRow(body, 1); outer.Children.Add(body);
         var footer = new StackPanel(); footer.Children.Add(_status); footer.Children.Add(_confirm);
         var buttons = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right }; buttons.Children.Add(new Button { Content = "Cancel", IsCancel = true, Margin = new Thickness(0, 0, 10, 0) }); _continue.Style = (Style)FindResource("Primary"); buttons.Children.Add(_continue); footer.Children.Add(buttons); Grid.SetRow(footer, 2); outer.Children.Add(footer);
         _assignment.SelectionChanged += (_, _) => Changed(); _task.SelectionChanged += (_, _) => Changed(); _existing.SelectionChanged += (_, _) => Changed();
         _confirm.Checked += (_, _) => Update(); _confirm.Unchecked += (_, _) => Update();
         _find.Click += Find_Click; _continue.Click += (_, _) => Accept();
-        Closing += (_, e) => { if (_searching) { e.Cancel = true; _status.Text = "Wait for the assignment search to finish."; } };
         Content = outer; _activities.SelectedIndex = 0; Update(); Appearance.Attach(this);
     }
     private static bool Eq(string a, string b) => !string.IsNullOrWhiteSpace(a) && string.Equals(a.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);
@@ -96,8 +94,8 @@ internal sealed class EmailImportWindow : Window
         _task.SelectedItem = _task.Items.Cast<Choice>().First(c => c.Id == map.Task);
         _existing.ItemsSource = new[] { new Choice(null, "New work to submit") }.Concat(Session.Days.Single(d => d.Date == a.Date).Existing.Select(r => new Choice(r.RecordId, $"#{r.RecordId} · {r.Hours:0.00} h · {r.Description}"))).ToList();
         _existing.SelectedItem = _existing.Items.Cast<Choice>().First(c => c.Id == map.Existing);
-        _assignment.IsEnabled = _task.IsEnabled = !map.Existing.HasValue;
-        _search.Text = a.MatterHint; _loading = false;
+        _assignment.IsEnabled = _task.IsEnabled = _find.IsEnabled = !map.Existing.HasValue;
+        _loading = false;
     }
     private void Changed()
     {
@@ -105,28 +103,25 @@ internal sealed class EmailImportWindow : Window
         var assignment = (_assignment.SelectedItem as Choice)?.Id;
         map.Internal = assignment == 0; map.Assignment = assignment > 0 ? assignment : null;
         map.Task = (_task.SelectedItem as Choice)?.Id; map.Existing = (_existing.SelectedItem as Choice)?.Id;
-        _assignment.IsEnabled = _task.IsEnabled = !map.Existing.HasValue;
+        _assignment.IsEnabled = _task.IsEnabled = _find.IsEnabled = !map.Existing.HasValue;
         _confirm.IsChecked = false; _activities.Items.Refresh(); Update();
     }
     private void Update()
     {
         var count = _mappings.Count(m => m.Existing.HasValue || ((m.Assignment.HasValue || m.Internal) && m.Task.HasValue));
         _status.Text = $"{count} of {_mappings.Count} activities matched. Nothing is written until you review and click Write to Quickbase.";
-        _continue.IsEnabled = !_searching && count == _mappings.Count && _confirm.IsChecked == true;
+        _continue.IsEnabled = count == _mappings.Count && _confirm.IsChecked == true;
     }
-    private async void Find_Click(object sender, RoutedEventArgs e)
+    private void Find_Click(object sender, RoutedEventArgs e)
     {
-        if (_api is null || _searching || string.IsNullOrWhiteSpace(_search.Text)) return;
-        _searching = true; _find.IsEnabled = _activities.IsEnabled = false; Update();
-        try
-        {
-            var found = await _api.FindAssignmentsAsync(_search.Text.Trim());
-            if (found.Count > 200) throw new InvalidOperationException("More than 200 assignments matched. Use more specific words.");
-            Session = Session with { Reference = Session.Reference with { Assignments = Session.Reference.Assignments.Concat(found).GroupBy(a => a.Id).Select(g => g.Last()).ToList() } };
-            Present(); _status.Text = $"{found.Count} assignments found. Choose the correct assignment above.";
-        }
-        catch (Exception ex) { _status.Text = ex.Message; }
-        finally { _searching = false; _find.IsEnabled = _activities.IsEnabled = true; _continue.IsEnabled = _confirm.IsChecked == true && _mappings.All(m => m.Existing.HasValue || ((m.Assignment.HasValue || m.Internal) && m.Task.HasValue)); }
+        if (_activities.SelectedItem is not Mapping map || map.Existing.HasValue) return;
+        var picker = new AssignmentSearchWindow(this, Session.Reference.Assignments,
+            (query, token) => _api is null ? Task.FromResult(AssignmentSearchWindow.Filter(Session.Reference.Assignments, query)) : _api.FindAssignmentsAsync(query, token),
+            initialQuery: map.Activity.MatterHint);
+        if (picker.ShowDialog() != true || picker.SelectedAssignment is not AssignmentRecord selected) return;
+        Session = Session with { Reference = Session.Reference with { Assignments = Session.Reference.Assignments.Where(a => a.Id != selected.Id).Append(selected).ToList() } };
+        map.Internal = false; map.Assignment = selected.Id;
+        Present(); _confirm.IsChecked = false; _activities.Items.Refresh(); Update();
     }
     private void Accept()
     {

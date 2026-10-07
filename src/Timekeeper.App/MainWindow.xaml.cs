@@ -118,6 +118,7 @@ public partial class MainWindow : Window
     }
     private void ResetSource()
     {
+        CopilotRefreshNotice.Visibility=Visibility.Collapsed;
         _session=null; _exportPath=null; ResetReview(); TrackedMetric.Text=ExistingMetric.Text="—"; SourceDetails.Text="";
         ExportTitle.Text="Your file will appear here"; ExportDetail.Text="Start by reading your time above."; DemoBanner.Visibility=Visibility.Collapsed;
     }
@@ -148,6 +149,7 @@ public partial class MainWindow : Window
     }
     private void PresentSession(ReadSession session)
     {
+        CopilotRefreshNotice.Visibility=Visibility.Collapsed;
         _session=session; ResetReview();
         var start=session.Days.Min(d=>d.Date); var end=session.Days.Max(d=>d.Date);
         StartDate.SelectedDate=start.ToDateTime(TimeOnly.MinValue); EndDate.SelectedDate=end.ToDateTime(TimeOnly.MinValue);
@@ -249,6 +251,31 @@ public partial class MainWindow : Window
         }
         catch(Exception ex) { ImportError(ex.Message); }
     }
+    private static bool TryGetEmailDrop(IDataObject data,out string path)
+    {
+        path="";
+        if(!data.GetDataPresent(DataFormats.FileDrop)||data.GetData(DataFormats.FileDrop) is not string[] files||files.Length!=1) return false;
+        if(!Path.GetExtension(files[0]).Equals(".xlsx",StringComparison.OrdinalIgnoreCase)||!File.Exists(files[0])) return false;
+        path=files[0]; return true;
+    }
+    private void EmailImport_DragOver(object sender,DragEventArgs e)
+    {
+        var accepted=!_busy&&(e.AllowedEffects&DragDropEffects.Copy)!=0&&TryGetEmailDrop(e.Data,out _);
+        e.Effects=accepted?DragDropEffects.Copy:DragDropEffects.None; e.Handled=true;
+        EmailImportButton.Tag=accepted?"DropReady":null;
+    }
+    private void EmailImport_DragLeave(object sender,DragEventArgs e)
+    {
+        EmailImportButton.Tag=null; e.Handled=true;
+    }
+    private void EmailImport_Drop(object sender,DragEventArgs e)
+    {
+        EmailImportButton.Tag=null; e.Effects=DragDropEffects.None; e.Handled=true;
+        if(_busy||(e.AllowedEffects&DragDropEffects.Copy)==0) return;
+        if(!TryGetEmailDrop(e.Data,out var path)) { StatusText.Text="Drop one email Excel workbook (.xlsx) here."; return; }
+        e.Effects=DragDropEffects.Copy;
+        _=ImportEmailAsync(path);
+    }
     private void EmailImport_Click(object sender,RoutedEventArgs e)
     {
         if(_busy) return;
@@ -329,6 +356,12 @@ public partial class MainWindow : Window
             var scope=ProposalScope.Select(_session,_proposal,_selectedDates);
             _validation=Rules.Validate(scope.Session,scope.Proposal);
             if(!_validation.IsValid) { ImportError(string.Join("\n",_validation.Errors)); return; }
+            if(CopilotRefreshNotice.Visibility==Visibility.Visible)
+            {
+                CopilotRefreshNotice.Visibility=Visibility.Collapsed;
+                ExportTitle.Text="Updated proposal received";
+                ExportDetail.Text="Review your new timecards below.";
+            }
             UpdateMetrics(scope.Session);
             if(_session.Days.Count>1)
             {
@@ -426,21 +459,30 @@ public partial class MainWindow : Window
     private async void Find_Click(object sender,RoutedEventArgs e)
     {
         if(_session is null||_busy) return;
-        if(_session.Demo) { new TextDialog(this,"Demo assignments",JsonSerializer.Serialize(_session.Reference.Assignments,JsonDefaults.Options)).ShowDialog(); return; }
-        string? query=TextDialog.Ask(this,"Find an assignment","Enter a few words from the assignment, project, or client name.");
-        if(string.IsNullOrWhiteSpace(query)) return;
-        await RunAsync(async ct=>
+        await RunAsync(ct=>
         {
-            using var api=MakeApi(); StatusText.Text="Searching Quickbase assignments…";
-            var matches=await api.FindAssignmentsAsync(query,ct);
-            if(matches.Count==0) { StatusText.Text="No assignments matched. Try fewer words."; return; }
-            if(matches.Count>200) throw new InvalidOperationException("More than 200 assignments matched. Use more specific search words.");
-            var merged=_session.Reference.Assignments.Concat(matches).GroupBy(a=>a.Id).Select(g=>g.Last()).ToList();
+            using var api=_session.Demo?null:MakeApi();
+            var picker=new AssignmentSearchWindow(this,_session.Reference.Assignments,
+                (query,token)=>api is null?Task.FromResult(AssignmentSearchWindow.Filter(_session.Reference.Assignments,query)):api.FindAssignmentsAsync(query,token),forExport:true);
+            if(picker.ShowDialog()!=true||picker.SelectedAssignment is not AssignmentRecord selected) return Task.CompletedTask;
+            var merged=_session.Reference.Assignments.Where(a=>a.Id!=selected.Id).Append(selected).ToList();
             _session=_session with { SessionId=Guid.NewGuid().ToString("N"),Reference=_session.Reference with { Assignments=merged } };
             _store.SaveSession(_session); PresentSession(_session);
-            new TextDialog(this,"Assignments added to a new export",$"Found {matches.Count} assignments. Upload the updated export to Copilot and request a new proposal; the previous proposal will no longer match.\n\n"+JsonSerializer.Serialize(matches,JsonDefaults.Options)).ShowDialog();
-            StatusText.Text="Search results added. Drag the updated file to Copilot.";
-        },true);
+            ShowAssignmentExportReminder();
+            StatusText.Text=$"Assignment #{selected.Id} added. Drag the updated file into Copilot AGAIN and request a NEW proposal.";
+            return Task.CompletedTask;
+        });
+    }
+    internal void ShowAssignmentExportReminder()
+    {
+        if(_session is null || _session.EmailWorkbook is not null || _exportPath is null) return;
+        ResetReview();
+        CopilotRefreshNotice.Visibility=Visibility.Visible;
+        ExportTitle.Text="Drag the updated file again";
+        ExportDetail.Text="Drop this file into Copilot again.\nAsk for a new proposal using the added assignment.";
+        ReviewTitle.Text="Waiting for a new Copilot proposal";
+        ValidationMessage.Text="Drag the updated file into Copilot again, then bring back its new proposal. The previous proposal cannot be used.";
+        WorkScroll.UpdateLayout(); CopilotRefreshNotice.BringIntoView();
     }
     private void Settings_Click(object sender,RoutedEventArgs e)
     {

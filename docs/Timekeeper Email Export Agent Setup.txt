@@ -1,0 +1,34 @@
+TIMEKEEPER EMAIL EXPORT AGENT - SETUP GUIDE
+OWNER REFERENCE ONLY - DO NOT PASTE THIS FILE INTO AGENT INSTRUCTIONS
+Revision: 2026-10-06
+
+1. Paste "Timekeeper Email Export Agent Instructions.txt" into the shared agent's Instructions field. This is the actual instruction file and is under 8,000 characters.
+
+2. Upload these three companion files as knowledge/context:
+- Timekeeper Email Export Agent Knowledge.txt
+- Timekeeper Email Export Agent Import Format.txt
+- Timekeeper Email Export Agent Report Format.txt
+
+3. Replace the older Email Export instructions and knowledge. Keeping conflicting copies can mix the old confirmation-first/PDF workflow with the revised draft-first/Word workflow. Leave the separate Toggl agent's files alone.
+
+4. Supply a sanitized Josh Boyd report for the desired layout. These texts describe a fallback but cannot reproduce an unavailable reference exactly. Do not upload employee mailbox exports as shared knowledge.
+
+5. Keep authorized email and optional Teams/calendar sources and document generation enabled. Test using a team member's own account. These files do not install a Quickbase connector or grant access. If a read-only Quickbase tool is connected, the instructions tell the agent to use it for matter lookup.
+
+WHAT CHANGED
+- Immediate best-effort review Excel and detailed Word report, with uncertainties disclosed instead of routine pre-draft questions.
+- Full non-spam communication accounting, including untimed messages.
+- Quarter-hour review allocations with underlying minutes retained.
+- Eight-hour ordinary-day planning target and clearly identified internal policy remainder, preserving work over eight hours.
+- Existing billing preserved, including non-billable case work with its assignment/task.
+- Separate detailed reconstruction, import and report references.
+
+CURRENT APP LIMITS
+Timekeeper 0.5.0 requires approved whole minutes, employee_confirmed=true and real stable source IDs. Its import does not accept an hours column, best_effort_estimate or blank evidence IDs. The agent therefore delivers review files first, then creates the import after approval and validation. Instructions alone cannot remove app requirements.
+
+In Timekeeper's Email imports settings, choose 15-minute rounding for quarter-hour output. Enable "Apply my Timecards and weekday fill settings to email imports" if desired; these additions are off for email by default. Check target, Timecards amount and partial-day needs. The agent previews policy additions separately and never fabricates filler evidence.
+
+This package updates agent guidance only. It does not update the application, installer, permissions or live agent configuration. Update and test the existing shared agent before team rollout.
+
+QUICK CHECK AFTER UPDATING
+Ask for a day with known activity. Confirm the agent delivers REVIEW.xlsx and Word before routine questions, labels uncertainties, accounts for non-spam messages and preserves work above eight hours. Approve the proposal once, then verify the separate import workbook uses minutes and real source IDs. Import it in Timekeeper for review; submission is a separate deliberate action.

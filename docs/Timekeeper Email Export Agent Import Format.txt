@@ -1,0 +1,96 @@
+TIMEKEEPER EMAIL EXPORT AGENT IMPORT FORMAT
+CONTEXT FILE 2 - UPLOAD AS AGENT KNOWLEDGE
+Revision: 2026-10-06
+Compatibility: Timekeeper 0.5.0 email workbook schema 1
+
+This is the FINAL import contract. Review Excel and Word may contain best-effort estimates, incomplete evidence and full communication accounting. They must not be presented as import-ready. Main Instructions control behavior; this file controls workbook structure.
+
+1. REQUIRED STATE
+The employee has approved displayed activities, underlying whole minutes, billing, account, dates, timezone and disclosed limitations. One approval is sufficient. Each imported activity has real stable individual-source IDs preserved exactly, without duplicate allocation. Any unresolved timed work is resolved or explicitly excluded from an approved subset identified in the report. Accepted retrieval gaps may remain disclosed.
+
+employee_confirmed=false, best_effort_estimate and empty evidence_ids are NOT accepted. The app's later review checkbox does not change this contract. Never set confirmation to true just to pass validation. If requirements are unmet, deliver REVIEW.xlsx and Word and identify the missing requirement.
+
+2. FILE AND WORKSHEETS
+Create real Office Open XML .xlsx, not renamed CSV/text. Filename: timekeeper-email-YYYY-MM-DD.xlsx; for a range, timekeeper-email-YYYY-MM-DD-to-YYYY-MM-DD.xlsx.
+
+Limits: 10 MiB file; 32 MiB expanded package; each XML part below 8 MiB; 1-1,000 activities; 1-31 inclusive dates. If no approved supported work remains, provide review files and say there is nothing to import.
+
+Only these exact case-sensitive sheets:
+Metadata
+Activities
+Evidence (optional)
+
+Headers must be in row 1, exact order below. Use contiguous data rows and plain saved text/numeric/Boolean values. No extra columns, title rows, footnotes, summary/ledger sheets or hidden leftover template sheets. No formulas, named formulas, macros, external links, hyperlinks, merged cells, drawings, embedded objects, credentials or raw message bodies. Compute totals outside the workbook and save literal values. Prevent libraries from automatically converting text into formulas or hyperlinks.
+
+Write dates, timestamps, IDs and time_basis as literal text. No Excel serial/localized dates. IDs retain case/characters without leading/trailing spaces or control characters. Use lowercase true/false text or Boolean cells. Blank billing is an empty cell, not "null", "default", "unknown" or zero.
+
+3. METADATA
+Exact header:
+key,value
+
+Exactly these keys, once each:
+format: timekeeper_email_activity
+schema_version: 1
+employee_email: valid address matching Timekeeper's verified Quickbase account
+time_zone: Windows or IANA timezone ID matching Timekeeper's timezone rules
+period_start: YYYY-MM-DD
+period_end: YYYY-MM-DD, inclusive; same as start for one day
+generated_at_utc: actual creation timestamp in UTC, e.g. 2026-10-06T18:30:00Z
+employee_confirmed: true, after actual approval
+retrieval_limitations: specific plain-text limitations, or none only when verified
+
+Eastern Standard Time and America/New_York are examples, not universal defaults. Do not use EST/EDT as an assumed timezone ID. Dates must be real dates. Creation timestamp must not be invented or materially in the future. retrieval_limitations is at most 4,000 characters; keep fuller explanation in Word.
+
+4. ACTIVITIES
+Exact header:
+activity_id,date,minutes,matter_hint,assignment_hint,task_hint,description,billable,time_basis,evidence_ids
+
+activity_id: nonempty unique stable text, maximum 256 characters. An agent-created bookkeeping ID is permitted here, but is not source evidence. Preserve it for unchanged groups on re-export.
+
+date: literal YYYY-MM-DD within the metadata period, representing supported work in the declared timezone.
+
+minutes: approved whole number 1-1440, before app rounding. Use 12 for twelve minutes, not 0.20 decimal hours or a duration string. Combined activities per date cannot exceed 1440 minutes. Column name MUST be minutes. Schema 1 has no hours column.
+
+matter_hint: supported case/project name or internal-work description, maximum 1,000 characters. It is a live-matching hint, not a foreign key.
+
+assignment_hint: known assignment name or blank, maximum 1,000 characters.
+task_hint: known task name or blank, maximum 1,000 characters.
+
+description: nonempty concise factual account of this employee's work, maximum 4,000 characters. Describe performed actions, not merely received requests. Avoid raw bodies.
+
+billable: true for explicit billable; false for explicit non-billable; blank for deliberate Quickbase default. Non-billable case work keeps its case/assignment/task hints. Do not invent new values or promise permission to override a restricted field.
+
+time_basis: exactly measured or employee_confirmed_estimate. measured requires actual duration evidence; approval alone does not make an estimate measured. best_effort_estimate is review-only.
+
+evidence_ids: real stable individual-source IDs separated by semicolons. Each is nonempty, maximum 2,048 characters, no semicolon or control characters. At most 1,000 IDs per activity. No ID may repeat within a row or anywhere else in Activities, including another date. Preserve exact case/characters. Keep the entire cell below 16,000 characters. Never truncate or invent IDs to fit limits.
+
+5. OPTIONAL EVIDENCE
+Exact header:
+evidence_id,source_type,timestamp_utc,direction,subject,action
+
+Every evidence_id must occur in Activities.evidence_ids and have at most one Evidence row. Maximum 10,000 rows. Describing an Activities reference once in Evidence is permitted; reusing an ID across Activities rows is not.
+
+timestamp_utc is an actual known source timestamp as ISO UTC text ending in Z. Do not fabricate missing timestamps. source_type, direction, subject and action are plain text, each at most 4,000 characters. Suggested types: email, calendar, teams_call, teams_chat, document. Email directions: received/sent. Distinguish received requests from employee actions.
+
+Omit Evidence rows if metadata is unavailable rather than inventing details. Omitting the sheet does not waive mandatory Activities.evidence_ids. Evidence adds no time.
+
+Do not use Evidence as the complete communication ledger. Untimed, personal, promotional, no-action, unresolved and duplicate retrieval records belong in Word/REVIEW.xlsx. Only legitimate Activity-referenced canonical sources belong here. Never add a Communications or Ledger sheet to the final import.
+
+6. ROUNDING AND DAILY ADDITIONS
+Import approved underlying minutes. Timekeeper groups by live relationships and billing, then applies configured rounding: none, up to 5 minutes (default), or up to 15 minutes. Select 15 for quarter-hour output. Report underlying minutes and projected rounded hours separately.
+
+Configured Timecards and weekday fill are OFF for email imports until enabled. Do not export unsupported filler or manufacture source IDs for it. Review files may preview policy additions separately. Existing records, live grouping and settings determine actual app totals.
+
+7. VALIDATE AND DELIVER
+Reopen the saved workbook with a document library when available; check the actual file, not only source data. Verify exact sheets/headers/keys, plain cell types, no formulas/links/macros, approval, valid account/timezone/dates, limits, allowed basis/billing, unique IDs, Evidence references and daily totals. Match all imported activities to the approved report and explain policy/rounding differences.
+
+Correct failures before declaring import readiness. Disclose unavailable technical validation; do not claim it was performed. Attach the actual file, never a fictitious link. Direct the employee to import, select live assignments/tasks, review and explicitly submit in Timekeeper.
+
+COMMON ERRORS
+Unsupported headers: regenerate using minutes and exact ordered columns, no hours/confidence/status columns.
+Confirmation required: get approval of the displayed proposal and regenerate; never flip the flag without approval.
+Unsupported basis: best_effort_estimate is draft-only.
+Missing/duplicate evidence: obtain real IDs or resolve overlap; filenames or invented suffixes do not fix it.
+Unexpected Evidence row: move full accounting to review files.
+Wrong account/timezone: align with Timekeeper's verified account/settings, with employee knowledge.
+Partial/existing submission: reconcile the receipt and link already-recorded work to real Quickbase records; never blindly resend.

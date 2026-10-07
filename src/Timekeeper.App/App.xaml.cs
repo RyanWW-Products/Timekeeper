@@ -53,6 +53,31 @@ public partial class App : Application
                 RenderWindow(emptyWindow,Path.Combine(output,"timekeeper-history-empty.png"),(int)emptyWindow.Width,(int)emptyWindow.Height);
 
                 var sample=DemoData.CreateSession();
+                var lookupSamples=new List<AssignmentRecord>
+                {
+                    new(501,"Presentation design",100,"Example Client / Spring launch","Example Client","Open","Full assignment descriptions must not appear in lookup results."),
+                    new(502,"Intake meeting",101,"Northbridge matter","Northbridge","Open","Long internal assignment notes omitted from the picker."),
+                    new(503,"Review and revise presentation layouts for the upcoming hearing",102,"Westlake / Presentation development and case preparation","Westlake","Completed","Notes omitted.")
+                };
+                var lookup=new AssignmentSearchWindow(window,lookupSamples,(query,_)=>query switch
+                {
+                    "missing"=>Task.FromResult(new List<AssignmentRecord>()),
+                    "fail"=>Task.FromException<List<AssignmentRecord>>(new InvalidOperationException("Sample search error. Please retry.")),
+                    "broad"=>Task.FromResult(Enumerable.Range(1,201).Select(id=>lookupSamples[0] with { Id=id }).ToList()),
+                    _=>Task.FromResult(lookupSamples)
+                },forExport:true,smoke:true);
+                // The synthetic search completes synchronously and never contacts Quickbase.
+                File.AppendAllText(report,lookup.SmokeSearchAsync().GetAwaiter().GetResult());
+                RenderWindow(lookup,Path.Combine(output,"timekeeper-assignment-search.png"),1060,690);
+                Appearance.Apply(new("Dark","Theme color",120,"Compact"));
+                RenderWindow(lookup,Path.Combine(output,"theme-dark-assignment-search-120.png"),760,580);
+                Appearance.Apply(new()); lookup.Close();
+                var refreshedExport=new MainWindow(new SessionStore(Path.Combine(output,"assignment-reminder-data")),true);
+                refreshedExport.ShowAssignmentExportReminder();
+                RenderWindow(refreshedExport,Path.Combine(output,"timekeeper-assignment-reminder.png"),1360,960);
+                Appearance.Apply(new("Dark","Theme color",120,"Compact"));
+                RenderWindow(refreshedExport,Path.Combine(output,"theme-dark-assignment-reminder-120.png"),1040,720);
+                Appearance.Apply(new()); refreshedExport.Close();
                 var proposal=DemoData.CreateProposal(sample);
                 var rows=Rules.Validate(sample,proposal).Rows;
                 var receipt=new SubmissionReceipt

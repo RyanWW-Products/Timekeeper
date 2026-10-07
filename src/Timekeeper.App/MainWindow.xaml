@@ -59,15 +59,33 @@
             <TextBlock Text="SAMPLE WORKSPACE  ·  Explore the workflow with sample data. Quickbase writing is disabled." Foreground="{DynamicResource Warning}" FontSize="12"/>
           </Border>
           <Border Style="{StaticResource Card}" Padding="18,13" Margin="{DynamicResource SectionGap}">
-            <WrapPanel VerticalAlignment="Center">
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+              <WrapPanel VerticalAlignment="Center" Margin="0,0,20,0">
               <Button x:Name="ReadTodayButton" Content="Read today's data" Style="{StaticResource Primary}" Click="ReadToday_Click" Margin="0,0,24,6" VerticalAlignment="Bottom"/>
-              <Button x:Name="EmailImportButton" Content="Import email Excel" Click="EmailImport_Click" Margin="0,0,24,6" VerticalAlignment="Bottom"/>
               <WrapPanel>
               <StackPanel Margin="0,0,10,6"><TextBlock Text="From" Foreground="{DynamicResource Muted}" FontSize="11" Margin="1,0,0,5"/><DatePicker x:Name="StartDate" Width="140" AutomationProperties.Name="Read from date"/></StackPanel>
               <StackPanel Margin="0,0,12,6"><TextBlock Text="Through" Foreground="{DynamicResource Muted}" FontSize="11" Margin="1,0,0,5"/><DatePicker x:Name="EndDate" Width="140" AutomationProperties.Name="Read through date"/></StackPanel>
               <Button x:Name="ReadRangeButton" Content="Read dates" Click="ReadRange_Click" VerticalAlignment="Bottom" Margin="0,0,0,6"/>
               </WrapPanel>
-            </WrapPanel>
+              </WrapPanel>
+              <Button x:Name="EmailImportButton" Grid.Column="1" Click="EmailImport_Click" HorizontalAlignment="Right" VerticalAlignment="Center" Padding="16,12" MinHeight="82"
+                      AllowDrop="True" PreviewDragEnter="EmailImport_DragOver" PreviewDragOver="EmailImport_DragOver" PreviewDragLeave="EmailImport_DragLeave" PreviewDrop="EmailImport_Drop"
+                      AutomationProperties.Name="Import email Excel" AutomationProperties.HelpText="Drop one Excel workbook here, or click to browse for an .xlsx file."
+                      ToolTip="Drop an email Excel workbook here, or click to browse.">
+                <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Style.Triggers><Trigger Property="Tag" Value="DropReady"><Setter Property="Background" Value="{DynamicResource AccentSoft}"/><Setter Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger></Style.Triggers></Style></Button.Style>
+                <StackPanel Orientation="Horizontal" IsHitTestVisible="False">
+                  <Grid Width="48" Height="40" Margin="0,0,14,0" VerticalAlignment="Center">
+                    <Rectangle Margin="1,3" RadiusX="4" RadiusY="4" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2"/>
+                    <Path Data="M 3,6 L 24,23 L 45,6 M 3,34 L 17,21 M 45,34 L 31,21" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2" StrokeLineJoin="Round"/>
+                  </Grid>
+                  <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Import email Excel"/>
+                    <TextBlock Text="Drop .xlsx or click to browse" FontSize="11" FontWeight="Normal" Margin="0,5,0,0"/>
+                  </StackPanel>
+                </StackPanel>
+              </Button>
+            </Grid>
           </Border>
           <Border Style="{StaticResource Card}" Padding="0" Margin="{DynamicResource SectionGap}">
             <UniformGrid Columns="4" Grid.IsSharedSizeScope="True">
@@ -76,6 +94,17 @@
               <Border Padding="20,14" Background="{DynamicResource AccentSoft}" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto" SharedSizeGroup="MetricLabels"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><TextBlock Text="Ready to add" Style="{StaticResource MetricLabel}" Foreground="{DynamicResource Accent}"/><TextBlock Grid.Row="1" x:Name="ReadyMetric" Text="—" Style="{StaticResource MetricValue}" Foreground="{DynamicResource Accent}"/></Grid></Border>
               <Border Padding="20,14"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto" SharedSizeGroup="MetricLabels"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><TextBlock Text="Weekday fill target" Style="{StaticResource MetricLabel}"/><TextBlock Grid.Row="1" x:Name="TargetMetric" Text="8.00 h" Style="{StaticResource MetricValue}"/></Grid></Border>
             </UniformGrid>
+          </Border>
+          <Border x:Name="CopilotRefreshNotice" Visibility="Collapsed" Background="{DynamicResource WarningSoft}" BorderBrush="{DynamicResource Warning}" BorderThickness="1" CornerRadius="9" Padding="18,14" Margin="{DynamicResource SectionGap}" AutomationProperties.LiveSetting="Assertive">
+            <StackPanel>
+              <TextBlock Text="Assignment added. Send the updated file to Copilot again." Foreground="{DynamicResource Warning}" FontWeight="SemiBold" FontSize="17" TextWrapping="Wrap"/>
+              <TextBlock Foreground="{DynamicResource Warning}" TextWrapping="Wrap" Margin="0,8,0,0" FontSize="13" LineHeight="21">
+                <Run Text="1. Drag the updated file below into your Copilot chat again."/><LineBreak/>
+                <Run Text="2. Ask Copilot for a new proposal using the added assignment."/><LineBreak/>
+                <Run Text="3. Download the new proposal and bring it back here."/>
+              </TextBlock>
+              <TextBlock Text="Your previous proposal is no longer valid." Foreground="{DynamicResource Warning}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,8,0,0" FontSize="12"/>
+            </StackPanel>
           </Border>
           <Grid Margin="{DynamicResource SectionGap}">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="18"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
@@ -89,8 +118,8 @@
                       <Path Data="M 6,1 L 22,1 L 31,10 L 31,37 L 3,37 L 3,1 Z" Fill="{DynamicResource Surface}" Stroke="{DynamicResource Accent}" StrokeThickness="1.3"/>
                       <Path Data="M 21,1 L 21,11 L 31,11 M 10,20 L 24,20 M 10,25 L 21,25" Stroke="{DynamicResource Accent}" StrokeThickness="1.3"/>
                     </Grid>
-                    <TextBlock x:Name="ExportTitle" Text="Your file will appear here" FontFamily="{StaticResource DisplayFont}" FontSize="19" TextAlignment="Center" Margin="0,0,0,7"/>
-                    <TextBlock x:Name="ExportDetail" Text="Start by reading your time above." TextAlignment="Center" FontSize="12" Foreground="{DynamicResource Muted}" MinHeight="34"/>
+                    <TextBlock x:Name="ExportTitle" Text="Your file will appear here" FontFamily="{StaticResource DisplayFont}" FontSize="19" TextAlignment="Center" TextWrapping="Wrap" Margin="0,0,0,7"/>
+                    <TextBlock x:Name="ExportDetail" Text="Start by reading your time above." TextAlignment="Center" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Muted}" MinHeight="34"/>
                   </StackPanel>
                 </Border>
                 <WrapPanel Grid.Row="2"><Button x:Name="CopilotButton" Content="Open Copilot ↗" Click="OpenCopilot_Click" FontSize="12" Padding="12,8" Margin="0,0,8,0"/><Button x:Name="SaveExportButton" Content="Save file" Click="SaveExport_Click" IsEnabled="False" Style="{StaticResource Quiet}" FontSize="12" Padding="12,8"/></WrapPanel>

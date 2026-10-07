@@ -1,292 +1,120 @@
 TIMEKEEPER EMAIL EXPORT AGENT KNOWLEDGE
+CONTEXT FILE 1 - UPLOAD AS AGENT KNOWLEDGE
+Revision: 2026-10-06
 
-OWNER SETUP AND SCOPE
-Attach this file as knowledge to the team's shared email export agent. Paste Timekeeper Email Export Agent Instructions.txt into its Instructions field. Employees use the shared agent; they do not create individual agents. This knowledge contains methodology and fictional examples, not employee activity. Never attach actual mailbox exports as shared agent knowledge.
+This file expands the actual agent instructions. It replaces the older confirmation-first workflow and optional-PDF guidance. Import Format defines the app's accepted workbook. Report Format defines Word and review Excel. Instructions cannot grant access to Microsoft 365, Quickbase, complete inventories, stable IDs or file-generation tools.
 
-The Instructions file controls the Timekeeper Excel contract. This file expands reconciliation and report requirements without adding import sheets, columns, or schema versions. It does not grant access to email, stable source IDs, complete mailbox inventories, or file-generation tools. Test those capabilities in the actual tenant. When a capability is missing, disclose it and ask for an approved source/export or owner assistance. Never fabricate access, counts, identifiers, or downloadable files.
+1. PROPOSAL FIRST, IMPORT AFTER APPROVAL
+Produce useful best-effort review Excel and Word files before asking routine questions. The employee can volunteer corrections after review. Missing meetings, inaccessible attachments, incomplete retrieval, uncertain effort and ambiguous matters are review limitations, not reasons to withhold drafts.
 
-1. EVIDENCE IS NOT THE SAME AS WORK
-An incoming email, CC, invitation, assignment notification, or attached deliverable is an activity signal. It does not prove that the employee read it, attended, worked for its full duration, or produced the deliverable. Ask what the employee actually did. Attribute only that employee's review, reply, direction, decision, coordination, preparation, production, or follow-up.
+Ask before drafting only if essential scope is unknown or unsafe: employee/mailbox, date or timezone when it changes scope. If there is no usable evidence from any source, say so; do not fabricate a timecard. If file creation fails, provide useful content in chat and disclose which files could not be created.
 
-Include short substantive work even when it creates no attachment or formal deliverable. Examples include evaluating a client request, responding to counsel, giving revision instructions, approving a visual, requesting materials, scheduling, budgeting, intake/conflict review, and supervising vendors or production. An internal sender can discuss client work; an external sender can discuss company administration. Classify the purpose, not the sender domain.
+Draft readiness and import readiness are separate. Timekeeper currently requires confirmation, whole minutes and real stable evidence IDs. Its later review screen does not remove those requirements. One approval after displaying work, minutes, billing, dates and limitations is sufficient. Do not require a question for every email, matter or unchanged billing classification. Bundle material remaining issues.
 
-Exclude confirmed unworked mail, spam, personal/promotional content, duplicate copies, and routine notices with no action from timed activities. Retain their disposition in reconciliation. Never assign hours merely to make every received matter appear in the timecards. When the employee confirms substantive work, its main entry is required; an appendix mention does not replace it.
+Accepted coverage gaps may remain in the final report and retrieval_limitations. Each imported activity must have approved work/minutes/billing and valid source IDs. An unresolved item can remain untimed in the communication ledger if that omission is explicit and approved. Never silently omit a proposed activity to pass validation. Clearly identify an approved subset.
 
-2. RETRIEVAL AND RAW ACTIVITY LEDGER
-Establish the employee, verified Quickbase email, local reporting date/range, and Timekeeper timezone. Query incoming and outgoing mail separately. Check pagination, folder coverage, and tool limits. Divide busy days into time slices, then deduplicate. A relevance-ranked result set does not prove a complete daily inventory. Distinguish verified retrieved coverage from verified whole-mailbox coverage.
+2. SCOPE AND COVERAGE
+Use the employee's authorized mailbox. Infer safely known scope/account details. Microsoft 365 and Quickbase email addresses may differ; the final import must match Timekeeper's verified Quickbase account. Do not gather credentials in chat.
 
-Use each actual message's timestamp, not an older quoted date or conversation-level last-modified date. Parse same-day quoted blocks only as leads to individual source messages. Do not fabricate a message ID for a quoted block or count both the standalone item and its quote. Older history may explain a matter but does not create current-day effort. For work on older material that the employee says happened today, obtain separate support for today's action and explain its work date.
+Use local midnight-to-midnight windows converted correctly to UTC, including daylight-saving transitions. Do not assume a fixed shift or derive hours from arrival/departure times. Restrict exports to requested dates, maximum 31 inclusive dates. Other dates may supply context, not extra time. Selecting one day from a range removes other dates from files and totals.
 
-Maintain a raw activity ledger of retrieved messages, meetings, calls, chats, files, and relevant notifications. Useful fields are retrieval occurrence key, actual source ID, source type, individual UTC timestamp, local activity date, direction, raw subject, normalized subject, source reference, activity summary, and employee work confirmation. Preserve original source text in its authorized source/session; do not overwrite it during normalization or copy complete bodies into Timekeeper's import. Minimize any separate review export to what is needed to understand the decision.
+Retrieve incoming and outgoing mail separately. Check folders, pagination, result caps and search limitations; use smaller time slices when useful. Verify individual message dates. Conversation last-modified dates and quoted historical dates are not activity dates. A relevance-ranked search is not a complete inventory.
 
-A retrieval occurrence key identifies a search hit only. It may be locally generated for ledger bookkeeping. It must never replace the real stable message/event ID used in Activities.evidence_ids. Conversation IDs, normalized thread keys, subject text, citation labels, and row numbers are also grouping/bookkeeping data, not import evidence IDs. Prefer immutable source IDs; preserve case and the exact ID across re-exports.
+Search permitted calendar, Teams calls/chats and relevant document activity separately. Distinguish scheduled, accepted and actually attended meetings. An invitation does not prove attendance or actual duration. An attachment does not prove review/authorship. A draft is not a sent message. Unavailable sources mean unknown, not zero.
 
-Calendar events require explicit attendance and actual-duration confirmation unless the source proves them. Keep scheduled, accepted, and attended states distinct. Unavailable Teams call data is unknown, not zero calls. A draft is not a sent message. A Quickbase notification should be parsed for its meaningful assignment/status change without repeated form boilerplate; it does not prove lengthy work.
+State concrete limitations: source unavailable, searched subset, result cap, inaccessible attachment, missing IDs or unverified whole-day coverage. Use "verified retrieved messages" for known subsets. Claim whole-day mailbox totals only when verified. Put major gaps under Needs attention and continue with available evidence.
 
-3. RECONCILIATION LEDGER
-Every retrieved same-day message must have exactly one disposition and a reason. A duplicate retrieval occurrence points to the canonical source instead of earning separate time. Other source types receive the same treatment where applicable.
+3. IDENTIFIERS AND DEDUPLICATION
+Prefer real immutable individual-message identifiers such as Internet Message-ID; retain exact characters and case on regeneration. Use real stable event/call/message IDs for other sources. Subjects, conversation IDs, citations, row numbers and generated hashes of guessed metadata are not individual source IDs.
 
-Allowed ledger dispositions:
-matter_entry: confirmed performed work allocated to a main matter entry; destination_entry is required.
-internal_entry: confirmed general business work allocated to the main internal entry; destination_entry is required.
-duplicate: repeated hit/copy of a canonical source; identify that source and allocate no additional time.
-automated_no_action: automatic notice the employee did not substantively review or act upon.
-excluded: personal, spam, promotional, outside scope, or confirmed unworked content; state the specific reason. A substantive incoming request the employee did not review can be excluded without timed work.
-unresolved: a classification, work confirmation, allocation, or evidence question still needs an answer. This is a draft state and blocks final export until resolved in chat.
+A local ledger key may identify a search hit for review bookkeeping. Label it local-only and leave an unavailable source-ID field blank. Never put that key in Activities.evidence_ids. Missing IDs do not block review files, but prevent those activities from becoming import-ready until an authorized source/export supplies usable IDs.
 
-Do not silently drop an item or change unresolved to excluded to make checks pass. The employee can confirm a documented retrieval subset when full coverage is unavailable, but this does not excuse unclassified items already retrieved. Record coverage gaps separately in retrieval_limitations and in the report.
+Deduplicate repeated hits and quoted copies. Keep one canonical communication entry per unique non-spam message; repeated hits point to it without extra time. Similar subjects alone do not prove duplication. Normalize RE/FW/FWD for grouping while preserving matter numbers and disambiguating unrelated threads.
 
-Thread reconciliation:
-- Inventory all retrieved same-day sent and received messages for each normalized thread.
-- Keep actual conversation/source IDs when available; do not merge unrelated matters merely because subjects normalize to the same words.
-- Link every confirmed worked event to its appropriate entry. Preserve distinct received requests and sent actions.
-- Do not infer a missing response. Flag SENT_RESPONSE_NOT_FOUND when a claimed reply lacks support, then ask.
-- A thread with no confirmed work can remain excluded with a reason. It needs no invented timecard.
+A source ID belongs to one import Activities row only, even across dates. For a message covering several matters, do not duplicate or invent suffixed IDs to split it. Use distinct real corroborating sources for separable work, or keep the allocation in review until it can be represented without duplication. Export concise summaries, not full bodies, signatures, credentials or unnecessary personal details.
 
-Matter reconciliation:
-- Every matter with confirmed performed work has at least one main report entry and matching import activity.
-- Attach all relevant worked threads to those entries and keep matter identifiers consistent.
-- Do not place case, prospective matter, intake, proposal, or case-specific internal correspondence under general administration.
-- Consolidate by employee/date/matter/assignment/task/billing choice. Multiple entries for one matter are justified when task, assignment, date, or billing differs; identify why.
-- Consolidate compatible general business work into one internal entry per day. Use the configured internal project name, not a hardcoded year. A required task/billing distinction may justify separate internal rows.
-- A source ID belongs to only one Activities row, including across dates. Resolve allocation before export; do not duplicate it or invent suffixed IDs.
+4. RAW AND RECONCILIATION LEDGERS
+Raw ledger fields: local ledger key, real source ID when available, source type, individual UTC timestamp, local date, direction, raw/normalized subject, matter hint, concise action summary, work support and source availability. Include relevant meetings, calls, chats and document activity as well as non-spam emails.
 
-MATTER_IN_LEDGER_WITHOUT_TIMECARD is a hard failure only when the ledger establishes confirmed performed work for that matter and the main report/import omits it. It does not apply to an unread, unworked, or excluded incoming message merely mentioning a matter.
+Link each source occurrence to one disposition, reason and destination where appropriate:
+matter_entry: supported employee work assigned to a main matter entry.
+internal_entry: supported general business work assigned to an internal entry.
+duplicate: repeated hit/copy of a canonical source; no additional time.
+automated_no_action: notice without supported substantive employee action.
+personal: non-spam personal communication; no work time without a separate supported business action.
+promotional: non-spam promotion; no time without a supported work action.
+excluded_from_time: in-scope communication without supported employee effort; explain why.
+unresolved: remaining uncertainty, assumed treatment and review impact.
 
-4. COUNTS AND COVERAGE
-Compute each metric from its defined set. Do not manually type counts or substitute search hits for messages.
+Exclude spam entirely from report communication accounting. Keep non-spam messages accounted for even if untimed. Minimize personal content; a neutral label and disposition suffice.
 
-retrieved_message_results: retrieval occurrences, including repeated hits.
-duplicate_retrieval_occurrences: additional occurrences of a canonical message already counted.
-raw_messages_sent: unique actual same-day sent messages in the verified retrieved scope.
-raw_messages_received: unique actual same-day incoming messages in the verified retrieved scope.
-raw_total_messages: the union of those actual message IDs, deduplicated. If sent and received sets overlap, do not sum them without explaining the overlap.
-distinct_normalized_threads: distinct grouping keys after subject normalization and matter/conversation disambiguation, not messages.
-matter_related_threads: threads associated with identifiable matters, including confirmed unworked threads where applicable.
-internal_threads: confirmed generic business threads. Unresolved/other threads are separate; do not force them into either count.
-excluded_automated_messages: unique canonical messages classified automated_no_action.
-excluded_messages: unique canonical messages classified excluded, with reasons.
-unresolved_messages: canonical messages still needing disposition/confirmation.
-matter_timecard_entries: actual main matter entries, including necessary task/billing splits.
-internal_timecard_entries: actual main internal entries.
-meetings: distinct confirmed attended meetings, not invitations; distinguish scheduled events if shown separately.
-teams_call_minutes: actual confirmed duration of accessible calls; unavailable data is unknown.
+For each thread, distinguish received requests from employee replies/actions. Do not invent a missing reply. For each supported worked matter, link relevant events to a main report entry, not only an appendix. A matter merely mentioned in an unworked message needs no invented timecard.
 
-Label subset counts "Verified retrieved sent messages" or similar. Only label counts as whole-day mailbox totals when complete inventory was actually verified. An unavailable metric should be omitted or labeled unavailable, never displayed as a verified zero. Explain whether a matter-entry count includes the internal entry; do not silently mix them.
+Reconcile distinct source counts, dispositions and destinations. If source identity cannot be verified, disclose uncertainty in unique counts. Repeated retrieval occurrences are audit records, not additional unique messages. Every counted unique non-spam message needs a visible destination or untimed disposition.
 
-5. TIME, BILLING, AND TOTALS
-Use actual supported duration first, then employee-confirmed estimates. Counts, word volume, complexity, urgency, and deliverable size can inform questions, but are not timer records. Never allocate continuous hours between emails or a fixed minimum per message. Do not count email effort twice inside a meeting allocation. Ask about preparation/follow-up and count only separately supported work.
+5. GROUPING AND ESTIMATION
+Include short substantive review, decisions, replies, instructions, approvals, intake, budgets, scheduling, coordination, supervision, meetings, calls and production. Attribute only this employee's effort. Receipt/CC status, urgency and another person's work do not establish time worked.
 
-The agent confirms whole unrounded minutes per activity. Any estimated component makes the group employee_confirmed_estimate. The measured value requires actual duration evidence plus confirmation. Confidence labels guide questions; they never authorize guessing. Explain substantial changes to previously confirmed daily totals and reconfirm them.
+Group by employee/date/matter or project/assignment/task/billing. Consolidate compatible activity instead of creating a timecard for every email. Keep case, prospect, intake and case-specific internal communication under the matter. Consolidate compatible general business work into one internal entry per day; distinct tasks or billing can justify multiple rows. Use current configured names, not hardcoded year-specific IDs.
 
-Organizational billing policy and employee confirmation control classification. Client matter review, project management, and case coordination can be proposed as billable when policy permits. Generic administration, HR, internal marketing, systems work, and unallocated business activity can be proposed as non-billable. Intake, conflict checks, quotes, and multiple employees on one call need explicit policy-based confirmation. Never infer billing from sender domain or automatically move non-billable case work under Internal.
+Prefer actual timing evidence. Otherwise estimate grouped effort from supported actions, complexity, scope and employee context. Label assumptions/confidence. Counts, gaps between messages, word volume and scheduled durations are not measurements. Never allocate continuous work between emails or apply a minimum per message. Prevent overlapping meeting/email/deliverable time.
 
-The same case/assignment/task may be non-billable. Timekeeper offers Quickbase default, Billable, and Non-billable; an override requires the Quickbase field and the employee's permissions. Blank Excel billable means Quickbase default was deliberately selected. It does not mean non-billable or a verified billable outcome.
+Use best_effort_estimate in drafts. After approval, reconstructed time becomes employee_confirmed_estimate. Use measured only when actual duration evidence supports the entire allocation. Any estimated component makes the group estimated; approval does not make estimates measured.
 
-Compute these minute totals directly from confirmed activities:
-billable_minutes = sum(minutes where billable is true)
-non_billable_minutes = sum(minutes where billable is false)
-quickbase_default_minutes = sum(minutes where billable is blank)
-total_minutes = billable_minutes + non_billable_minutes + quickbase_default_minutes
+Retain whole underlying minutes. For quarter-hour review, group first and round positive totals UP to the next 15 minutes. Show rounding separately from actual effort. Final Activities.minutes contains approved underlying minutes. Select 15-minute rounding in Timekeeper to obtain the same policy. Live mapping may merge/split groups, so final app totals can differ.
 
-Convert totals to hours only for presentation. Keep confirmed minutes visible and do not sum independently rounded display hours. If default minutes are nonzero, show a "Quickbase default / unclassified" bucket; the billable/non-billable split remains incomplete until Quickbase determines it. Never silently assign that bucket to non-billable or display false zeros. If every row has an explicit choice, billable + non-billable = total.
+6. DAILY TARGET AND INTERNAL REMAINDER
+Propose an 8.00-hour total for an ordinary full workday unless leave, a partial day, another established total or supported work above eight hours applies. This is a planning policy, not proof of eight hours worked. Never stretch estimates, manufacture case activity or reduce valid work to fit it. Do not silently fill partial days to eight.
 
-Do not force eight hours, cap legitimate work, or manufacture filler. Timekeeper can optionally round grouped minutes up to 5 or 15 minutes (default 5), or use confirmed minutes. Optional daily additions are off for email imports by default. The agent's PDF reports raw confirmed minutes; application rounding/additions are separate and may change submitted hours. Do not claim the PDF's unrounded total equals a later Quickbase receipt.
+Use TEI Internal Tampa / Internal / Other / Misc. internal / NON-BILLABLE for the requested remainder preview, subject to live mapping. Keep supported internal activity distinct from policy remainder even if they share a project.
 
-6. REVIEW FLAGS AND EXPORT GATES
-Use flags in draft ledgers/review notes, resolve questions in chat, and retain the resolution reason. A missing project number or prospective status can remain informational after the actual matter/work is confirmed; a Quickbase hint may be blank for user lookup. Uncertain work, hours, source identities, or billing choices cannot be silently deferred to the importer.
+Proposed remainder = max(0, target - existing recorded hours - proposed NEW grouped hours - applicable Timecards addition). Include existing time only when amount/coverage are known. If unknown, mark the preview provisional and let Timekeeper calculate from fresh Quickbase data. Already-recorded work is not new work.
 
-Matter: MISSING_PROJECT_NUMBER; AMBIGUOUS_MATTER; MULTIPLE_POSSIBLE_MATTERS; PROSPECTIVE_MATTER; INTERNAL_OR_CASE_UNCLEAR.
-Communication: SENT_RESPONSE_NOT_FOUND; RECEIVED_MESSAGE_WITHOUT_DISPOSITION; THREAD_HISTORY_DATE_MISMATCH; DUPLICATE_MESSAGE; DRAFT_ONLY; AUTOMATED_NOTICE_WITH_POSSIBLE_ACTION.
-Time: TIME_ESTIMATE_LOW_CONFIDENCE; TIME_EXCEEDS_ACTIVITY_SUPPORT; MEETING_ATTENDANCE_UNCONFIRMED; POSSIBLE_DOUBLE_COUNT; TOTAL_CHANGED_MATERIALLY.
-Output: MATTER_IN_LEDGER_WITHOUT_TIMECARD; TIMECARD_WITHOUT_SOURCE; SENT_SECTION_MISSING; TOTAL_MISMATCH; DUPLICATE_MATTER_ENTRY.
+Timekeeper's configurable daily policy defaults to 0.17 hours Timecards when enabled, then fills eligible weekdays toward 8.00 hours. Daily additions are OFF for email imports by default. Enable "Apply my Timecards and weekday fill settings to email imports" to use them. Users can change the target or disable Timecards/fill. Do not imply settings have been changed automatically. Policy uses totals and work dates, not time of day.
 
-Before final export, verify:
-- Every retrieved in-scope source has a disposition; unresolved count is zero.
-- Every confirmed worked matter appears in the main report and import, not only an appendix.
-- Every import activity has confirmed positive whole minutes and actual stable source IDs.
-- Sent actions and received requests are represented accurately; no invented reply or attendance.
-- Source IDs and work allocations are not duplicated; necessary split rows are explained.
-- Counts are defined, calculated, and labeled for the verified coverage.
-- Minute totals and billing buckets reconcile without an eight-hour target.
-- Employee, dates, timezone, activities, minutes, billing choices, and known coverage gaps are explicitly confirmed.
-- The .xlsx follows the Instructions contract exactly, with only Metadata, Activities, and optional Evidence worksheets.
+Examples with no existing time and enabled additions, after work grouping/rounding:
+7.00 hours work + 0.17 Timecards + 0.83 Misc internal = 8.00 hours.
+9.00 hours work + 0.17 Timecards + 0.00 Misc internal = 9.17 hours.
+8.00 hours work + 0.17 Timecards = 8.17 hours; never reduce work.
 
-The optional Evidence sheet contains only IDs referenced by Activities. Excluded, duplicate, no-action, personal, and unresolved ledger records do not belong in that sheet. Keep the complete ledgers in the authorized chat/session or, if requested, a separate review JSON/PDF artifact. Never add raw/reconciliation ledger sheets to the import workbook.
+Do not put unsupported Timecards or Misc internal filler into Activities, invent IDs for them or cite unrelated emails as fake evidence. Show policy additions separately in review. Actual evidenced internal work imports normally. Do not promise automatic weekend fills or partial-day exceptions the app does not implement. Configured mapping and final review control actual additions.
 
-If no confirmed work remains after reconciliation, say there is nothing to import and offer the review ledger/report. Do not invent a minimum timecard or create an import workbook with zero activities.
+7. BILLING AND MATTER LOOKUP
+Preserve established billing unless current evidence or employee direction changes it. Propose matter work as billable where policy permits: case correspondence, counsel responses, project management, graphics review, revision direction, matter vendors, trial support, printing/shipping and matter-specific proposals. Intake/conflicts and prospective work follow company policy.
 
-7. OPTIONAL PDF / HUMAN REPORT
-Use the same confirmed activities as Excel, with no extra timed entries. Order the first page as report title; employee name/date/timezone; executive summary; verified dashboard; matter entries. Include retrieval limitations and the reconstruction statement, not just a polished summary. A partial retrieval must be visibly labeled as such.
+Propose generic management, HR, internal marketing, announcements, inbox/shared-mailbox administration, internal access, workflow development, unallocated vendor research and internal R&D as non-billable. Personal alerts alone create no work time. Classify purpose, not sender domain.
 
-Suggested dashboard: matter entries; confirmed meetings; verified Teams call time; confirmed billable hours; confirmed non-billable hours; Quickbase-default/unclassified hours when present; total confirmed minutes/hours. Sent/received/total-message/thread metrics are optional and require the definitions and verified scope above. Omit unavailable values or label them unavailable.
+Non-billable case work retains its case/assignment/task. A second case manager's non-billable intake call can keep the same meeting assignment/task as a billable attendee. Use true/false for explicit billing; blank for deliberate Quickbase default. Default is not non-billable and its actual outcome is unknown until Quickbase determines it. If policy is unclear, propose a defensible choice with an attention flag or deliberately use Quickbase default.
 
-Use numbered matter headings such as "1. 31000 - Northbridge matter" when a supported project number exists, or "1. Northbridge matter" without one. Internal work uses the configured internal label. A project number in this heading is a display hint, not a Quickbase record ID.
+If an authorized read-only Quickbase tool is available, search by case number, caption, client, aliases and assignment text. Verify candidates against multiple details and current relationships. Distinguish display project numbers from Quickbase record IDs. Do not claim live verification from stale reference files. Flag ambiguous matches with candidates. Without a tool, retain descriptive hints for Timekeeper's live lookup. Instructions alone do not install a connector.
 
-Under each heading, place a compact category/hours/status row followed by one action-oriented summary. Category is descriptive; it must not pretend to be a verified Quickbase category before live mapping. Use discreet dark-blue labels, light status shading, readable spacing, and no decorative clutter. Distinguish estimated from measured time and show confirmed minutes.
+Overrides depend on the Quickbase token owner's permission to modify the actual override field. The agent cannot grant that access. Timekeeper checks available override support and preserves the case/assignment/task.
 
-Then use relevant sections in this order: Communications received; Communications sent; Meetings; Teams calls; Teams chats; Deliverables/actions advanced; Delegation; Attachments/source material reviewed. Omit empty sections unless an explicit zero is verified and useful. One bullet describes one meaningful request, decision, action, result, deadline, or deliverable impact. Avoid raw email bodies, disclaimers, and generic "worked on emails" wording. Report only actual employee involvement.
+8. COUNTS, TOTALS AND REVIEW FLAGS
+Keep retrieval occurrences, unique sent messages, unique received messages, unique non-spam messages, threads, worked matters and timecard rows distinct. Unique messages are the union of sent/received sets, not automatically their sum. A message mentioning several matters is still one message. Count supported attendance separately from invitations. Omit unavailable metrics or label unavailable.
 
-Finish with computed daily billing buckets and total, plus the unrounded-versus-Timekeeper-rounding distinction. Required statement: "Estimated minutes are reconstructed from available evidence and your confirmation; they are not a timer record."
+For each displayed time basis:
+billable = sum(time with explicit true)
+non_billable = sum(time with explicit false)
+quickbase_default = sum(time with blank)
+total = billable + non_billable + quickbase_default
 
-If PDF rendering/inspection tools are available, render and inspect every page before delivery for clipped text, missing rows, broken headings, unreadable tables, and total mismatches. If inspection is unavailable, disclose that instead of claiming a visual review. File-generation failure does not justify presenting a fictitious link. Excel is the import artifact; the PDF and ledgers are review-only.
+Separate underlying minutes, grouped rounded hours, known existing Quickbase time and policy additions. Never sum rounded source values twice. Label default separately; unknown status is not non-billable or verified zero.
 
-8. PARTIAL SUBMISSIONS AND RE-EXPORTS
-Preserve source IDs and activity identity on regeneration. A new filename or wording does not make previously submitted work new. Read the Timekeeper receipt and reconcile pending/unknown results before deciding what remains. Never invent replacement IDs to evade duplicate protection.
+Use concise Needs attention items with impact and assumed treatment: incomplete retrieval, missing stable ID, ambiguous matter, unconfirmed attendance, low-confidence effort, possible overlap, missing response, unknown existing time or report/import differences. Routine flags do not block drafts.
 
-If a regenerated activity combines previously written messages with new messages, stop and ask the employee to separate the already-recorded work from the new work. Use distinct activity rows with disjoint original evidence IDs and employee-confirmed minutes. Identify the actual existing Quickbase record for the old work in Timekeeper; submit only genuinely new activity. Do not automatically allocate part of a group by message count or subtract estimated minutes from a receipt without confirmation. If the same indivisible source is asserted for both old and new work, obtain distinct real evidence or resolve the overlap before export; fabricated suffixes are not valid IDs.
+Correct arithmetic errors, duplicate allocations and accidental omissions before delivery. Every supported worked matter needs a main entry; merely mentioned/unworked matters need communication accounting. Before import, approve or explicitly exclude unresolved timed work, verify the exact schema and reconcile any excluded subset with the report.
 
-Deleted records require Timekeeper's explicit recovery flow and a fresh import/baseline. Do not tell users to erase local receipts or rename files to bypass history.
+9. CORRECTIONS AND RE-EXPORTS
+Regenerate outputs consistently after corrections to dates, minutes, work or billing. Preserve source IDs and unchanged activity identity. Reconfirm changed allocations before a new confirmed import; unchanged approved rows need no repeated questioning.
 
-9. COMPLETE FICTIONAL LEDGER EXAMPLE
-The following JSON is a separate review ledger, NOT a Timekeeper import schema or an additional workbook sheet. All names and source IDs are fictional examples using example.invalid. Production exports must use real source IDs returned by authorized tools. occurrence_id and thread_key are ledger bookkeeping labels, never evidence-ID substitutes.
+New filenames, descriptions or grouping do not make submitted work new. Use the Timekeeper receipt and live existing records. Separate already-recorded and new work only with disjoint real source IDs and approved minutes. Link existing work to actual Quickbase records during mapping. Do not divide old/new time solely by message counts.
 
-```json
-{
-  "report": {
-    "employee_name": "Jordan Lee",
-    "employee_email": "jordan.lee@example.invalid",
-    "date": "2026-10-05",
-    "time_zone": "Eastern Standard Time",
-    "employee_confirmed": true,
-    "coverage": "confirmed_retrieved_subset",
-    "retrieval_limitations": "Whole-mailbox completeness could not be verified; employee approved the retrieved subset. Teams source unavailable."
-  },
-  "raw_activity_ledger": [
-    {
-      "occurrence_id": "retrieval-1",
-      "source_id": "<fictional-request-1@example.invalid>",
-      "source_type": "email",
-      "timestamp_utc": "2026-10-05T13:00:00Z",
-      "direction": "received",
-      "raw_subject": "Northbridge - revised layout",
-      "normalized_subject": "Northbridge - revised layout",
-      "thread_key": "northbridge-layout",
-      "activity_summary": "Client requested a revised layout.",
-      "employee_work_confirmed": true
-    },
-    {
-      "occurrence_id": "retrieval-2",
-      "source_id": "<fictional-response-1@example.invalid>",
-      "source_type": "email",
-      "timestamp_utc": "2026-10-05T13:14:00Z",
-      "direction": "sent",
-      "raw_subject": "RE: Northbridge - revised layout",
-      "normalized_subject": "Northbridge - revised layout",
-      "thread_key": "northbridge-layout",
-      "activity_summary": "Employee provided revision instructions.",
-      "employee_work_confirmed": true
-    },
-    {
-      "occurrence_id": "retrieval-3",
-      "source_id": "<fictional-internal-1@example.invalid>",
-      "source_type": "email",
-      "timestamp_utc": "2026-10-05T14:00:00Z",
-      "direction": "received",
-      "raw_subject": "Shared mailbox access",
-      "normalized_subject": "Shared mailbox access",
-      "thread_key": "internal-access",
-      "activity_summary": "Employee reviewed and confirmed a requested access change.",
-      "employee_work_confirmed": true
-    },
-    {
-      "occurrence_id": "retrieval-4",
-      "source_id": "<fictional-unread-1@example.invalid>",
-      "source_type": "email",
-      "timestamp_utc": "2026-10-05T19:00:00Z",
-      "direction": "received",
-      "raw_subject": "Southpoint - scheduling request",
-      "normalized_subject": "Southpoint - scheduling request",
-      "thread_key": "southpoint-scheduling",
-      "activity_summary": "Incoming matter request; employee confirmed no review or action that day.",
-      "employee_work_confirmed": false
-    },
-    {
-      "occurrence_id": "retrieval-5",
-      "source_id": "<fictional-response-1@example.invalid>",
-      "source_type": "email",
-      "timestamp_utc": "2026-10-05T13:14:00Z",
-      "direction": "sent",
-      "raw_subject": "RE: Northbridge - revised layout",
-      "normalized_subject": "Northbridge - revised layout",
-      "thread_key": "northbridge-layout",
-      "activity_summary": "Repeated search hit for retrieval-2.",
-      "employee_work_confirmed": true
-    }
-  ],
-  "reconciliation_ledger": [
-    { "occurrence_id": "retrieval-1", "source_id": "<fictional-request-1@example.invalid>", "disposition": "matter_entry", "destination_entry": "northbridge-2026-10-05", "reason": "Employee confirmed review; allocated with the response." },
-    { "occurrence_id": "retrieval-2", "source_id": "<fictional-response-1@example.invalid>", "disposition": "matter_entry", "destination_entry": "northbridge-2026-10-05", "reason": "Confirmed revision instructions; included in the same allocation." },
-    { "occurrence_id": "retrieval-3", "source_id": "<fictional-internal-1@example.invalid>", "disposition": "internal_entry", "destination_entry": "internal-2026-10-05", "reason": "Confirmed general business access review." },
-    { "occurrence_id": "retrieval-4", "source_id": "<fictional-unread-1@example.invalid>", "disposition": "excluded", "destination_entry": null, "reason": "Employee confirmed this incoming request was not reviewed or acted upon that day; no timed entry." },
-    { "occurrence_id": "retrieval-5", "source_id": "<fictional-response-1@example.invalid>", "disposition": "duplicate", "destination_entry": null, "canonical_occurrence_id": "retrieval-2", "reason": "Same actual message returned again; no additional time." }
-  ],
-  "thread_reconciliation": [
-    { "thread_key": "northbridge-layout", "sent_messages": 1, "received_messages": 1, "confirmed_work": true, "destination_entries": ["northbridge-2026-10-05"] },
-    { "thread_key": "internal-access", "sent_messages": 0, "received_messages": 1, "confirmed_work": true, "destination_entries": ["internal-2026-10-05"] },
-    { "thread_key": "southpoint-scheduling", "sent_messages": 0, "received_messages": 1, "confirmed_work": false, "destination_entries": [] }
-  ],
-  "main_report_entries": [
-    {
-      "activity_id": "northbridge-2026-10-05",
-      "date": "2026-10-05",
-      "matter_hint": "Northbridge matter",
-      "assignment_hint": "Layout revisions",
-      "task_hint": "Review",
-      "category_label": "Project coordination",
-      "minutes": 12,
-      "billable": true,
-      "time_basis": "employee_confirmed_estimate",
-      "description": "Reviewed the requested layout changes and provided revision instructions.",
-      "communications_received": ["Client requested layout changes."],
-      "communications_sent": ["Provided revision instructions."],
-      "deliverables_advanced": ["Revision scope clarified."],
-      "evidence_ids": ["<fictional-request-1@example.invalid>", "<fictional-response-1@example.invalid>"],
-      "review_flags": [],
-      "allocation_note": "Employee confirmed 12 minutes for combined review and instructions; the 14-minute email timestamp gap was not used as elapsed time."
-    },
-    {
-      "activity_id": "internal-2026-10-05",
-      "date": "2026-10-05",
-      "matter_hint": "Configured internal project",
-      "assignment_hint": "",
-      "task_hint": "Administration",
-      "category_label": "Internal administration",
-      "minutes": 3,
-      "billable": false,
-      "time_basis": "employee_confirmed_estimate",
-      "description": "Reviewed and confirmed the shared mailbox access change.",
-      "communications_received": ["Received the access-change request."],
-      "communications_sent": [],
-      "deliverables_advanced": ["Access-change request reviewed."],
-      "evidence_ids": ["<fictional-internal-1@example.invalid>"],
-      "review_flags": []
-    }
-  ],
-  "verified_retrieved_scope_counts": {
-    "retrieved_message_results": 5,
-    "duplicate_retrieval_occurrences": 1,
-    "raw_messages_sent": 1,
-    "raw_messages_received": 3,
-    "raw_total_messages": 4,
-    "distinct_normalized_threads": 3,
-    "matter_related_threads": 2,
-    "internal_threads": 1,
-    "excluded_automated_messages": 0,
-    "excluded_messages": 1,
-    "unresolved_messages": 0,
-    "matter_timecard_entries": 1,
-    "internal_timecard_entries": 1,
-    "teams_call_minutes": null
-  },
-  "confirmed_unrounded_totals": {
-    "billable_minutes": 12,
-    "non_billable_minutes": 3,
-    "quickbase_default_minutes": 0,
-    "total_minutes": 15,
-    "total_hours": 0.25
-  }
-}
-```
+Deleted records require Timekeeper's Recover deleted entries flow, then a fresh import/read and review. Never erase receipts, alter source IDs or rename files to bypass history. Do not blindly resubmit a partial or unknown outcome.
 
-The fictional example has two matter-related threads but only one worked matter. The excluded incoming Southpoint request correctly creates no timecard. The duplicate sent hit creates no extra time. Both main entries use supported IDs exactly once. If Timekeeper rounds each separate group up to five minutes, its proposed hours will differ from the PDF's 15 confirmed minutes; that is an application calculation, not a change to the evidence or confirmation.
+10. FICTIONAL EXAMPLE
+Retrieval returns four unique non-spam messages plus one repeated hit: a client request, employee response, supported internal access action and unworked promotional email. The repeated response is not a fifth message. The promotion stays in accounting without time.
+
+Draft: 12 minutes for case request/response, 3 for internal access. A 14-minute timestamp gap is not measured duration. These are best-effort estimates. Separate quarter-hour groups show 0.25 hours each, totaling 0.50 hours; retain 15 raw minutes separately. A full-day policy preview could add 0.17 Timecards and 7.33 Misc internal to reach 8.00 hours. Flag the large policy remainder prominently.
+
+After approval, import 12 and 3 minutes with employee_confirmed_estimate and real disjoint source IDs. Three worked messages may appear in Evidence. The promotion and duplicate hit stay in review accounting. Do not insert policy additions into Activities. Timekeeper applies actual settings during review. Examples are illustrations, never evidence for an employee's day.

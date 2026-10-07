@@ -1,0 +1,104 @@
+TIMEKEEPER EMAIL EXPORT AGENT REPORT FORMAT
+CONTEXT FILE 3 - UPLOAD AS AGENT KNOWLEDGE
+Revision: 2026-10-06
+
+REQUIRED OUTPUTS
+Create detailed Word .docx on every run and real Excel review workbook for the initial proposal. Disclose incomplete coverage, estimated effort and missing IDs without withholding useful review files. After approval and validation, create the separate exact-schema import workbook. Word and REVIEW.xlsx are personal-review artifacts, not Timekeeper inputs.
+
+Filenames:
+timekeeper-email-YYYY-MM-DD.docx
+timekeeper-email-YYYY-MM-DD-REVIEW.xlsx
+timekeeper-email-YYYY-MM-DD.xlsx (confirmed import only)
+For ranges, use YYYY-MM-DD-to-YYYY-MM-DD.
+
+1. JOSH BOYD VISUAL REFERENCE
+When the actual supplied Josh Boyd daily activity report is accessible, inspect and reproduce its page setup, hierarchy, section order, matter grouping, heading typography, spacing, table styles, borders, shading, alignment, labels and detail density as closely as possible. Preserve separate received/sent communication sections. Do not replace an accessible reference with a generic design.
+
+Use it only as a layout reference. Never copy its employee, cases, counts, hours or conclusions into another day's report. Layout does not override required uncertainty labels, billing buckets or import schema.
+
+If missing/unreadable, do not claim an exact match. Note "Reference layout unavailable; standard report layout used" and deliver useful files using the fallback below. Do not stall reconstruction to request it. The shared-agent owner should supply a sanitized reference without private employee/client content.
+
+2. FIRST PAGE AND STATUS
+Include the reference's title treatment, employee, date/range and timezone.
+Before approval: DRAFT - REVIEW ONLY.
+After approval: EMPLOYEE-APPROVED REVIEW.
+State import readiness separately; IDs or file generation may still be missing.
+
+Add a concise executive summary and prominent Needs attention for major missing sources, low-confidence allocations and import blockers. Include a dashboard of calculated, clearly scoped metrics.
+
+Suggested dashboard: worked matters, supported attended meetings, available Teams call time, billable hours, non-billable hours, Quickbase-default hours and total. Label the hours' basis: underlying estimates, grouped rounded allocations, or proposed totals including policy additions. Do not mix bases without labels.
+
+Optional metrics: verified retrieved sent messages, verified retrieved received messages, unique non-spam messages and distinct threads. These are different metrics. Search hits are not total emails. If uniqueness/coverage cannot be verified, say so. Unavailable sources do not imply zero.
+
+3. MATTER ENTRIES
+Number supported worked matters consistently with the reference. Prominent heading examples: "1. 31000 - Northbridge matter" when the actual display project number is known; otherwise "1. Northbridge matter". Display numbers are not assumed Quickbase record IDs. Internal work uses the configured label. Separate policy remainder from evidenced internal activity.
+
+Under each heading, show compact category/task, hours, billing and time-basis metadata. Show underlying minutes when rounded hours differ. Assignment/category names are proposed until live matching unless a current authorized Quickbase lookup verified them.
+
+Follow with a concise action-oriented account of the employee's work and relevant sections in this order:
+Communications received
+Communications sent
+Meetings
+Teams calls
+Teams chats
+Deliverables / actions advanced
+Delegation
+Attachments / source material reviewed
+
+Separate received requests from employee responses. Each bullet captures a meaningful request, decision, action, result, deadline or deliverable impact. Never invent responses, attendance, file review or completion. Mentioning an attachment does not establish review. Omit empty sections unless the reference requires them; use Unavailable instead of false zero.
+
+Prefer "Reviewed requested layout changes, directed revisions and coordinated delivery" when supported. Avoid "Worked on emails", copied bodies, signatures and disclaimers. Every worked matter belongs in the main timecard section; an appendix is insufficient. Untimed matter mentions need communication accounting, not invented time.
+
+4. BILLING AND FALLBACK STYLE
+Use explicit BILLABLE, NON-BILLABLE and QUICKBASE DEFAULT labels in summaries/details. Do not rely on color alone. Follow the reference when available. Otherwise use restrained green for billable, muted red for non-billable and neutral slate for default, with readable contrast. Default billing is pending Quickbase, not non-billable.
+
+Fallback: professional Word document, consistent headings, dark-blue labels, light table shading, compact metadata rows and readable body spacing. Right-align hours with two decimal places. Repeat table headers, keep headings with following content and avoid splitting short metadata blocks. Include page numbers. No decorative slogans, novelty icons or excessive color.
+
+Do not shrink content to an arbitrary page count. Let long tables flow without clipping or overlap. Wrap concise communication summaries or use a landscape ledger section when needed.
+
+5. COMPLETE NON-SPAM ACCOUNTING
+Account for every retrieved in-scope non-spam message, even if untimed. Main matter sections may summarize groups; the accounting ledger provides one canonical row per unique message, disposition and destination. Repeated hits may appear as duplicate references without inflating unique counts.
+
+Ledger fields: local date/time, direction, concise subject or neutral personal label, matter/internal label, disposition, destination activity/section and brief reason. Keep real IDs in a reference field or review Excel when long. Mark missing IDs; local ledger keys are not import evidence IDs.
+
+Include personal, promotional, automated no-action, excluded-from-time and unresolved messages. Minimize sensitive personal content. Exclude spam entirely. Never allocate time merely to make each message timed.
+
+For extensive ledgers, Word can show concise accounting and direct cross-references to complete rows in REVIEW.xlsx, with reconciled counts. Do not call a Word summary the full ledger if rows are elsewhere.
+
+6. TIME AND TOTALS
+Show quarter-hour grouped decimal hours in the review. Round positive grouped underlying minutes UP to 15 minutes, not each email. Retain underlying minutes and basis. Final import contains those approved underlying minutes; Timekeeper rounds after live mapping.
+
+Separate:
+1. Underlying supported/reconstructed minutes and hours.
+2. Grouped quarter-hour allocations and rounding difference.
+3. Known existing Quickbase time, checked for overlap.
+4. Proposed configured Timecards and Misc internal additions.
+5. Proposed daily total and assumptions.
+
+Use the ordinary-day 8.00-hour planning target described in Knowledge. Label remainder as policy allocation, not measured/evidenced work. Preserve supported work above target. If existing records or app settings are unknown, mark totals provisional. Show large remainder prominently. Do not claim projected totals exactly predict the saved receipt.
+
+For each layer, billable + non-billable + Quickbase default = total on that same basis. Calculate from entries. Explain differences between raw minutes, rounded display hours and later app grouping. For ranges, show daily subtotals and a range total; eight hours is not a single target for the entire range.
+
+Include: "Estimated hours are reconstructed from available evidence and are not a timer record."
+
+7. REVIEW EXCEL
+Initial Excel is separate from the import contract. Use REVIEW in its filename and prominently label "DRAFT - REVIEW ONLY; not a Timekeeper import file" before approval. This enables immediate delivery without falsely asserting confirmation.
+
+Recommended sheets:
+Summary: employee, dates, timezone, coverage, approval/import status, daily billing buckets and separate time/policy totals.
+Proposed Activities: activity ID, date, matter, assignment/task hints, description, underlying minutes, grouped rounded hours, billing, basis, confidence, available evidence IDs and attention notes.
+Communications: full non-spam ledger, available source IDs, direction, source timestamp, concise subject/action, disposition and destination.
+Needs Attention: assumptions, retrieval limitations, missing IDs, ambiguous matches and import-readiness decisions.
+
+Use best_effort_estimate for unapproved reconstructed values. Leave unavailable source IDs blank and flag them. Separate app policy additions from evidence-backed activities. Use saved plain values without macros, external links or formulas. Omit credentials and raw bodies. Use readable tables, wrapped text and consistent widths.
+
+After approval, generate a NEW final workbook using only Metadata, Activities and optional Evidence from Import Format. Do not rename REVIEW.xlsx to make it importable. Update report status and show any excluded subset explicitly. Approval is distinct from import readiness.
+
+8. QUALITY CHECK AND DELIVERY
+Reconcile source dispositions, worked-matter entries, received/sent summaries, raw/rounded totals, billing buckets, coverage claims and cross-file identities. Selected dates must match all outputs. Preserve earlier approved work unless changed.
+
+Create actual local .docx/.xlsx with available file tools and attach real downloads. Chat tables/code do not replace files. Do not promise previews the platform does not supply. If one type fails, say which and deliver the useful remaining output.
+
+When rendering tools exist, visually inspect every Word page for missing rows, clipping, overflow, awkward splits, spacing and billing legibility. Reopen Excel to check stored values. Disclose unavailable inspection instead of claiming a visual pass. Optional PDF may be supplied on request, but does not replace Word.
+
+Keep chat concise: filenames, draft/approved/import status, important limitations and next step. Invite draft corrections or one approval when the employee is ready. For a confirmed import, direct them to import in Timekeeper, select live assignments/tasks, review hours/billing and explicitly submit. File generation does not post timecards.
