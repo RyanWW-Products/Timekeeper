@@ -24,7 +24,11 @@ The team owner maintains the shared agent using the repository's [owner guide](d
 
 For short, fragmented work, the shared email agent reconstructs a day from the employee's available mail and asks them to confirm activity and minutes in chat. Download its Excel workbook, choose **Import email Excel**, match activities to live Quickbase assignments and tasks, then review. Toggl is optional for this workflow. The [email agent instructions](docs/Timekeeper%20Email%20Export%20Agent%20Instructions.txt) and [email import guide](docs/EMAIL_IMPORT.md) define the workbook contract and setup. A personal PDF is optional and is not submission input. Email time uses confirmed minutes, with five-minute rounding after grouping and no automatic additions by default; both are configurable.
 
-Each review row has **Quickbase default / Billable / Non-billable** choices and a gray, green or dim red indicator. An override changes billing while retaining the assignment and task. Quickbase must expose a writable **Billable Override** field and permit the employee to modify it. Timekeeper checks permissions before sending overrides and confirms the saved billing result. It stops if the requested billing cannot be confirmed without replaying a created record.
+Billing shows **Billable - Default** or **Nonbillable - Default** when Quickbase exposes the fields needed to resolve its rule. Accounts with Modify access can choose a billing override; other accounts see a read-only status. If Quickbase hides the default inputs or uses an unsupported formula, the label is **Default unavailable**. Green means billable, dim red means nonbillable, and gray means unknown. Overrides preserve the assignment and task and are checked again before writing.
+
+Double-click an hours box, or focus it and press F2, to make a last-minute duration edit. Enter decimal hours and save. Other rows, including Misc internal, stay unchanged. Review the updated daily total and acknowledge the warning. Receipts keep the original and submitted hours; source and duplicate checks still apply.
+
+Version 0.6.0 also accepts the supported `timekeeper_email_review` Excel layout. It shows the draft activities and limitations and requires local confirmation before matching assignments. These files use limited row-fingerprint duplicate checks because they lack stable message IDs. The final `timekeeper_email_activity` format with genuine source IDs remains supported. Email-only users leave the Toggl token blank in Settings; only Quickbase is tested and used.
 
 ## Time policy
 

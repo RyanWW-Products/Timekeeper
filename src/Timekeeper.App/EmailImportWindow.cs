@@ -88,6 +88,8 @@ internal sealed class EmailImportWindow : Window
         _loading = true;
         var a = map.Activity;
         _details.Text = $"{a.Date:dddd, MMMM d, yyyy} · {a.Minutes} confirmed minutes\n{(a.TimeBasis == "measured" ? "Measured time" : "Employee-confirmed estimate")}\n\n{a.Description}\n\nMatter: {a.MatterHint}\nAssignment: {a.AssignmentHint}\nTask: {a.TaskHint}\nBilling requested: {(a.Billable is null ? "Quickbase default" : a.Billable.Value ? "Billable" : "Non-billable")}";
+        if (a.EvidenceSummary.Length > 0) _details.Text += "\n\nEvidence reviewed: " + a.EvidenceSummary;
+        if (a.ReviewNotes.Length > 0) _details.Text += "\n\nNeeds attention: " + a.ReviewNotes;
         _assignment.ItemsSource = new[] { new Choice(null, "Choose an assignment"), new Choice(0, $"Internal · {Session.Reference.InternalProject!.Name}") }.Concat(Session.Reference.Assignments.OrderBy(a => a.ProjectName).ThenBy(a => a.Name).Select(a => new Choice(a.Id, $"{a.ProjectName} · {a.Name} (#{a.Id})"))).ToList();
         _assignment.SelectedItem = _assignment.Items.Cast<Choice>().First(c => c.Id == (map.Internal ? 0 : map.Assignment));
         _task.ItemsSource = new[] { new Choice(null, "Choose a task") }.Concat(Session.Reference.Tasks.OrderBy(t => t.Name).Select(t => new Choice(t.Id, $"{t.Name} (#{t.Id})"))).ToList();

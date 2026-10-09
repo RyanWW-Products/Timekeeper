@@ -119,6 +119,8 @@ public sealed record RecordedEntryLink
 }
 public sealed record VerifiedRow
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public decimal? OriginalHours { get; init; }
     public string RowId { get; init; } = Guid.NewGuid().ToString("N");
     public DateOnly Date { get; init; }
     public decimal Hours { get; init; }

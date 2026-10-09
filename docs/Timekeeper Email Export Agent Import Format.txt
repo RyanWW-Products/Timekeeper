@@ -3,7 +3,7 @@ CONTEXT FILE 2 - UPLOAD AS AGENT KNOWLEDGE
 Revision: 2026-10-06
 Compatibility: Timekeeper 0.5.0 email workbook schema 1
 
-This is the FINAL import contract. Review Excel and Word may contain best-effort estimates, incomplete evidence and full communication accounting. They must not be presented as import-ready. Main Instructions control behavior; this file controls workbook structure.
+This is the FINAL activity import contract. Timekeeper 0.6.0 separately accepts the supported Review layout described in Report Format after local employee confirmation, with limited duplicate checks. The final format below still requires genuine source IDs. Review Excel and Word may contain best-effort estimates, incomplete evidence and full communication accounting. They must not be presented as import-ready. Main Instructions control behavior; this file controls workbook structure.
 
 1. REQUIRED STATE
 The employee has approved displayed activities, underlying whole minutes, billing, account, dates, timezone and disclosed limitations. One approval is sufficient. Each imported activity has real stable individual-source IDs preserved exactly, without duplicate allocation. Any unresolved timed work is resolved or explicitly excluded from an approved subset identified in the report. Accepted retrieval gaps may remain disclosed.

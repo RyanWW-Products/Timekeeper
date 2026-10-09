@@ -14,6 +14,10 @@ public sealed record EmailWorkbook
     public List<EmailActivity> Activities { get; init; } = [];
     public List<EmailEvidence> Evidence { get; init; } = [];
     public string ContentSha256 { get; init; } = "";
+    public List<string> ReviewNotes { get; init; } = [];
+    public DateTimeOffset? ReviewConfirmedAtUtc { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsReviewWorkbook => Metadata.Format == "timekeeper_email_review";
     public static EmailWorkbook Load(string path) => EmailWorkbookReader.Read(path);
 }
 
@@ -40,6 +44,8 @@ public sealed record EmailActivity
     public string TaskHint { get; init; } = "";
     public string Description { get; init; } = "";
     public bool? Billable { get; init; }
+    public string ReviewNotes { get; init; } = "";
+    public string EvidenceSummary { get; init; } = "";
     public string TimeBasis { get; init; } = "";
     public List<string> EvidenceIds { get; init; } = [];
 }
@@ -61,7 +67,7 @@ public sealed record RecordedActivityLink
 }
 
 /// <summary>Reads only plain cell values from a bounded XLSX package. Excel is never launched.</summary>
-public static class EmailWorkbookReader
+public static partial class EmailWorkbookReader
 {
     public const int MaximumActivities = 1000;
     private const long MaximumFileBytes = 10 * 1024 * 1024;
@@ -106,8 +112,6 @@ public static class EmailWorkbookReader
                 using var stream = part.Open();
                 using var xml = XmlReader.Create(stream, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = MaximumPartBytes, MaxCharactersFromEntities = 0 });
                 var doc = XDocument.Load(xml, LoadOptions.None);
-                if (doc.Descendants(Main + "f").Any() || doc.Descendants(Main + "definedName").Any())
-                    throw Bad("Formula cells and defined formulas are not supported. Export plain values.");
                 if (doc.Descendants(Relations + "Relationship").Any(r => string.Equals((string?)r.Attribute("TargetMode"), "External", StringComparison.OrdinalIgnoreCase)))
                     throw Bad("External links are not supported. Export plain text values without hyperlinks.");
                 if (doc.Descendants().Attributes("ContentType").Any(a => a.Value.Contains("macroEnabled", StringComparison.OrdinalIgnoreCase)))
@@ -124,11 +128,21 @@ public static class EmailWorkbookReader
                 ? sharedDoc.Root!.Elements(Main + "si").Select(PlainText).ToList() : [];
             if (shared.Count > 50_000) throw Bad("The workbook contains too many shared strings.");
             var sheets = new Dictionary<string, List<Dictionary<string, string>>>(StringComparer.Ordinal);
+            var isReview = workbook.Descendants(Main + "sheet").Any(s => (string?)s.Attribute("name") == "Review");
+            foreach (var doc in documents.Values)
+            {
+                if (!isReview && (doc.Descendants(Main + "f").Any() || doc.Descendants(Main + "definedName").Any()))
+                    throw Bad("Formula cells and defined formulas are not supported. Export plain values.");
+                if (isReview && doc.Descendants(Main + "definedName").Any(n => (string?)n.Attribute("name") != "_xlnm._FilterDatabase"
+                    || !Regex.IsMatch(n.Value, @"\A(?:Review|'Communication Accounting')!\$[A-I]\$[1-9][0-9]{0,4}:\$[A-I]\$[1-9][0-9]{0,4}\z")))
+                    throw Bad("Defined formulas are not supported in review workbooks.");
+            }
+            var reviewSheets = new Dictionary<string, SortedDictionary<int, Dictionary<int, string>>>(StringComparer.Ordinal);
             var sheetParts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var sheet in workbook.Root?.Element(Main + "sheets")?.Elements(Main + "sheet") ?? [])
             {
                 var name = (string?)sheet.Attribute("name") ?? "";
-                if (name is not ("Metadata" or "Activities" or "Evidence")) throw Bad($"Unsupported worksheet '{name}'. Use Metadata, Activities and optional Evidence only.");
+                if (isReview ? name is not ("Metadata" or "Review" or "Communication Accounting" or "Needs attention") : name is not ("Metadata" or "Activities" or "Evidence")) throw Bad($"Unsupported worksheet '{name}'. Use Metadata, Activities and optional Evidence only.");
                 var relation = rels.SingleOrDefault(r => (string?)r.Attribute("Id") == (string?)sheet.Attribute(OfficeRelations + "id"));
                 if (relation is null || !((string?)relation.Attribute("Type") ?? "").EndsWith("/worksheet", StringComparison.Ordinal)) throw Bad($"Worksheet '{name}' has an invalid relationship.");
                 var target = (string?)relation.Attribute("Target") ?? "";
@@ -136,8 +150,14 @@ public static class EmailWorkbookReader
                 else target = "xl/" + target;
                 if (target.Contains('\\') || target.Contains('%') || target.Split('/').Any(p => p is "." or "..") || !target.StartsWith("xl/worksheets/", StringComparison.Ordinal))
                     throw Bad("A worksheet points outside the workbook.");
-                if (!sheetParts.Add(target) || sheets.ContainsKey(name)) throw Bad("Worksheet names or package references are duplicated.");
-                sheets.Add(name, ReadSheet(Required(target), name, shared));
+                if (!sheetParts.Add(target) || sheets.ContainsKey(name) || reviewSheets.ContainsKey(name)) throw Bad("Worksheet names or package references are duplicated.");
+                if (isReview) reviewSheets.Add(name, ReadReviewCells(Required(target), name, shared));
+                else sheets.Add(name, ReadSheet(Required(target), name, shared));
+            }
+            if (isReview)
+            {
+                if (documents.Any(d => !sheetParts.Contains(d.Key) && d.Value.Descendants(Main + "f").Any())) throw Bad("Formula content outside a worksheet is not supported.");
+                return ReadReview(reviewSheets, digest);
             }
             if (!sheets.TryGetValue("Metadata", out var metadataRows) || !sheets.TryGetValue("Activities", out var activityRows))
                 throw Bad("The workbook needs Metadata and Activities worksheets.");
@@ -173,15 +193,15 @@ public static class EmailWorkbookReader
         { throw Bad("The workbook structure is invalid. Ask the email agent for a new plain-value export.", ex); }
     }
 
-    public static List<string> Validate(EmailWorkbook? workbook, AppSettings? settings = null, DateTimeOffset? now = null)
+    public static List<string> Validate(EmailWorkbook? workbook, AppSettings? settings = null, DateTimeOffset? now = null, bool allowReviewDraft = false)
     {
         var errors = new List<string>();
         if (workbook?.Metadata is null || workbook.Activities is null || workbook.Evidence is null) return ["Email workbook metadata or activities are missing."];
         var meta = workbook.Metadata;
-        if (meta.Format != "timekeeper_email_activity" || meta.SchemaVersion != 1) errors.Add("Unsupported email workbook format or schema version.");
+        if (meta.Format is not ("timekeeper_email_activity" or "timekeeper_email_review") || meta.SchemaVersion != 1) errors.Add("Unsupported email workbook format or schema version.");
         if (!MailAddress.TryCreate(meta.EmployeeEmail, out var address) || address.Address != meta.EmployeeEmail) errors.Add("The workbook employee_email must be a valid email address.");
         if (settings is not null && !string.Equals(meta.EmployeeEmail, settings.Email, StringComparison.OrdinalIgnoreCase)) errors.Add("The workbook employee email does not match the verified Quickbase account.");
-        if (!meta.EmployeeConfirmed) errors.Add("Confirm all activity and minutes with the email agent before exporting. employee_confirmed must be true.");
+        if ((!meta.EmployeeConfirmed || (workbook.IsReviewWorkbook && !workbook.ReviewConfirmedAtUtc.HasValue)) && !(allowReviewDraft && workbook.IsReviewWorkbook)) errors.Add("Confirm all activity and minutes before importing. Review workbooks require confirmation in Timekeeper; final exports require employee_confirmed=true.");
         TimeZoneInfo? zone = null;
         try { zone = TimeZoneInfo.FindSystemTimeZoneById(meta.TimeZone); }
         catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException or ArgumentException) { errors.Add("The workbook time_zone must be a valid Windows or IANA time zone."); }
@@ -205,6 +225,7 @@ public static class EmailWorkbookReader
             if (row.Minutes is < 1 or > 1440) errors.Add($"{label} must have between 1 and 1,440 confirmed whole minutes.");
             if (row.TimeBasis is not ("employee_confirmed_estimate" or "measured")) errors.Add($"{label} has an unsupported time_basis.");
             if (string.IsNullOrWhiteSpace(row.Description) || row.Description.Length > 4000 || HasControls(row.Description)) errors.Add($"{label} needs a plain-text description of at most 4,000 characters.");
+            if (new[] { row.ReviewNotes, row.EvidenceSummary }.Any(s => s is null || s.Length > 4000 || HasControls(s))) errors.Add($"{label} has invalid review details.");
             if (new[] { row.MatterHint, row.AssignmentHint, row.TaskHint }.Any(s => s is null || s.Length > 1000 || HasControls(s))) errors.Add($"{label} has an invalid mapping hint.");
             if (row.EvidenceIds is null || row.EvidenceIds.Count is 0 or > 1000) { errors.Add($"{label} needs immutable evidence IDs for its messages or events."); continue; }
             foreach (var id in row.EvidenceIds)
@@ -212,6 +233,8 @@ public static class EmailWorkbookReader
         }
         foreach (var day in workbook.Activities.Where(a => a is not null).GroupBy(a => a.Date))
             if (day.Sum(a => (long)a.Minutes) > 1440) errors.Add($"{day.Key:yyyy-MM-dd}: confirmed activity exceeds 24 hours.");
+        if (workbook.ReviewNotes is null || workbook.ReviewNotes.Count > 1000 || workbook.ReviewNotes.Any(n => n is null || n.Length > 4000 || HasControls(n))) errors.Add("Review notes are invalid.");
+        if (workbook.ReviewConfirmedAtUtc is DateTimeOffset confirmed && (confirmed.Offset != TimeSpan.Zero || confirmed > (now ?? DateTimeOffset.UtcNow).AddMinutes(5))) errors.Add("The review confirmation timestamp is invalid.");
         var corroborating = new HashSet<string>(StringComparer.Ordinal);
         if (workbook.Evidence.Count > 10_000) errors.Add("The Evidence sheet contains too many entries.");
         foreach (var item in workbook.Evidence)
@@ -222,9 +245,9 @@ public static class EmailWorkbookReader
         return errors.Distinct().ToList();
     }
 
-    private static List<Dictionary<string, string>> ReadSheet(XDocument document, string name, List<string> shared)
+    private static SortedDictionary<int, Dictionary<int, string>> ReadCells(XDocument document, string name, List<string> shared, bool allowMerged = false)
     {
-        if (document.Root?.Name != Main + "worksheet" || document.Descendants(Main + "mergeCell").Any()) throw Bad($"Worksheet '{name}' must contain a plain unmerged table.");
+        if (document.Root?.Name != Main + "worksheet" || (!allowMerged && document.Descendants(Main + "mergeCell").Any())) throw Bad($"Worksheet '{name}' must contain a plain unmerged table.");
         var cells = new SortedDictionary<int, Dictionary<int, string>>();
         var totalCells = 0;
         foreach (var row in document.Root.Element(Main + "sheetData")?.Elements(Main + "row") ?? [])
@@ -253,6 +276,12 @@ public static class EmailWorkbookReader
             }
             cells.Add(rowNumber, values);
         }
+        return cells;
+    }
+
+    private static List<Dictionary<string, string>> ReadSheet(XDocument document, string name, List<string> shared)
+    {
+        var cells = ReadCells(document, name, shared);
         if (!cells.TryGetValue(1, out var headerCells)) throw Bad($"Worksheet '{name}' must have its headers in row 1.");
         var expected = name switch { "Metadata" => ["key", "value"], "Activities" => ActivityHeaders, _ => EvidenceHeaders };
         if (headerCells.Any(c => c.Key > expected.Length && c.Value.Length > 0) || !Enumerable.Range(1, expected.Length).All(i => headerCells.TryGetValue(i, out var h) && h == expected[i - 1])) throw Bad($"Worksheet '{name}' headers must be: {string.Join(", ", expected)}.");

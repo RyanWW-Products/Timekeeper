@@ -7,7 +7,27 @@ static class BillingApiTests
 {
     public static async Task Run(Func<string, Func<Task>, Task> check)
     {
-        await check("Quickbase-only identity test and discovery require no Toggl token", async () =>
+        await check("live recognized billing rule resolves task defaults and internal exceptions", async () =>
+        {
+            foreach (var projectType in new[] { "Internal", "Client" })
+            {
+                using var f = new BillingFixture();
+                f.Server.ProjectType = projectType;
+                f.Server.Metadata = new object[] { BillingFake.OverrideField(),
+                    new { id = 172, label = "Bill This Task", fieldType = "checkbox", mode = "formula", properties = new { formula = "If([Billable Override]=\"\",If([Project Type]=\"Internal\",false,[Bill Task]=true,true,false), [Billable Override]=\"NonBillable\",false,[Billable Override]=\"Billable\",true)" } },
+                    new { id = 90, label = "Project Type", fieldType = "text", mode = "lookup", properties = new { lookupReferenceFieldId = 11, lookupTargetFieldId = 9 } },
+                    new { id = 91, label = "Bill Task", fieldType = "checkbox", mode = "lookup", properties = new { lookupReferenceFieldId = 16, lookupTargetFieldId = 8 } }
+                };
+                var reference = await f.Api.ReadReferenceAsync();
+                Equal<bool?>(projectType != "Internal", reference.Billing!.DefaultFor(100, 44));
+                Equal<bool?>(null, reference.Billing.DefaultFor(999, 44)); Equal(0, f.Server.WriteCount);
+            }
+        });
+        await check("unknown billing formulas never guess a default", async () =>
+        {
+            using var f = new BillingFixture(); var reference = await f.Api.ReadReferenceAsync();
+            Equal<bool?>(null, reference.Billing!.DefaultFor(100, 44));
+        });        await check("Quickbase-only identity test and discovery require no Toggl token", async () =>
         {
             using var f = new BillingFixture("");
             True((await f.Api.TestQuickbaseAsync()).Contains("person@example.com"));
@@ -184,6 +204,7 @@ sealed class BillingFake : HttpMessageHandler
     public HttpMethod? MetadataMethod;
     public bool? ForceBillable;
     public bool OmitWriteResult;
+    public string ProjectType = "Internal";
     private bool actualBillable;
     public static object OverrideField(int id = 99, string mode = "", string type = "text", object? permissions = null, object? properties = null) =>
         new { id, label = "Billable Override", fieldType = type, mode, permissions = permissions ?? Array.Empty<object>(), properties = properties ?? new { formula = "" } };
@@ -225,8 +246,8 @@ sealed class BillingFake : HttpMessageHandler
             object[]? references = table switch
             {
                 "beb9dvs6p" => [FakeApi.Row((3, 11), (6, "Internal"))],
-                "bd3bsxtbn" => [FakeApi.Row((3, 44), (7, "Internal work"), (11, true), (17, 11))],
-                "bd3bsxtbj" => [FakeApi.Row((3, 100), (6, "Internal"))],
+                "bd3bsxtbn" => [FakeApi.Row((3, 44), (7, "Internal work"), (8, true), (11, true), (17, 11))],
+                "bd3bsxtbj" => [FakeApi.Row((3, 100), (6, "Internal"), (9, ProjectType))],
                 "biqs87fvg" => [],
                 _ => null
             };

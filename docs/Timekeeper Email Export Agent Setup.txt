@@ -32,3 +32,6 @@ This package updates agent guidance only. It does not update the application, in
 
 QUICK CHECK AFTER UPDATING
 Ask for a day with known activity. Confirm the agent delivers REVIEW.xlsx and Word before routine questions, labels uncertainties, accounts for non-spam messages and preserves work above eight hours. Approve the proposal once, then verify the separate import workbook uses minutes and real source IDs. Import it in Timekeeper for review; submission is a separate deliberate action.
+
+TIMEKEEPER 0.6.0
+Update the main instructions and all three context files together. Review Excel now uses the exact Metadata/Review/Communication Accounting/Needs attention layout. Employees can confirm this review inside Timekeeper with limited duplicate detection. Final activity exports still require real evidence IDs. Email-only employees leave Toggl blank in Settings; Quickbase setup remains required for mapping and submission.

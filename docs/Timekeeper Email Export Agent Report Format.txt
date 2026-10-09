@@ -1,6 +1,6 @@
 TIMEKEEPER EMAIL EXPORT AGENT REPORT FORMAT
 CONTEXT FILE 3 - UPLOAD AS AGENT KNOWLEDGE
-Revision: 2026-10-06
+Revision: 2026-10-09
 
 REQUIRED OUTPUTS
 Create detailed Word .docx on every run and real Excel review workbook for the initial proposal. Disclose incomplete coverage, estimated effort and missing IDs without withholding useful review files. After approval and validation, create the separate exact-schema import workbook. Word and REVIEW.xlsx are personal-review artifacts, not Timekeeper inputs.
@@ -81,18 +81,23 @@ For each layer, billable + non-billable + Quickbase default = total on that same
 
 Include: "Estimated hours are reconstructed from available evidence and are not a timer record."
 
-7. REVIEW EXCEL
-Initial Excel is separate from the import contract. Use REVIEW in its filename and prominently label "DRAFT - REVIEW ONLY; not a Timekeeper import file" before approval. This enables immediate delivery without falsely asserting confirmation.
+7. REVIEW EXCEL (TIMEKEEPER 0.6.0+)
+Use REVIEW in the filename and label unapproved files DRAFT - REVIEW ONLY. These can be confirmed in Timekeeper; they are not final activity exports. Do not invent evidence IDs when M365 cannot provide them.
 
-Recommended sheets:
-Summary: employee, dates, timezone, coverage, approval/import status, daily billing buckets and separate time/policy totals.
-Proposed Activities: activity ID, date, matter, assignment/task hints, description, underlying minutes, grouped rounded hours, billing, basis, confidence, available evidence IDs and attention notes.
-Communications: full non-spam ledger, available source IDs, direction, source timestamp, concise subject/action, disposition and destination.
-Needs Attention: assumptions, retrieval limitations, missing IDs, ambiguous matches and import-readiness decisions.
+Use exactly these sheets: Metadata, Review, and optional Communication Accounting and Needs attention. Do not add Summary or Proposed Activities sheets to this supported layout.
 
-Use best_effort_estimate for unapproved reconstructed values. Leave unavailable source IDs blank and flag them. Separate app policy additions from evidence-backed activities. Use saved plain values without macros, external links or formulas. Omit credentials and raw bodies. Use readable tables, wrapped text and consistent widths.
+Metadata has key,value headers in row 1. Required keys: format=timekeeper_email_review, employee_email, time_zone, period_start, period_end, employee_confirmed=false for drafts, retrieval_limitations. Dates use yyyy-MM-dd; identify missing stable IDs and incomplete coverage explicitly. Timekeeper asks for local confirmation regardless of the employee_confirmed cell.
 
-After approval, generate a NEW final workbook using only Metadata, Activities and optional Evidence from Import Format. Do not rename REVIEW.xlsx to make it importable. Update report status and show any excluded subset explicitly. Approval is distinct from import readiness.
+Review columns in exact order: Date | Matter / Project | Assignment / Category | Detailed work summary | Billing | Minutes | Decimal Hours | Evidence Reviewed | Needs Attention
+A title may precede the headers. Date is ISO text, Minutes is a positive whole number, Decimal Hours is Minutes/60 rounded to two decimals. Billing is BILLABLE, NON-BILLABLE or QUICKBASE DEFAULT. Use clear mapping hints, detailed descriptions, concise evidence subjects and all unresolved notes. Optional final TOTAL has sums only in Minutes and Decimal Hours. Each day's minutes must be at most 1440.
+
+Use saved plain values. Timekeeper also supports G-row formulas F[row]/60 and whole-table SUM totals in F/G, calculated locally, not from cached results. Only a row-1 title and the TOTAL label A:E may be merged. No external links, macros, arbitrary formulas, credentials or raw message bodies.
+
+Communication Accounting contains the full non-spam ledger with direction/source, matter/thread, most recent subject, disposition, whether time bearing and notes. Needs attention contains assumptions, coverage gaps, missing IDs and approval decisions. Keep policy allocations clearly disclosed and separate where possible; do not duplicate automatic app additions.
+
+On import, the employee reviews activities and notes and accepts limited duplicate detection before matching live Quickbase relationships. These files have row fingerprints, not stable message IDs. Changed or regrouped files can escape duplicate matching. The employee must check existing time. The app records confirmation; the agent must not pretend it already occurred.
+
+When genuine source IDs and chat approval are available, generate a separate final workbook using Metadata, Activities and optional Evidence from Import Format. Its exact schema remains unchanged. Explain any approved subset or differences in rounding/policy totals.
 
 8. QUALITY CHECK AND DELIVERY
 Reconcile source dispositions, worked-matter entries, received/sent summaries, raw/rounded totals, billing buckets, coverage claims and cross-file identities. Selected dates must match all outputs. Preserve earlier approved work unless changed.

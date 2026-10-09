@@ -26,6 +26,7 @@ public static class EmailRules
         { errors.Add("The email workbook, source session and proposal are required."); return result; }
         errors.AddRange(Rules.ValidateSettings(session.Settings));
         errors.AddRange(EmailWorkbookReader.Validate(session.EmailWorkbook, session.Settings, now));
+        if (session.EmailWorkbook.IsReviewWorkbook) warnings.Add(EmailWorkbookReader.ReviewLimitations);
         if (session.SchemaVersion != 1 || proposal.SchemaVersion != 1) errors.Add("Unsupported email session or proposal schema version.");
         if (string.IsNullOrWhiteSpace(session.SessionId) || proposal.SessionId != session.SessionId) errors.Add("This proposal belongs to a different import session. Import the workbook again.");
         if (proposal.EmployeeId != session.Settings.EmployeeId) errors.Add("The proposal employee ID does not match the verified account.");

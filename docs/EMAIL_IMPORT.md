@@ -10,7 +10,7 @@ In Agent Builder, open **Configure > Knowledge**, select the search bar, and add
 
 Under **Capabilities**, enable **Create documents, charts, and code** if the toggle is shown. Some Agent Builder experiences include code interpreter automatically. This capability supports downloadable Excel workbooks and optional PDFs. Test that the agent produces an actual `.xlsx` download and ask employees to save it while the session is active. [Microsoft: Build agents](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/agent-builder-build-agents), [Microsoft: Code interpreter](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/code-interpreter)
 
-The agent must retrieve stable IDs for individual messages or events before producing an import-ready workbook. A conversation ID or generated citation label is insufficient for duplicate checks. Test inventory coverage and usable IDs in your tenant; instructions do not guarantee either. Missing IDs do not block the draft Word report and review workbook, but must be disclosed. The agent must not invent IDs or claim import readiness until the source limitation is resolved. File-generation failures must also be disclosed.
+The agent must retrieve stable IDs for individual messages or events before producing an import-ready workbook. A conversation ID or generated citation label is insufficient for duplicate checks. Test inventory coverage and usable IDs in your tenant; instructions do not guarantee either. Missing IDs do not block the draft Word report and review workbook, but must be disclosed. The agent must not invent IDs. Missing IDs prevent a final activity export, but the supported review workbook can be confirmed locally in Timekeeper with limited duplicate detection. File-generation failures must also be disclosed.
 
 Never put Quickbase or Toggl tokens in the agent or exported files. Configure your own Quickbase credentials in Timekeeper. Toggl credentials are optional for this workflow. Do not embed an employee's mailbox export as shared agent knowledge. Supply a sanitized Josh Boyd reference report if the agent should reproduce its layout.
 
@@ -18,7 +18,7 @@ Never put Quickbase or Toggl tokens in the agent or exported files. Configure yo
 
 1. Give the email agent the reporting date, your verified Quickbase sign-in email, and the timezone configured in Timekeeper. Confirm that it is reviewing your own mailbox.
 2. Review the agent's best-effort Word report and `-REVIEW.xlsx` workbook. It provides drafts before routine confirmation questions, labels estimates and coverage gaps, and accounts for every retrieved non-spam message, including untimed items. Email timestamps do not establish how long you worked.
-3. Correct the proposal as needed, then approve the displayed work, underlying minutes, billing, account, dates and limitations once. The agent creates a separate import `.xlsx` using the exact schema below when approval and real stable source IDs are available. Word and `-REVIEW.xlsx` are review-only; do not import them. Unresolved activities must be resolved or explicitly excluded from an approved subset.
+3. Correct the proposal as needed, then approve the displayed work, underlying minutes, billing, account, dates and limitations once. The agent creates a separate import `.xlsx` using the exact schema below when approval and real stable source IDs are available. Word is for personal review. Version 0.6.0 can also import the supported `-REVIEW.xlsx` format after confirmation inside Timekeeper, with limited duplicate detection. Unresolved activities must be resolved or explicitly excluded from an approved subset.
 4. Choose **Import email Excel** in Timekeeper, or drag the downloaded workbook into the file drop area. For a multi-day workbook, select the dates to include. In **Match your activities**, select the matching Quickbase assignments and tasks using live lookup results. Use **Find assignment** if needed. The workbook supplies name hints, not authoritative Quickbase record IDs. If work already exists, select its actual record under **Already in Quickbase?** instead of submitting it again.
 5. Confirm **These activities and confirmed minutes are mine**, then choose **Review timecards**. Review dates, grouped hours, descriptions, assignments, tasks, and billing. Timekeeper applies the selected rounding once per group. The agent supplies confirmed whole minutes without rounding or automatic additions.
 6. Choose **Write to Quickbase** after reviewing the result. Check **Submission history** for the saved receipt.
@@ -39,9 +39,26 @@ Ledgers stay in the authorized chat or a separate review artifact. Do not add le
 
 ## Billing during review
 
-The **Billing** dropdown offers **Quickbase default**, **Billable**, and **Non-billable** while retaining the same project, assignment, and task. A green indicator identifies a billable override; dim red identifies non-billable; gray means Quickbase will determine the default when saved. Read the label as well as the color. A blank workbook value selects **Quickbase default**.
+The Billing dropdown appears only when Quickbase confirms Modify access to its Billable Override field. Otherwise, billing is read-only. Default labels show **Billable - Default** or **Nonbillable - Default** from the live rule and readable project/task fields. If those inputs are hidden or the formula is unsupported, **Default unavailable** avoids guessing. Green means billable, dim red means nonbillable, and gray means unknown. An explicit imported override without permission must be cleared with **Use default**, or the permission issue resolved, before submission.
 
-An override requires a writable field supported by the Quickbase app and your account's permissions. If Timekeeper reports that an override is unavailable or rejected, resolve the field or permission issue before submitting that choice. The application cannot grant additional Quickbase permissions.
+Double-click Hours (or focus it and press F2) to edit decimal hours. Saving changes that row only and requires confirmation of the updated total. Original hours remain in the receipt. New proposals and billing regrouping reset manual edits, so make duration changes last.
+
+## Confirmed review workbooks (0.6.0+)
+
+Toggl is optional. Leave its token blank in Settings and test/save the Quickbase account normally.
+
+Use `format=timekeeper_email_review` in Metadata. Required keys: format, employee_email, time_zone, period_start, period_end, employee_confirmed, retrieval_limitations. Preserve `employee_confirmed=false` in an unapproved draft. Timekeeper always asks for local confirmation even if this cell says true. The workbook email and time zone must match the verified account.
+
+Required sheet: `Review`, with these exact headers in one row:
+`Date | Matter / Project | Assignment / Category | Detailed work summary | Billing | Minutes | Decimal Hours | Evidence Reviewed | Needs Attention`
+
+Dates are ISO text. Minutes are positive whole numbers. Billing is `BILLABLE`, `NON-BILLABLE` or `QUICKBASE DEFAULT`. Hours must agree with Minutes / 60 to two decimals. An optional TOTAL row must match. Optional sheets are exactly `Communication Accounting` and `Needs attention`. A title may be merged in row 1; a TOTAL label may span A:E. The supplied October 8 workbook is supported.
+
+Plain values are preferred. The reader also recalculates same-row `F[row]/60` formulas in G and whole-table `SUM` totals in F/G. Excel cached values are ignored for these formulas. Other formulas, external links, macros and merged activity data are rejected. Filter-range names for Review/Communication Accounting are supported.
+
+The confirmation screen displays every activity, attention note and retrieval limitation. Both activity confirmation and limited-duplicate acknowledgement are required. Timekeeper records the confirmation time, original workbook hash and local row fingerprints. These fingerprints are not email IDs: edited/regrouped exports and crossover with final activity exports may escape duplicate matching. Check existing Quickbase time before submitting. No records are written by import or confirmation.
+
+Review rows may already include a disclosed policy allocation. Keep automatic email additions off unless they are deliberately needed; do not add the same time twice. Final imports below retain their stricter real-source-ID contract.
 
 ## Workbook contract
 

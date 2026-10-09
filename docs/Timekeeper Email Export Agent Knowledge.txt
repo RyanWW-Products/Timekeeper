@@ -118,3 +118,7 @@ Retrieval returns four unique non-spam messages plus one repeated hit: a client 
 Draft: 12 minutes for case request/response, 3 for internal access. A 14-minute timestamp gap is not measured duration. These are best-effort estimates. Separate quarter-hour groups show 0.25 hours each, totaling 0.50 hours; retain 15 raw minutes separately. A full-day policy preview could add 0.17 Timecards and 7.33 Misc internal to reach 8.00 hours. Flag the large policy remainder prominently.
 
 After approval, import 12 and 3 minutes with employee_confirmed_estimate and real disjoint source IDs. Three worked messages may appear in Evidence. The promotion and duplicate hit stay in review accounting. Do not insert policy additions into Activities. Timekeeper applies actual settings during review. Examples are illustrations, never evidence for an employee's day.
+
+
+TIMEKEEPER 0.6.0 REVIEW IMPORT
+The supported timekeeper_email_review layout in Report Format can be confirmed inside Timekeeper even when stable source IDs are unavailable. Do not fabricate IDs. Keep drafts unconfirmed and disclose incomplete evidence, estimates and policy allocations. Local row fingerprints provide limited duplicate detection; edited/regrouped exports may not match. Final activity exports retain the genuine-source-ID requirement. No agent output submits records automatically.

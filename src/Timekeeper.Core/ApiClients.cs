@@ -264,7 +264,9 @@ public sealed partial class TimecardApi : IDisposable
             .Select(r => new ProjectRecord(RecordId(r, settings.ProjectsTable, 3, "Record ID"), CellString(r, 6))).ToList();
         // Multiple annual project matches must be selected explicitly in settings, never guessed.
         var internalProject = projects.Count == 1 ? projects[0] : null;
-        return new ReferenceData { Tasks = tasks.OrderBy(t => t.Id).ToList(), Categories = categories.OrderBy(c => c.Id).ToList(), Assignments = assignments.OrderBy(a => a.Id).ToList(), InternalProject = internalProject, Billing = await ReadBillingCapabilitiesAsync(ct: ct) };
+        var billing = await ReadBillingCapabilitiesAsync(refresh: true, ct: ct);
+        await ReadBillingDefaultsAsync(billing, assignments.Select(a => a.ProjectId).Concat(projects.Select(p => p.Id)), ct);
+        return new ReferenceData { Tasks = tasks.OrderBy(t => t.Id).ToList(), Categories = categories.OrderBy(c => c.Id).ToList(), Assignments = assignments.OrderBy(a => a.Id).ToList(), InternalProject = internalProject, Billing = billing };
     }
 
     public async Task<List<AssignmentRecord>> FindAssignmentsAsync(string query, CancellationToken ct = default)
@@ -273,7 +275,10 @@ public sealed partial class TimecardApi : IDisposable
         var words = query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         if (words.Length == 0 || words.Length > 12) throw new ArgumentException("Enter one to twelve search words.");
         var where = string.Join("AND", words.Select(word => $"({{13.CT.'{EscapeQuery(word)}'}}OR{{16.CT.'{EscapeQuery(word)}'}}OR{{23.CT.'{EscapeQuery(word)}'}})"));
-        return (await QueryAllAsync(settings.AssignmentsTable, AssignmentFields, where, ct)).Select(ParseAssignment).ToList();
+        var assignments = (await QueryAllAsync(settings.AssignmentsTable, AssignmentFields, where, ct)).Select(ParseAssignment).ToList();
+        var billing = await ReadBillingCapabilitiesAsync(ct: ct);
+        await ReadBillingDefaultsAsync(billing, assignments.Select(a => a.ProjectId), ct);
+        return assignments;
     }
 
     internal async Task<AssignmentRecord?> ReadAssignmentAsync(int id, CancellationToken ct)
@@ -284,6 +289,7 @@ public sealed partial class TimecardApi : IDisposable
     internal async Task<ProjectRecord?> ReadProjectAsync(int id, CancellationToken ct)
     {
         var rows = await QueryAllAsync(settings.ProjectsTable, [3, 6], $"{{3.EX.'{id}'}}", ct);
+        if (billingCapabilities is not null) await ReadBillingDefaultsAsync(billingCapabilities, [id], ct);
         return rows.Count == 1 ? new ProjectRecord(RecordId(rows[0], settings.ProjectsTable, 3, "Record ID"), CellString(rows[0], 6)) : null;
     }
     internal static bool IsClosed(string status) => new[] { "closed", "complete", "completed", "cancelled", "canceled", "inactive", "archived" }.Contains(status.Trim(), StringComparer.OrdinalIgnoreCase);

@@ -5,14 +5,14 @@ namespace Timekeeper.Core;
 /// <summary>One reviewed row per request. Every possible side effect has a durable pending journal first.</summary>
 public sealed class SubmissionService(TimecardApi api, SessionStore store)
 {
-    public async Task<SubmissionReceipt> SubmitAsync(ReadSession session, ProposalEnvelope proposal, IReadOnlyList<VerifiedRow> reviewedRows, CancellationToken ct = default, bool warningsAcknowledged = false, IReadOnlyCollection<DateOnly>? selectedDates = null)
+    public async Task<SubmissionReceipt> SubmitAsync(ReadSession session, ProposalEnvelope proposal, IReadOnlyList<VerifiedRow> reviewedRows, CancellationToken ct = default, bool warningsAcknowledged = false, IReadOnlyCollection<DateOnly>? selectedDates = null, IReadOnlyList<ReviewDuration>? durationEdits = null)
     {
         using var localLock = store.AcquireSubmissionLock();
         if (session.Demo) throw new InvalidOperationException("Demo sessions cannot write to Quickbase.");
         if (!Same(session.Settings, api.Settings)) throw new InvalidOperationException("Account or policy settings changed. Read the day again before submitting.");
         if (reviewedRows.Count == 0) throw new InvalidOperationException("There are no new rows to submit.");
         var scope = ProposalScope.Select(session, proposal, selectedDates);
-        var validation = Rules.Validate(scope.Session, scope.Proposal);
+        var validation = ReviewDurations.Apply(scope.Session, Rules.Validate(scope.Session, scope.Proposal), durationEdits);
         if (!validation.IsValid) throw new InvalidOperationException("The proposal is no longer valid: " + string.Join(" ", validation.Errors));
         if (validation.Warnings.Count > 0 && !warningsAcknowledged)
             throw new InvalidOperationException("Review and acknowledge every proposal warning before writing to Quickbase.");
@@ -237,6 +237,9 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
             var project = await api.ReadProjectAsync(id, ct);
             if (project is null || rows.Any(r => r.Project == id && r.ProjectName != project.Name)) throw Stale("Quickbase project");
         }
+        foreach (var row in rows.Where(r => !r.BillableOverride.HasValue))
+            if (session.Reference.Billing?.DefaultFor(row.Project, row.Task) is bool before && reference.Billing?.DefaultFor(row.Project, row.Task) != before)
+                throw Stale("Quickbase billing default");
         foreach (var id in rows.Where(r => r.Assignment.HasValue).Select(r => r.Assignment!.Value).Distinct())
         {
             var original = session.Reference.Assignments.SingleOrDefault(a => a.Id == id);

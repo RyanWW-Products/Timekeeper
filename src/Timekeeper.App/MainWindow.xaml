@@ -152,17 +152,29 @@
               <DataGrid x:Name="ReviewGrid" FrozenColumnCount="2" MinHeight="100" MaxHeight="320" Visibility="Collapsed" ScrollViewer.HorizontalScrollBarVisibility="Auto" MouseDoubleClick="RowDetails_Click" ToolTip="Double-click a row to inspect its full description and field IDs.">
                 <DataGrid.Columns>
                   <DataGridTextColumn Header="Date" Binding="{Binding Date, StringFormat=yyyy-MM-dd}" ElementStyle="{StaticResource TableText}" Width="110" MinWidth="110"/>
-                  <DataGridTextColumn Header="Hours" Binding="{Binding Hours, StringFormat=F2}" ElementStyle="{StaticResource TableNumber}" Width="72" MinWidth="72"/>
+                  <DataGridTemplateColumn Header="Hours" Width="88" MinWidth="88">
+                    <DataGridTemplateColumn.CellStyle><Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}"><Setter Property="Padding" Value="4,2"/></Style></DataGridTemplateColumn.CellStyle>
+                    <DataGridTemplateColumn.CellTemplate><DataTemplate>
+                      <TextBox Text="{Binding Hours, Mode=OneWay, StringFormat=F2}" IsReadOnly="True" IsReadOnlyCaretVisible="False" TextAlignment="Right" Padding="5,4" Margin="2" MinHeight="28" FontFamily="{StaticResource MonoFont}" ToolTip="{Binding DurationHint}" PreviewMouseDoubleClick="Duration_DoubleClick" PreviewKeyDown="Duration_KeyDown" AutomationProperties.Name="Hours. Double-click or press F2 to edit."/>
+                    </DataTemplate></DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
                   <DataGridTemplateColumn Header="Billing" Width="205" MinWidth="205">
                     <DataGridTemplateColumn.CellStyle><Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}"><Setter Property="Padding" Value="4,2"/></Style></DataGridTemplateColumn.CellStyle>
                     <DataGridTemplateColumn.CellTemplate>
                       <DataTemplate>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="3,0">
                           <Ellipse Width="9" Height="9" Fill="{Binding BillingLight}" Margin="0,0,9,0" ToolTip="{Binding BillingLabel}" AutomationProperties.Name="{Binding BillingLabel}"/>
+                          <TextBlock Text="{Binding BillingLabel}" VerticalAlignment="Center" FontSize="11" ToolTip="{Binding BillingHint}">
+                            <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding CanOverride}" Value="False"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
+                          </TextBlock>
+                          <Button Content="Use default" Click="ClearBilling_Click" Margin="5,0,0,0" Padding="4,2" FontSize="10" ToolTip="Clear the requested override and use Quickbase's billing rules.">
+                            <Button.Style><Style TargetType="Button" BasedOn="{StaticResource Quiet}"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding HasUnavailableOverride}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Button.Style>
+                          </Button>
                           <ComboBox Width="165" Height="30" MinHeight="30" SelectedIndex="{Binding BillingIndex, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding BillingHint}" AutomationProperties.Name="Timecard billing status" FontSize="11" Padding="7,4">
-                            <ComboBoxItem Content="Quickbase default"/>
+                            <ComboBox.Style><Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}"><Style.Triggers><DataTrigger Binding="{Binding CanOverride}" Value="False"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></ComboBox.Style>
+                            <ComboBoxItem Content="{Binding DefaultBillingLabel}"/>
                             <ComboBoxItem Content="Billable" IsEnabled="{Binding CanOverride}"/>
-                            <ComboBoxItem Content="Non-billable" IsEnabled="{Binding CanOverride}"/>
+                            <ComboBoxItem Content="Nonbillable" IsEnabled="{Binding CanOverride}"/>
                           </ComboBox>
                         </StackPanel>
                       </DataTemplate>

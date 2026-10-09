@@ -114,6 +114,17 @@ public partial class App : Application
                 RenderWindow(dateReview,Path.Combine(output,"timekeeper-selected-date-review.png"),(int)dateReview.Width,(int)dateReview.Height);
                 dateReview.Close();
 
+                File.AppendAllText(report,window.SmokeReviewControls());
+                ((ScrollViewer)window.FindName("WorkScroll")).ScrollToEnd();
+                RenderWindow(window,Path.Combine(output,"timekeeper-readonly-billing.png"),1380,1050);
+                File.AppendAllText(report,window.SmokeRenderedReviewControls());
+                var hoursWindow=new DurationEditWindow(window,new VerifiedRow { Hours=1.25m, TaskName="Case meeting", Description="Reviewed case materials", Date=DateOnly.FromDateTime(DateTime.Today) },smoke:true);
+                RenderWindow(hoursWindow,Path.Combine(output,"timekeeper-duration-editor.png"),450,440); hoursWindow.Close();
+                var reviewWorkbook=EmailSmoke.Session().EmailWorkbook!;
+                reviewWorkbook=reviewWorkbook with { Metadata=reviewWorkbook.Metadata with { Format="timekeeper_email_review",EmployeeConfirmed=false },ReviewNotes=["Email coverage is incomplete. Confirm the proposed estimates and check existing timecards."] };
+                var workbookWindow=new ReviewWorkbookWindow(window,reviewWorkbook,smoke:true);
+                File.AppendAllText(report,workbookWindow.SmokeSummary());
+                RenderWindow(workbookWindow,Path.Combine(output,"timekeeper-confirm-review-workbook.png"),860,790); workbookWindow.Close();
                 var emailSession=EmailSmoke.Session();
                 var emailWindow=new EmailImportWindow(window,emailSession,null,smoke:true);
                 File.AppendAllText(report,emailWindow.SmokeSummary());

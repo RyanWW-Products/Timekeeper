@@ -46,6 +46,7 @@ internal sealed class SettingsWindow : Window
         var accountFields=Columns(accounts);
         AddField(accountFields.Left,"realm","Quickbase realm",settings.Realm);
         AddField(accountFields.Right,"email","Quickbase sign-in email",settings.Email);
+        accounts.Children.Add(new Border { Background=Brush("AccentSoft"),CornerRadius=new CornerRadius(8),Padding=new Thickness(12),Margin=new Thickness(0,12,0,8),Child=Hint("Email-only setup: leave the Toggl token blank. Test connections will verify Quickbase only. A Toggl account is needed only to read Toggl time.") });
         var tokenFields=Columns(accounts);
         tokenFields.Left.Children.Add(Label("Toggl API token (optional for email imports)")); tokenFields.Left.Children.Add(_toggl);
         tokenFields.Right.Children.Add(Label("Quickbase user token")); tokenFields.Right.Children.Add(_quickbase);
@@ -193,7 +194,7 @@ internal sealed class SettingsWindow : Window
         bool blocked=false;
         try { _=Collect(); } catch(ArgumentException) { blocked=true; }
         if(!blocked) throw new InvalidOperationException("Unverified setup can be saved.");
-        _detectedEmployeeId="123.test"; _=Collect();
+        _toggl.Password=""; _detectedEmployeeId="123.test"; _=Collect();
         _testedConfiguration="synthetic-tested-state"; _identity.IsChecked=true;
         _quickbase.Password="changed-synthetic-token";
         if(_detectedEmployeeId!=""||_testedConfiguration!=null||_identity.IsChecked==true) throw new InvalidOperationException("Changing the token retained a stale identity.");
@@ -203,7 +204,7 @@ internal sealed class SettingsWindow : Window
         ShowError(new InvalidOperationException("Synthetic generic error"));
         if(_recordUrl!=null||_openRecord.Visibility!=Visibility.Collapsed) throw new InvalidOperationException("An unrelated error retained a stale record link.");
         ClearErrorActions(); _status.Text="Test connections to verify your accounts.";
-        return "PASS: setup accepts blank ID for discovery only\nPASS: detected user ID is kept out of the settings form\nPASS: token changes clear detected ID and verification\nPASS: detailed errors are copyable and record links cannot go stale\n";
+        return "PASS: setup accepts a blank Toggl token for email-only use\nPASS: setup accepts blank ID for discovery only\nPASS: detected user ID is kept out of the settings form\nPASS: token changes clear detected ID and verification\nPASS: detailed errors are copyable and record links cannot go stale\n";
     }
     internal void ShowSampleError() => ShowError(new QuickbaseDataException("Quickbase could not read Category.\nTable: Tasks (example123)\nRecord: #44 — Sample internal task\nField: Category (field 17)\nReceived: null (blank)\nExpected: a positive whole-number record ID.\nCheck this record and the Quickbase table/field mapping.","https://demo.quickbase.com/db/example123?a=dr&rid=44"));
 }

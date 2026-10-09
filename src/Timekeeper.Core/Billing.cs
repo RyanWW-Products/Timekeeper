@@ -11,6 +11,13 @@ public sealed record BillingCapabilities
     public int? OverrideFieldId { get; init; }
     public int? BillableFieldId { get; init; }
     public bool CanOverride { get; init; }
+    public int? ProjectTypeFieldId { get; init; }
+    public int? TaskBillableFieldId { get; init; }
+    public Dictionary<int, string> ProjectTypes { get; init; } = [];
+    public Dictionary<int, bool> TaskBilling { get; init; } = [];
+    public bool? DefaultFor(int project, int task) => ProjectTypes.TryGetValue(project, out var type)
+        ? type.Equals("Internal", StringComparison.OrdinalIgnoreCase) ? false : TaskBilling.TryGetValue(task, out var billable) ? billable : null
+        : null;
     public string Message { get; init; } = "Quickbase billing permissions have not been checked.";
 }
 
@@ -53,8 +60,9 @@ public sealed partial class TimecardApi
         var overrides = root.EnumerateArray().Where(f => String(f, "label").Equals("Billable Override", StringComparison.OrdinalIgnoreCase)).ToArray();
         var results = root.EnumerateArray().Where(f => String(f, "label").Equals("Bill This Task", StringComparison.OrdinalIgnoreCase)).ToArray();
         int? resultId = results.Length == 1 && String(results[0], "fieldType") == "checkbox" && String(results[0], "mode") == "formula" ? FieldId(results[0]) : null;
+        var defaults = DefaultBillingMetadata(root, results);
         const string accessMessage = "Timekeeper could not confirm Modify access to the Timecards Billable Override field. Ask your Quickbase administrator to check your role and this field, then read again. Quickbase default remains available.";
-        if (overrides.Length != 1) return new() { BillableFieldId = resultId, Message = accessMessage };
+        if (overrides.Length != 1) return defaults with { BillableFieldId = resultId, Message = accessMessage };
         var field = overrides[0];
         var id = FieldId(field);
         var type = String(field, "fieldType");
@@ -103,10 +111,57 @@ public sealed partial class TimecardApi
         }
         else safe = false;
         if (!resultId.HasValue) safe = false;
-        return new() { OverrideFieldId = safe ? id : null, BillableFieldId = resultId, CanOverride = safe,
+        return defaults with { OverrideFieldId = safe ? id : null, BillableFieldId = resultId, CanOverride = safe,
             Message = safe ? "Billing selections keep the same project, assignment, and task. Quickbase permissions still apply when writing." : accessMessage };
     }
 
+    private static BillingCapabilities DefaultBillingMetadata(JsonElement root, JsonElement[] results)
+    {
+        // Resolve this known rule only when the live formula and both relationship lookups match.
+        // Unknown/custom formulas must not produce a guessed Billable label.
+        const string expected = "If([Billable Override]=\"\",If([Project Type]=\"Internal\",false,[Bill Task]=true,true,false), [Billable Override]=\"NonBillable\",false,[Billable Override]=\"Billable\",true)";
+        if (results.Length != 1 || String(results[0], "fieldType") != "checkbox" || String(results[0], "mode") != "formula" || !results[0].TryGetProperty("properties", out var props) || props.ValueKind != JsonValueKind.Object
+            || !string.Equals(System.Text.RegularExpressions.Regex.Replace(String(props, "formula"), @"\s+", ""),
+                System.Text.RegularExpressions.Regex.Replace(expected, @"\s+", ""), StringComparison.OrdinalIgnoreCase)) return new();
+        int? Lookup(string label, int reference, string type)
+        {
+            var matches = root.EnumerateArray().Where(f => String(f, "label") == label && String(f, "mode") == "lookup" && String(f, "fieldType") == type).ToArray();
+            if (matches.Length != 1 || !matches[0].TryGetProperty("properties", out var p)
+                || !p.TryGetProperty("lookupReferenceFieldId", out var r) || !r.TryGetInt32(out var id) || id != reference
+                || !p.TryGetProperty("lookupTargetFieldId", out var target) || !target.TryGetInt32(out var targetId) || targetId <= 3) return null;
+            return targetId;
+        }
+        return new() { ProjectTypeFieldId = Lookup("Project Type", 11, "text"), TaskBillableFieldId = Lookup("Bill Task", 16, "checkbox") };
+    }
+
+    public async Task<BillingCapabilities> ReadBillingDefaultsAsync(IEnumerable<int> projects, CancellationToken ct = default)
+    {
+        var billing = await ReadBillingCapabilitiesAsync(ct: ct);
+        await ReadBillingDefaultsAsync(billing, projects, ct);
+        return billing;
+    }
+
+    private async Task ReadBillingDefaultsAsync(BillingCapabilities billing, IEnumerable<int> projects, CancellationToken ct)
+    {
+        if (billing.ProjectTypeFieldId is not int projectField || billing.TaskBillableFieldId is not int taskField) return;
+        try
+        {
+            if (billing.TaskBilling.Count == 0)
+                foreach (var row in await QueryAllAsync(settings.TasksTable, [3, taskField], null, ct))
+                    if (TryRecordId(Cell(row, 3), out var id) && BillingValue(Cell(row, taskField)) is bool value) billing.TaskBilling[id] = value;
+            foreach (var batch in projects.Distinct().Where(id => !billing.ProjectTypes.ContainsKey(id)).Chunk(100))
+            {
+                var where = string.Join("OR", batch.Select(id => $"{{3.EX.'{id.ToString(CultureInfo.InvariantCulture)}'}}"));
+                foreach (var row in await QueryAllAsync(settings.ProjectsTable, [3, projectField], where, ct))
+                    if (TryRecordId(Cell(row, 3), out var id) && Cell(row, projectField).ValueKind == JsonValueKind.String)
+                        billing.ProjectTypes[id] = CellString(row, projectField);
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidDataException or JsonException)
+        {
+            // Unreadable defaults remain explicitly unknown; ordinary timecards can still be reviewed.
+        }
+    }
     private async Task<HashSet<int>> ReadCallerRoleIdsAsync(CancellationToken ct)
     {
         const string formula = "ToText(UserRoles(\"ID\"))";

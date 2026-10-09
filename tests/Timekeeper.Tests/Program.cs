@@ -384,6 +384,40 @@ Test("reopened receipt separates its current guidance from its original failure"
     True(!JsonSerializer.Serialize(receipt, JsonDefaults.Options).Contains("display_message"), "Display-only guidance must not change the saved schema.");
 });
 
+Test("local duration edits preserve source hours and leave other rows unchanged", () =>
+{
+    var session = Session(); var baseline = Check(session); var work = baseline.Rows.First(r => r.Kind == "work");
+    var result = ReviewDurations.Apply(session, baseline, [new(ReviewDurations.Key(work), work.Hours, 6.25m)]);
+    Valid(result); Equal(result.Rows[0].Hours, 6.25m); Equal(result.Rows[0].OriginalHours, (decimal?)7m);
+    Equal(baseline.Rows[0].Hours, 7m); Equal(result.Rows.Single(r => r.Kind == "misc_internal").Hours, baseline.Rows.Single(r => r.Kind == "misc_internal").Hours);
+    True(result.Warnings.Any(w => w.Contains("changed in review")), "Duration edits require review acknowledgement.");
+    var forged = Proposal(session) with { Rows = Proposal(session).Rows.Select(r => r with { Hours = 6.25m }).ToList() };
+    Reject(Rules.Validate(session, forged), "locally calculated");
+});
+Test("duration edits reject invalid values stale rows and duplicate edits", () =>
+{
+    var session = Session(); var baseline = Check(session); var row = baseline.Rows[0]; var key = ReviewDurations.Key(row);
+    foreach (var hours in new[] { 0m, -1m, 24.01m, 1.234m }) Reject(ReviewDurations.Apply(session, baseline, [new(key, row.Hours, hours)]), "Edited hours");
+    Reject(ReviewDurations.Apply(session, baseline, [new(key, 2m, 3m)]), "original timecard");
+    Reject(ReviewDurations.Apply(session, baseline, [new("unknown", 7m, 3m)]), "original timecard");
+    Reject(ReviewDurations.Apply(session, baseline, [new(key, row.Hours, 6m), new(key, row.Hours, 6m)]), "original timecard");
+});
+Test("duration edits enforce whole-day limit and check newly matching duplicates", () =>
+{
+    var session = Session(); var baseline = Check(session); var row = baseline.Rows[0];
+    Reject(ReviewDurations.Apply(session, baseline, [new(ReviewDurations.Key(row), row.Hours, 24m)]), "24 hours");
+    session = WithExisting(session, new ExistingTimecard(123, row.Date, 6m, row.Project, row.Task, row.Category, row.Assignment, "Earlier work"));
+    var result = ReviewDurations.Apply(session, baseline, [new(ReviewDurations.Key(row), row.Hours, 6m)]);
+    Valid(result); True(result.Warnings.Any(w => w.Contains("Possible duplicate after editing")), "Edited-hours duplicates must be visible.");
+});
+Test("automatic timecard durations can also be edited and reset", () =>
+{
+    var session = Session(); var baseline = Check(session); var row = baseline.Rows.Single(r => r.Kind == "timecards");
+    var result = ReviewDurations.Apply(session, baseline, [new(ReviewDurations.Key(row), row.Hours, 0.25m)]);
+    Valid(result); Equal(result.Rows.Single(r => r.Kind == "timecards").Hours, 0.25m);
+    var unchanged = ReviewDurations.Apply(session, baseline, [new(ReviewDurations.Key(row), row.Hours, row.Hours)]);
+    Equal(unchanged.Rows.Single(r => r.Kind == "timecards").OriginalHours, (decimal?)null);
+});
 var failed = 0;
 foreach (var (name, run) in tests)
 {

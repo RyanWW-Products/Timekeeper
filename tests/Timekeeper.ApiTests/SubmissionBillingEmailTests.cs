@@ -8,7 +8,22 @@ static class SubmissionBillingEmailTests
 {
     public static async Task Run(Func<string, Func<Task>, Task> check)
     {
-        await check("submission billing permission loss fails preflight before creating a receipt", async () =>
+        await check("manual hours require explicit edits and acknowledgement before submission", async () =>
+        {
+            using var f = new SubmissionEmailFixture(); var (session, proposal) = await f.ReadEmail();
+            var baseline = Rules.Validate(session, proposal); var row = baseline.Rows.Single();
+            var edits = new[] { new ReviewDuration(ReviewDurations.Key(row), row.Hours, 0.5m) };
+            var reviewed = ReviewDurations.Apply(session, baseline, edits);
+            await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(session, proposal, reviewed.Rows, warningsAcknowledged: true));
+            await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(session, proposal, reviewed.Rows, durationEdits: edits));
+            Equal(0, f.Server.WriteCount);
+            var receipt = await f.Service.SubmitAsync(session, proposal, reviewed.Rows, warningsAcknowledged: true, durationEdits: edits);
+            Equal("complete", receipt.Status); Equal(0.5m, receipt.Rows.Single().Row.Hours); Equal<decimal?>(row.Hours, receipt.Rows.Single().Row.OriginalHours);
+            True(receipt.ReviewedWarnings.Any(w => w.Contains("changed in review"))); Equal(1, f.Server.WriteCount);
+            var (fresh, replay) = await f.ReadEmail();
+            await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(fresh, replay, Rules.Validate(fresh, replay).Rows, warningsAcknowledged: true));
+            Equal(1, f.Server.WriteCount);
+        });        await check("submission billing permission loss fails preflight before creating a receipt", async () =>
         {
             using var f = new SubmissionEmailFixture(); var (session, proposal) = await f.ReadToggl();
             var rows = Rules.Validate(session, proposal).Rows.Select(r => r with { BillableOverride = false }).ToList();

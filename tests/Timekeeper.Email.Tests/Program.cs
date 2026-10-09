@@ -280,6 +280,91 @@ Test("Invalid date text and fractional minutes cannot be silently coerced", () =
     Throws(() => EmailWorkbookReader.Read(minutes.Path), "whole number");
 });
 
+Test("review workbook stays a draft until explicitly confirmed locally", () =>
+{
+    using var book = new WorkbookFixture(ReviewBook.Convert);
+    var draft = EmailWorkbookReader.Read(book.Path);
+    True(draft.IsReviewWorkbook); True(!draft.Metadata.EmployeeConfirmed); Equal(draft.Activities.Count, 1); Equal(draft.Activities[0].Minutes, 15);
+    True(EmailWorkbookReader.Validate(draft).Any(e => e.Contains("confirmation")));
+    var confirmed = EmailWorkbookReader.ConfirmReview(draft);
+    Equal(EmailWorkbookReader.Validate(confirmed).Count, 0); True(confirmed.ReviewConfirmedAtUtc.HasValue);
+    True(!draft.Metadata.EmployeeConfirmed); True(confirmed.Activities[0].EvidenceIds[0].StartsWith("review-row:"));
+    var settings = new AppSettings { Email = "different@example.com" };
+    True(EmailWorkbookReader.Validate(confirmed, settings).Any(e => e.Contains("does not match")));
+});
+Test("review imports reject inconsistent duration and total cells", () =>
+{
+    using var hours = new WorkbookFixture(p => { ReviewBook.Convert(p); p["xl/worksheets/sheet2.xml"] = p["xl/worksheets/sheet2.xml"].Replace("0.25", "0.50"); });
+    Throws(() => EmailWorkbookReader.Read(hours.Path), "disagree");
+    using var totals = new WorkbookFixture(p => { ReviewBook.Convert(p); p["xl/worksheets/sheet2.xml"] = p["xl/worksheets/sheet2.xml"].Replace("<t>15</t>", "<t>20</t>"); });
+    Throws(() => EmailWorkbookReader.Read(totals.Path), "disagree");
+});
+Test("review row fingerprints survive duration and description edits", () =>
+{
+    using var first = new WorkbookFixture(ReviewBook.Convert);
+    using var second = new WorkbookFixture(p => { ReviewBook.Convert(p); p["xl/worksheets/sheet2.xml"] = p["xl/worksheets/sheet2.xml"].Replace("<t>15</t>", "<t>30</t>").Replace("0.25", "0.50").Replace("Worked on client layout", "Revised description"); });
+    var a = EmailWorkbookReader.Read(first.Path); var b = EmailWorkbookReader.Read(second.Path);
+    Equal(a.Activities[0].EvidenceIds[0], b.Activities[0].EvidenceIds[0]); True(a.ContentSha256 != b.ContentSha256);
+});
+Test("review imports reject formulas and merged activity cells", () =>
+{
+    using var formula = new WorkbookFixture(p => { ReviewBook.Convert(p); p["xl/worksheets/sheet2.xml"] = p["xl/worksheets/sheet2.xml"].Replace("</sheetData>", "</sheetData><f>1+1</f>"); });
+    Throws(() => EmailWorkbookReader.Read(formula.Path), "Formula");
+    using var merge = new WorkbookFixture(p => { ReviewBook.Convert(p); p["xl/worksheets/sheet2.xml"] = p["xl/worksheets/sheet2.xml"].Replace("</sheetData>", "</sheetData><mergeCells><mergeCell ref='A4:B4'/></mergeCells>"); });
+    Throws(() => EmailWorkbookReader.Read(merge.Path), "merged title");
+});
+Test("review format retains limited duplicate detection warning through validation", () =>
+{
+    using var book = new WorkbookFixture(ReviewBook.Convert);
+    var draft = EmailWorkbookReader.Read(book.Path);
+    var session = Session(15); var confirmed = EmailWorkbookReader.ConfirmReview(draft);
+    session = session with { EmailWorkbook = confirmed with { Metadata = confirmed.Metadata with { EmployeeEmail = session.Settings.Email } } };
+    var result = Rules.Validate(session, Proposal(session)); Valid(result);
+    True(result.Warnings.Any(w => w.Contains("no stable message")));
+    var serialized = JsonSerializer.Serialize(session, JsonDefaults.Options);
+    var restored = JsonSerializer.Deserialize<ReadSession>(serialized, JsonDefaults.Options)!;
+    True(restored.EmailWorkbook!.IsReviewWorkbook); True(restored.EmailWorkbook.ReviewConfirmedAtUtc.HasValue);
+});
+
+Test("review hours and totals are recalculated instead of trusting formula caches", () =>
+{
+    using var book = new WorkbookFixture(p =>
+    {
+        ReviewBook.Convert(p);
+        XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        var doc = XDocument.Parse(p["xl/worksheets/sheet2.xml"]);
+        foreach (var (address, formula) in new[] { ("G4", "F4/60"), ("F5", "SUM(F4:F4)"), ("G5", "SUM(G4:G4)") })
+        {
+            var cell = doc.Descendants(ns + "c").Single(c => (string?)c.Attribute("r") == address);
+            cell.Attribute("t")?.Remove(); cell.ReplaceNodes(new XElement(ns + "f", formula), new XElement(ns + "v", "999"));
+        }
+        p["xl/worksheets/sheet2.xml"] = doc.ToString();
+    });
+    var workbook = EmailWorkbookReader.Read(book.Path); Equal(workbook.Activities.Single().Minutes, 15);
+});
+Test("review formula cannot substitute another row or an external calculation", () =>
+{
+    foreach (var expression in new[] { "F5/60", "WEBSERVICE(1)", "SUM(F4:F999)" })
+    {
+        using var book = new WorkbookFixture(p =>
+        {
+            ReviewBook.Convert(p); XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+            var doc = XDocument.Parse(p["xl/worksheets/sheet2.xml"]);
+            var cell = doc.Descendants(ns + "c").Single(c => (string?)c.Attribute("r") == "G4");
+            cell.Attribute("t")?.Remove(); cell.ReplaceNodes(new XElement(ns + "f", expression), new XElement(ns + "v", "0.25"));
+            p["xl/worksheets/sheet2.xml"] = doc.ToString();
+        });
+        Throws(() => EmailWorkbookReader.Read(book.Path), "unsupported");
+    }
+});
+if (args.Length == 2 && args[0] == "--inspect-workbook")
+{
+    var workbook = EmailWorkbookReader.Read(args[1]);
+    Console.WriteLine($"Reference workbook: {workbook.Activities.Count} activities, {workbook.Activities.Sum(a => a.Minutes)} minutes, review={workbook.IsReviewWorkbook}, confirmed={workbook.Metadata.EmployeeConfirmed}, {workbook.ReviewNotes.Count} notes.");
+    True(workbook.IsReviewWorkbook && !workbook.Metadata.EmployeeConfirmed);
+    Equal(EmailWorkbookReader.Validate(EmailWorkbookReader.ConfirmReview(workbook)).Count, 0);
+    Console.WriteLine("PASS reference workbook parses and validates after local confirmation; no network calls or records written.");
+}
 var failed = 0;
 foreach (var test in tests)
 {
@@ -315,4 +400,19 @@ sealed class WorkbookFixture : IDisposable
         }
     }
     public void Dispose() => File.Delete(Path);
+}
+
+static class ReviewBook
+{
+    public static void Convert(Dictionary<string, string> parts)
+    {
+        parts["xl/workbook.xml"] = parts["xl/workbook.xml"].Replace("Activities", "Review");
+        parts["xl/worksheets/sheet1.xml"] = parts["xl/worksheets/sheet1.xml"].Replace("timekeeper_email_activity", "timekeeper_email_review");
+        string[][] rows = [["DRAFT - REVIEW ONLY"], [], ["Date", "Matter / Project", "Assignment / Category", "Detailed work summary", "Billing", "Minutes", "Decimal Hours", "Evidence Reviewed", "Needs Attention"],
+            ["2026-09-28", "Example case", "Presentation", "Worked on client layout", "QUICKBASE DEFAULT", "15", "0.25", "Client layout email", "Confirm estimated time"],
+            ["TOTAL", "", "", "", "", "15", "0.25", "", ""]];
+        XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        parts["xl/worksheets/sheet2.xml"] = new XElement(ns + "worksheet", new XElement(ns + "sheetData", rows.Select((values, r) =>
+            new XElement(ns + "row", new XAttribute("r", r + 1), values.Select((value, c) => new XElement(ns + "c", new XAttribute("r", $"{(char)('A' + c)}{r + 1}"), new XAttribute("t", "inlineStr"), new XElement(ns + "is", new XElement(ns + "t", value)))))))).ToString(SaveOptions.DisableFormatting);
+    }
 }
