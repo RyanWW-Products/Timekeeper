@@ -10,9 +10,9 @@ public static partial class EmailWorkbookReader
     public const string ReviewLimitations = "This review workbook has no stable message or event IDs. Duplicate checks use row fingerprints and existing Quickbase timecards; changed or regrouped exports may not be recognized. Check the entire day for overlapping timers, meetings and earlier imports. Estimates and policy allocations need your confirmation.";
     private static readonly string[] ReviewHeaders = ["Date", "Matter / Project", "Assignment / Category", "Detailed work summary", "Billing", "Minutes", "Decimal Hours", "Evidence Reviewed", "Needs Attention"];
 
-    private static SortedDictionary<int, Dictionary<int, string>> ReadReviewCells(System.Xml.Linq.XDocument doc, string name, List<string> shared)
+    private static SortedDictionary<int, Dictionary<int, string>> ReadReviewCells(System.Xml.Linq.XDocument doc, string name, List<string> shared, bool use1904Dates)
     {
-        var cells = ReadCells(doc, name, shared, allowMerged: true);
+        var cells = ReadCells(doc, name, shared, allowMerged: true, use1904Dates: use1904Dates);
         foreach (var merge in doc.Descendants(Main + "mergeCell"))
         {
             var range = (string?)merge.Attribute("ref") ?? "";
@@ -83,7 +83,10 @@ public static partial class EmailWorkbookReader
             if (Number(Cell(7), number) != decimal.Round(minutes / 60m, 2, MidpointRounding.AwayFromZero)) throw Bad($"Review row {number}: Minutes and Decimal Hours disagree. Correct the workbook before importing.");
             bool? billable = Cell(5).ToUpperInvariant() switch
             {
-                "BILLABLE" => true, "NON-BILLABLE" or "NONBILLABLE" => false, "QUICKBASE DEFAULT" or "" => null,
+                "BILLABLE" or "TRUE" or "1" => true,
+                "NON-BILLABLE" or "NONBILLABLE" or "NON BILLABLE" or "FALSE" or "0" => false,
+                "QUICKBASE DEFAULT" or "" => null,
+                _ when decimal.TryParse(Cell(5), NumberStyles.Float, CultureInfo.InvariantCulture, out var numericBilling) && numericBilling is 0 or 1 => numericBilling == 1,
                 _ => throw Bad($"Review row {number}: Billing must be BILLABLE, NON-BILLABLE or QUICKBASE DEFAULT.")
             };
             // These are local row fingerprints, explicitly not fabricated email/message IDs.
@@ -108,7 +111,7 @@ public static partial class EmailWorkbookReader
         return result;
     }
 
-    private static decimal Number(string value, int row) => decimal.TryParse(value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var number)
+    private static decimal Number(string value, int row) => decimal.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
         ? number : throw Bad($"Review row {row}: Minutes and Decimal Hours must be numbers.");
 
     public static EmailWorkbook ConfirmReview(EmailWorkbook workbook)

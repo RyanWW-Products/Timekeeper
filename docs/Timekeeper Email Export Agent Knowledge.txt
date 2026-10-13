@@ -122,3 +122,6 @@ After approval, import 12 and 3 minutes with employee_confirmed_estimate and rea
 
 TIMEKEEPER 0.6.0 REVIEW IMPORT
 The supported timekeeper_email_review layout in Report Format can be confirmed inside Timekeeper even when stable source IDs are unavailable. Do not fabricate IDs. Keep drafts unconfirmed and disclose incomplete evidence, estimates and policy allocations. Local row fingerprints provide limited duplicate detection; edited/regrouped exports may not match. Final activity exports retain the genuine-source-ID requirement. No agent output submits records automatically.
+
+TIMEKEEPER 0.6.2 WORKBOOK COMPATIBILITY
+Use the supplied Timekeeper Email Workbook Example - REVIEW.xlsx for the exact Review layout, not as activity evidence. Replace all sample data and template guidance. Work-date and reporting-period fields accept native Excel dates, General/text serials and unambiguous date text. Prefer YYYY-MM-DD exports. Dates such as 10/12/2026 are ambiguous as text and need clarification, not an assumed locale. Duration cells retain whole minutes; source IDs remain literal identifiers. UTC timestamps still require ISO text ending in Z. Save changes before importing an open workbook.

@@ -22,7 +22,7 @@ Evidence (optional)
 
 Headers must be in row 1, exact order below. Use contiguous data rows and plain saved text/numeric/Boolean values. No extra columns, title rows, footnotes, summary/ledger sheets or hidden leftover template sheets. No formulas, named formulas, macros, external links, hyperlinks, merged cells, drawings, embedded objects, credentials or raw message bodies. Compute totals outside the workbook and save literal values. Prevent libraries from automatically converting text into formulas or hyperlinks.
 
-Write dates, timestamps, IDs and time_basis as literal text. No Excel serial/localized dates. IDs retain case/characters without leading/trailing spaces or control characters. Use lowercase true/false text or Boolean cells. Blank billing is an empty cell, not "null", "default", "unknown" or zero.
+Prefer dates, timestamps, IDs and time_basis as literal text. Date exports should use YYYY-MM-DD. Timekeeper 0.6.2 also accepts Excel serial/native dates in work-date and reporting-period fields, including 1904 workbooks, plus unambiguous date text. Ambiguous text such as 10/12/2026 is rejected. UTC timestamps still require explicit ISO text ending in Z. IDs retain case/characters without leading/trailing spaces or control characters. Use lowercase true/false text or Boolean cells. Blank billing is an empty cell, not "null", "default", "unknown" or zero.
 
 3. METADATA
 Exact header:

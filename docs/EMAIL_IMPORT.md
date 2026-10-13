@@ -52,7 +52,11 @@ Use `format=timekeeper_email_review` in Metadata. Required keys: format, employe
 Required sheet: `Review`, with these exact headers in one row:
 `Date | Matter / Project | Assignment / Category | Detailed work summary | Billing | Minutes | Decimal Hours | Evidence Reviewed | Needs Attention`
 
-Dates are ISO text. Minutes are positive whole numbers. Billing is `BILLABLE`, `NON-BILLABLE` or `QUICKBASE DEFAULT`. Hours must agree with Minutes / 60 to two decimals. An optional TOTAL row must match. Optional sheets are exactly `Communication Accounting` and `Needs attention`. A title may be merged in row 1; a TOTAL label may span A:E. The supplied October 8 workbook is supported.
+Prefer ISO date text. Version 0.6.2 also accepts normal Excel date cells, General/text serials, native ISO date cells, English month names and unambiguous numeric date text. Both Excel date systems are supported. Ambiguous text such as `10/12/2026` requires correction; use `2026-10-12` or an actual Excel date cell. Work-date fields retain the written calendar date and ignore time of day. Minutes are positive whole numbers. Billing is `BILLABLE`, `NON-BILLABLE` or `QUICKBASE DEFAULT`. Hours must agree with Minutes / 60 to two decimals. An optional TOTAL row must match total minutes and total minutes / 60 rounded to two decimals. Optional sheets are exactly `Communication Accounting` and `Needs attention`. A title may be merged in row 1; a TOTAL label may span A:E.
+
+[Example Review workbook](templates/Timekeeper%20Email%20Workbook%20Example%20-%20REVIEW.xlsx) provides the supported layout for M365. Its sample data must be replaced, including employee email, dates, activities and limitations. Replace template guidance with actual daily attention notes. It does not contain evidence for any real employee.
+
+Version 0.6.2 reads a bounded snapshot of the saved workbook, including when Excel has it open for editing. Save changes before importing; unsaved edits are not included. Exclusive locks or unreadable files show recovery instructions. Numeric values and numeric text are accepted for durations; Boolean cells, true/false text (any case) and 1/0 are accepted for Boolean fields. These conversions do not change minutes, IDs, confirmation, duplicate checks or submission permissions. UTC evidence/generated timestamps still require explicit ISO text ending in `Z`.
 
 Plain values are preferred. The reader also recalculates same-row `F[row]/60` formulas in G and whole-table `SUM` totals in F/G. Excel cached values are ignored for these formulas. Other formulas, external links, macros and merged activity data are rejected. Filter-range names for Review/Communication Accounting are supported.
 
@@ -62,7 +66,7 @@ Review rows may already include a disclosed policy allocation. Keep automatic em
 
 ## Workbook contract
 
-The machine-readable format is version 1. Worksheet names and headers must match exactly. Store dates and IDs as text, use plain values, and omit formulas, macros, external workbook links, and merged data cells. The maximum file size is 10 MB, the maximum range is 31 dates, and the maximum activity count is 1,000.
+The machine-readable format is version 1. Worksheet names and headers must match exactly. Prefer dates as ISO text and always preserve IDs as text. Use plain values, and omit formulas, macros, external workbook links, and merged data cells. Date compatibility described above also applies to final Activities and Metadata reporting-period fields. The maximum file size is 10 MB, the maximum range is 31 dates, and the maximum activity count is 1,000.
 
 `Metadata` has columns `key,value` and these keys:
 

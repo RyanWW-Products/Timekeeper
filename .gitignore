@@ -1,6 +1,7 @@
 **/bin/
 **/obj/
 artifacts/
+outputs/
 installer/*.exe
 installer/SHA256SUMS.txt
 .dotnet/

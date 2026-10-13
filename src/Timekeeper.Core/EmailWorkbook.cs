@@ -84,8 +84,7 @@ public static partial class EmailWorkbookReader
     {
         if (!string.Equals(Path.GetExtension(path), ".xlsx", StringComparison.OrdinalIgnoreCase))
             throw Bad("Choose a .xlsx workbook. PDF, CSV and macro-enabled workbooks cannot be imported.");
-        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        if (file.Length is 0 or > MaximumFileBytes) throw Bad("The workbook must be nonempty and no larger than 10 MB.");
+        using var file = ReadWorkbookSnapshot(path);
         var digest = Convert.ToHexString(SHA256.HashData(file));
         file.Position = 0;
         try
@@ -121,6 +120,12 @@ public static partial class EmailWorkbookReader
             XDocument Required(string name) => documents.GetValueOrDefault(name) ?? throw Bad($"The workbook is missing {name}.");
             _ = Required("[Content_Types].xml");
             var workbook = Required("xl/workbook.xml");
+            var use1904Dates = ((string?)workbook.Root?.Element(Main + "workbookPr")?.Attribute("date1904")) switch
+            {
+                null or "0" or "false" => false,
+                "1" or "true" => true,
+                _ => throw Bad("The workbook date1904 setting must be true, false, 1 or 0.")
+            };
             var rels = Required("xl/_rels/workbook.xml.rels").Root?.Elements(Relations + "Relationship").ToList() ?? throw Bad("Workbook relationships are missing.");
             if (rels.Any(r => string.IsNullOrWhiteSpace((string?)r.Attribute("Id"))) || rels.Select(r => (string?)r.Attribute("Id")).Distinct(StringComparer.Ordinal).Count() != rels.Count)
                 throw Bad("Workbook relationships are invalid or duplicated.");
@@ -151,8 +156,8 @@ public static partial class EmailWorkbookReader
                 if (target.Contains('\\') || target.Contains('%') || target.Split('/').Any(p => p is "." or "..") || !target.StartsWith("xl/worksheets/", StringComparison.Ordinal))
                     throw Bad("A worksheet points outside the workbook.");
                 if (!sheetParts.Add(target) || sheets.ContainsKey(name) || reviewSheets.ContainsKey(name)) throw Bad("Worksheet names or package references are duplicated.");
-                if (isReview) reviewSheets.Add(name, ReadReviewCells(Required(target), name, shared));
-                else sheets.Add(name, ReadSheet(Required(target), name, shared));
+                if (isReview) reviewSheets.Add(name, ReadReviewCells(Required(target), name, shared, use1904Dates));
+                else sheets.Add(name, ReadSheet(Required(target), name, shared, use1904Dates));
             }
             if (isReview)
             {
@@ -167,7 +172,8 @@ public static partial class EmailWorkbookReader
                 if (!metadata.TryAdd(row["key"], row["value"]) || !MetadataKeys.Contains(row["key"], StringComparer.Ordinal)) throw Bad("Metadata contains a duplicate or unknown key.");
             }
             foreach (var key in MetadataKeys) if (!metadata.ContainsKey(key)) throw Bad($"Metadata is missing '{key}'.");
-            if (!int.TryParse(metadata["schema_version"], NumberStyles.None, CultureInfo.InvariantCulture, out var version)) throw Bad("Metadata schema_version must be 1.");
+            if (!decimal.TryParse(metadata["schema_version"], NumberStyles.Float, CultureInfo.InvariantCulture, out var versionValue) || versionValue != 1) throw Bad("Metadata schema_version must be 1.");
+            const int version = 1;
             var result = new EmailWorkbook
             {
                 ContentSha256 = digest,
@@ -191,6 +197,36 @@ public static partial class EmailWorkbookReader
         }
         catch (Exception ex) when (ex is XmlException or ArgumentException or OverflowException)
         { throw Bad("The workbook structure is invalid. Ask the email agent for a new plain-value export.", ex); }
+        catch (InvalidDataException ex) when (!ex.Message.StartsWith("Email workbook:", StringComparison.Ordinal))
+        { throw Bad("The saved workbook could not be read as a valid .xlsx file. Save it in Excel and try importing again.", ex); }
+    }
+
+    private static MemoryStream ReadWorkbookSnapshot(string path)
+    {
+        var snapshot = new MemoryStream();
+        try
+        {
+            // Excel normally keeps a write handle open. Read saved bytes into one
+            // bounded snapshot so hashing and ZIP parsing see identical content.
+            using var source = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            if (source.Length is 0 or > MaximumFileBytes) throw Bad("The workbook must be nonempty and no larger than 10 MB.");
+            var buffer = new byte[64 * 1024];
+            int read;
+            while ((read = source.Read(buffer)) != 0)
+            {
+                if (snapshot.Length + read > MaximumFileBytes) throw Bad("The workbook must be no larger than 10 MB.");
+                snapshot.Write(buffer, 0, read);
+            }
+            if (snapshot.Length == 0) throw Bad("The saved workbook is empty. Save it in Excel and try again.");
+            snapshot.Position = 0;
+            return snapshot;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            snapshot.Dispose();
+            throw Bad("The saved workbook could not be opened. Save it and try again; if it remains locked, close Excel before importing.", error);
+        }
+        catch { snapshot.Dispose(); throw; }
     }
 
     public static List<string> Validate(EmailWorkbook? workbook, AppSettings? settings = null, DateTimeOffset? now = null, bool allowReviewDraft = false)
@@ -245,7 +281,7 @@ public static partial class EmailWorkbookReader
         return errors.Distinct().ToList();
     }
 
-    private static SortedDictionary<int, Dictionary<int, string>> ReadCells(XDocument document, string name, List<string> shared, bool allowMerged = false)
+    private static SortedDictionary<int, Dictionary<int, string>> ReadCells(XDocument document, string name, List<string> shared, bool allowMerged = false, bool use1904Dates = false)
     {
         if (document.Root?.Name != Main + "worksheet" || (!allowMerged && document.Descendants(Main + "mergeCell").Any())) throw Bad($"Worksheet '{name}' must contain a plain unmerged table.");
         var cells = new SortedDictionary<int, Dictionary<int, string>>();
@@ -268,7 +304,7 @@ public static partial class EmailWorkbookReader
                     "inlineStr" => PlainText(cell.Element(Main + "is") ?? new XElement(Main + "is")),
                     "s" => int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var index) && index >= 0 && index < shared.Count ? shared[index] : throw Bad("A shared string index is invalid."),
                     "b" => value is "1" or "0" ? value == "1" ? "true" : "false" : throw Bad("A Boolean cell is invalid."),
-                    "n" or "str" => value,
+                    "n" or "str" or "d" => value,
                     _ => throw Bad($"Worksheet '{name}' contains an unsupported cell type. Use plain text and numbers.")
                 };
                 if (value.Length > 16_000 || HasControls(value)) throw Bad("A cell contains too much text or unsupported control characters.");
@@ -276,12 +312,13 @@ public static partial class EmailWorkbookReader
             }
             cells.Add(rowNumber, values);
         }
+        NormalizeDateCells(cells, name, use1904Dates);
         return cells;
     }
 
-    private static List<Dictionary<string, string>> ReadSheet(XDocument document, string name, List<string> shared)
+    private static List<Dictionary<string, string>> ReadSheet(XDocument document, string name, List<string> shared, bool use1904Dates)
     {
-        var cells = ReadCells(document, name, shared);
+        var cells = ReadCells(document, name, shared, use1904Dates: use1904Dates);
         if (!cells.TryGetValue(1, out var headerCells)) throw Bad($"Worksheet '{name}' must have its headers in row 1.");
         var expected = name switch { "Metadata" => ["key", "value"], "Activities" => ActivityHeaders, _ => EvidenceHeaders };
         if (headerCells.Any(c => c.Key > expected.Length && c.Value.Length > 0) || !Enumerable.Range(1, expected.Length).All(i => headerCells.TryGetValue(i, out var h) && h == expected[i - 1])) throw Bad($"Worksheet '{name}' headers must be: {string.Join(", ", expected)}.");
@@ -301,6 +338,11 @@ public static partial class EmailWorkbookReader
     private static bool Identifier(string? text, int max) => !string.IsNullOrWhiteSpace(text) && text == text.Trim() && text.Length <= max && !text.Any(char.IsControl);
     private static DateOnly Date(string value, string field) => DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : throw Bad($"{field} must be ISO date text: YYYY-MM-DD.");
     private static DateTimeOffset Timestamp(string value, string field) => DateTimeOffset.TryParseExact(value, ["yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'"], CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var time) ? time : throw Bad($"{field} must be an ISO UTC timestamp ending in Z.");
-    private static bool Boolean(string value, string field) => value is "true" or "false" ? value == "true" : throw Bad($"{field} must be true or false.");
+    private static bool Boolean(string value, string field)
+    {
+        if (bool.TryParse(value, out var boolean)) return boolean;
+        if (decimal.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var number) && number is 0 or 1) return number == 1;
+        throw Bad($"{field} must be true or false (Excel Boolean cells and 1/0 are also accepted).");
+    }
     private static InvalidDataException Bad(string message, Exception? inner = null) => new("Email workbook: " + message, inner);
 }

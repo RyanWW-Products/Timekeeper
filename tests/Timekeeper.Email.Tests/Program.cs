@@ -272,10 +272,10 @@ Test("Duplicate ZIP parts and worksheet coordinates are rejected", () =>
     using var cells = new WorkbookFixture(p => p["xl/worksheets/sheet2.xml"] = p["xl/worksheets/sheet2.xml"].Replace("r=\"B2\"", "r=\"A2\""));
     Throws(() => EmailWorkbookReader.Read(cells.Path), "repeated cell");
 });
-Test("Invalid date text and fractional minutes cannot be silently coerced", () =>
+Test("Ambiguous date text and fractional minutes cannot be silently coerced", () =>
 {
-    using var date = new WorkbookFixture(p => p["xl/worksheets/sheet2.xml"] = p["xl/worksheets/sheet2.xml"].Replace("2026-09-28", "09/28/2026"));
-    Throws(() => EmailWorkbookReader.Read(date.Path), "ISO date");
+    using var date = new WorkbookFixture(p => p["xl/worksheets/sheet2.xml"] = p["xl/worksheets/sheet2.xml"].Replace("2026-09-28", "09/10/2026"));
+    Throws(() => EmailWorkbookReader.Read(date.Path), "ambiguous date");
     using var minutes = new WorkbookFixture(p => p["xl/worksheets/sheet2.xml"] = p["xl/worksheets/sheet2.xml"].Replace("<v>5</v>", "<v>5.5</v>"));
     Throws(() => EmailWorkbookReader.Read(minutes.Path), "whole number");
 });
@@ -357,13 +357,22 @@ Test("review formula cannot substitute another row or an external calculation", 
         Throws(() => EmailWorkbookReader.Read(book.Path), "unsupported");
     }
 });
+WorkbookValueTests.Register(Test);
 if (args.Length == 2 && args[0] == "--inspect-workbook")
 {
-    var workbook = EmailWorkbookReader.Read(args[1]);
-    Console.WriteLine($"Reference workbook: {workbook.Activities.Count} activities, {workbook.Activities.Sum(a => a.Minutes)} minutes, review={workbook.IsReviewWorkbook}, confirmed={workbook.Metadata.EmployeeConfirmed}, {workbook.ReviewNotes.Count} notes.");
-    True(workbook.IsReviewWorkbook && !workbook.Metadata.EmployeeConfirmed);
-    Equal(EmailWorkbookReader.Validate(EmailWorkbookReader.ConfirmReview(workbook)).Count, 0);
-    Console.WriteLine("PASS reference workbook parses and validates after local confirmation; no network calls or records written.");
+    try
+    {
+        var workbook = EmailWorkbookReader.Read(args[1]);
+        Console.WriteLine($"Reference workbook: {workbook.Activities.Count} activities, {workbook.Activities.Sum(a => a.Minutes)} minutes, review={workbook.IsReviewWorkbook}, confirmed={workbook.Metadata.EmployeeConfirmed}, {workbook.ReviewNotes.Count} notes.");
+        True(workbook.IsReviewWorkbook && !workbook.Metadata.EmployeeConfirmed);
+        Equal(EmailWorkbookReader.Validate(EmailWorkbookReader.ConfirmReview(workbook)).Count, 0);
+        Console.WriteLine("PASS reference workbook parses and validates after local confirmation; no network calls or records written.");
+    }
+    catch (Exception error)
+    {
+        Console.Error.WriteLine("Workbook inspection failed: " + error.Message);
+        return 1;
+    }
 }
 var failed = 0;
 foreach (var test in tests)

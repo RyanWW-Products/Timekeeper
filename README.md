@@ -30,6 +30,8 @@ Double-click an hours box, or focus it and press F2, to make a last-minute durat
 
 Version 0.6.0 also accepts the supported `timekeeper_email_review` Excel layout. It shows the draft activities and limitations and requires local confirmation before matching assignments. These files use limited row-fingerprint duplicate checks because they lack stable message IDs. The final `timekeeper_email_activity` format with genuine source IDs remains supported. Email-only users leave the Toggl token blank in Settings; only Quickbase is tested and used.
 
+Use the [example Review workbook](docs/templates/Timekeeper%20Email%20Workbook%20Example%20-%20REVIEW.xlsx) as M365 context for the layout; replace all sample data. Version 0.6.2 accepts normal Excel dates, General/text serial dates, clear date text and mixed numeric/Boolean cells. Ambiguous dates name the cell needing correction. Saved workbooks can stay open in Excel during import.
+
 ## Time policy
 
 Per-user defaults are **0.17 hours for Timecards** and an **eight-hour weekday target**. The application calculates rounded work and automatic additions; Copilot proposes the matching and descriptions. Worked hours and the full Timecards addition are preserved: nine hours of work becomes **9.17 hours**, with no Misc internal addition. Clock time does not affect this calculation. See [the time policy](docs/TIME_POLICY.md) for the confirmed arithmetic.

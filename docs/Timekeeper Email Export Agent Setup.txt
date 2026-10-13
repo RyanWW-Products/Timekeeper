@@ -24,7 +24,7 @@ WHAT CHANGED
 - Separate detailed reconstruction, import and report references.
 
 CURRENT APP LIMITS
-Timekeeper 0.5.0 requires approved whole minutes, employee_confirmed=true and real stable source IDs. Its import does not accept an hours column, best_effort_estimate or blank evidence IDs. The agent therefore delivers review files first, then creates the import after approval and validation. Instructions alone cannot remove app requirements.
+Final activity exports require approved whole minutes, employee_confirmed=true and real stable source IDs. Their import does not accept an hours column, best_effort_estimate or blank evidence IDs. Timekeeper 0.6.0+ also accepts the supported Review format after local confirmation, with limited duplicate detection. Instructions alone cannot remove app requirements.
 
 In Timekeeper's Email imports settings, choose 15-minute rounding for quarter-hour output. Enable "Apply my Timecards and weekday fill settings to email imports" if desired; these additions are off for email by default. Check target, Timecards amount and partial-day needs. The agent previews policy additions separately and never fabricates filler evidence.
 
@@ -35,3 +35,6 @@ Ask for a day with known activity. Confirm the agent delivers REVIEW.xlsx and Wo
 
 TIMEKEEPER 0.6.0
 Update the main instructions and all three context files together. Review Excel now uses the exact Metadata/Review/Communication Accounting/Needs attention layout. Employees can confirm this review inside Timekeeper with limited duplicate detection. Final activity exports still require real evidence IDs. Email-only employees leave Toggl blank in Settings; Quickbase setup remains required for mapping and submission.
+
+TIMEKEEPER 0.6.2
+Provide Timekeeper Email Workbook Example - REVIEW.xlsx as a layout reference with the agent context. All sample data must be replaced. Update the main instructions and context files together. The importer accepts Excel date cells, General/text serials and unambiguous date text, but exports should still prefer YYYY-MM-DD. Saved workbooks can remain open in Excel; save changes before importing. The template's Needs attention guidance belongs only in the example; generated daily files use actual day-specific notes.
