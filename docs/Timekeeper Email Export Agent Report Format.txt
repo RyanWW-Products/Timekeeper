@@ -1,9 +1,9 @@
 TIMEKEEPER EMAIL EXPORT AGENT REPORT FORMAT
 CONTEXT FILE 3 - UPLOAD AS AGENT KNOWLEDGE
-Revision: 2026-10-09
+Revision: 2026-10-13
 
 REQUIRED OUTPUTS
-Create detailed Word .docx on every run and real Excel review workbook for the initial proposal. Disclose incomplete coverage, estimated effort and missing IDs without withholding useful review files. After approval and validation, create the separate exact-schema import workbook. Word and REVIEW.xlsx are personal-review artifacts, not Timekeeper inputs.
+Create detailed Word .docx on every run and real Excel review workbook for the initial proposal. Disclose incomplete coverage, estimated effort and missing IDs without withholding useful review files. Word is for personal review. The supported REVIEW.xlsx format can be imported and confirmed inside Timekeeper 0.6.0+. After chat approval and validation with genuine source IDs, create the separate final Activities workbook when possible.
 
 Filenames:
 timekeeper-email-YYYY-MM-DD.docx
@@ -66,7 +66,7 @@ Include personal, promotional, automated no-action, excluded-from-time and unres
 For extensive ledgers, Word can show concise accounting and direct cross-references to complete rows in REVIEW.xlsx, with reconciled counts. Do not call a Word summary the full ledger if rows are elsewhere.
 
 6. TIME AND TOTALS
-Show quarter-hour grouped decimal hours in the review. Round positive grouped underlying minutes UP to 15 minutes, not each email. Retain underlying minutes and basis. Final import contains those approved underlying minutes; Timekeeper rounds after live mapping.
+Show quarter-hour grouped allocations in Word/chat, separately from underlying minutes. Round positive grouped underlying minutes UP to 15 minutes, not each email. In the Review worksheet, Minutes and Decimal Hours remain underlying time: Decimal Hours is Minutes/60 rounded to two decimals, not rounded to a quarter hour. Final Activities also contains underlying minutes; Timekeeper rounds after live mapping. This avoids rounding twice.
 
 Separate:
 1. Underlying supported/reconstructed minutes and hours.
@@ -91,7 +91,7 @@ Metadata has key,value headers in row 1. Required keys: format=timekeeper_email_
 Review columns in exact order: Date | Matter / Project | Assignment / Category | Detailed work summary | Billing | Minutes | Decimal Hours | Evidence Reviewed | Needs Attention
 A title may precede the headers. Prefer ISO date text; Timekeeper 0.6.2 also accepts real Excel dates and unambiguous date text. Minutes is a positive whole number, Decimal Hours is Minutes/60 rounded to two decimals. Billing is BILLABLE, NON-BILLABLE or QUICKBASE DEFAULT. Use clear mapping hints, detailed descriptions, concise evidence subjects and all unresolved notes. Optional final TOTAL sums Minutes and rounds total Minutes/60 to two decimals. Each day's minutes must be at most 1440.
 
-Use saved plain values. Timekeeper also supports G-row formulas F[row]/60 and whole-table SUM totals in F/G, calculated locally, not from cached results. Only a row-1 title and the TOTAL label A:E may be merged. No external links, macros, arbitrary formulas, credentials or raw message bodies.
+Use saved plain values. Timekeeper also supports G-row formulas F[row]/60 and whole-table SUM totals in F/G, calculated locally, not from cached results. Only a row-1 title and the TOTAL label A:E may be merged. No external links, macros, arbitrary formulas, credentials or raw message bodies. Review/Communication Accounting filter ranges are supported, including Excel's quoted 'Review' sheet name in Timekeeper 0.6.3+. Avoid other workbook defined names; they are not cell values and can cause rejection.
 
 Communication Accounting contains the full non-spam ledger with direction/source, matter/thread, most recent subject, disposition, whether time bearing and notes. Needs attention contains assumptions, coverage gaps, missing IDs and approval decisions. Keep policy allocations clearly disclosed and separate where possible; do not duplicate automatic app additions.
 

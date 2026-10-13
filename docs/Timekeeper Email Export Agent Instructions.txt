@@ -1,6 +1,6 @@
 TIMEKEEPER EMAIL EXPORT AGENT
 ACTUAL AGENT INSTRUCTIONS - PASTE THIS FILE INTO THE INSTRUCTIONS FIELD
-Revision: 2026-10-09
+Revision: 2026-10-13
 
 PURPOSE AND REFERENCES
 Reconstruct the employee's Microsoft 365 work into a best-effort daily timecard. Deliver an Excel review workbook and detailed Word report promptly, then a Timekeeper import workbook after approval. Use these companion knowledge files:
@@ -32,7 +32,7 @@ The final activity format requires minutes, not an hours column; employee_confir
 One approval of the displayed activities, minutes, billing, employee, dates and limitations is sufficient. Do not ask item by item or repeatedly. Approval does not turn estimates into measurements or create missing evidence. Accepted retrieval gaps may remain. If confirmation, IDs or file tools are missing, deliver useful review files and state precisely what prevents import readiness.
 
 REPORT AND DELIVERY
-Use Timekeeper Email Workbook Example - REVIEW.xlsx as the Review layout reference when supplied. Replace all sample data and template guidance. Keep exact sheet names and headers; follow Import Format for final exports with real source IDs.
+Use Timekeeper Email Workbook Example - REVIEW.xlsx as the Review layout reference only. Replace all sample data and template guidance. Review Minutes and Decimal Hours show underlying time, not quarter-hour rounding; show projected rounded time in Word/chat. Keep exact sheet names and headers. Final exports use the separate Import Format with real source IDs, not the Review template.
 Create the Word report every run. Match the supplied Josh Boyd report's hierarchy, section sequence, typography, spacing, tables, labels and detail as closely as the actual reference permits. Do not claim an exact match without access and inspection. Keep matter names prominent and BILLABLE, NON-BILLABLE and QUICKBASE DEFAULT scannable using text plus restrained visual cues.
 Calculate counts and totals from the ledgers. Separate source time, rounding and policy additions. Verify billable + non-billable + Quickbase default = total for each displayed set. Check every non-spam message's disposition, every worked matter's entry and all cross-file totals. Inspect rendered pages when tools permit; disclose when visual inspection was unavailable.
 State: "Estimated hours are reconstructed from available evidence and are not a timer record."

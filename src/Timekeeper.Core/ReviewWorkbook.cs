@@ -24,14 +24,14 @@ public static partial class EmailWorkbookReader
         }
         var formulas = doc.Descendants(Main + "f").ToList();
         if (formulas.Count == 0) return cells;
-        if (name != "Review") throw Bad("Formula cells are supported only for Review hours and totals.");
+        if (name != "Review") throw Bad($"Worksheet '{name}' contains a formula. Formula cells are supported only for Review hours and totals; export other cells as plain values.");
         var headers = cells.Where(r => Enumerable.Range(1, ReviewHeaders.Length).All(i => r.Value.GetValueOrDefault(i) == ReviewHeaders[i - 1])).ToList();
         if (headers.Count != 1) throw Bad("Formula cells need the standard Review column headers.");
         foreach (var formula in formulas)
         {
             var address = (string?)formula.Parent?.Attribute("r") ?? "";
             var match = Regex.Match(address, @"\A([FG])([1-9][0-9]{0,4})\z");
-            if (!match.Success || formula.HasAttributes || formula.Parent?.Name != Main + "c") throw Bad("Formula cells are supported only for Review hours and totals.");
+            if (!match.Success || formula.HasAttributes || formula.Parent?.Name != Main + "c") throw Bad($"Formula in Review!{(address.Length == 0 ? "(unknown cell)" : address)} is unsupported. Formula cells are supported only for Review hours and totals; export other cells as plain values.");
             var column = match.Groups[1].Value; var number = int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture);
             if (!cells.TryGetValue(number, out var row) || number <= headers[0].Key) throw Bad("Formula location is invalid.");
             var expression = formula.Value.Trim();

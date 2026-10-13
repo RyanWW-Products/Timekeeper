@@ -138,9 +138,19 @@ public static partial class EmailWorkbookReader
             {
                 if (!isReview && (doc.Descendants(Main + "f").Any() || doc.Descendants(Main + "definedName").Any()))
                     throw Bad("Formula cells and defined formulas are not supported. Export plain values.");
-                if (isReview && doc.Descendants(Main + "definedName").Any(n => (string?)n.Attribute("name") != "_xlnm._FilterDatabase"
-                    || !Regex.IsMatch(n.Value, @"\A(?:Review|'Communication Accounting')!\$[A-I]\$[1-9][0-9]{0,4}:\$[A-I]\$[1-9][0-9]{0,4}\z")))
-                    throw Bad("Defined formulas are not supported in review workbooks.");
+                if (isReview)
+                    foreach (var definedName in doc.Descendants(Main + "definedName"))
+                    {
+                        // Excel can quote a worksheet name even when it contains no spaces.
+                        // Filter ranges are metadata, never activity values or formulas to execute.
+                        if ((string?)definedName.Attribute("name") != "_xlnm._FilterDatabase"
+                            || !Regex.IsMatch(definedName.Value, @"\A(?:Review|'Review'|'Communication Accounting')!\$[A-I]\$[1-9][0-9]{0,4}:\$[A-I]\$[1-9][0-9]{0,4}\z"))
+                        {
+                            var label = (string?)definedName.Attribute("name") ?? "(unnamed)";
+                            label = label[..Math.Min(label.Length, 128)];
+                            throw Bad($"Workbook defined name '{label}' is unsupported. Only filter ranges on Review and Communication Accounting are allowed. Remove this name in Excel's Formulas > Name Manager, or ask the agent for a plain-value export.");
+                        }
+                    }
             }
             var reviewSheets = new Dictionary<string, SortedDictionary<int, Dictionary<int, string>>>(StringComparer.Ordinal);
             var sheetParts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

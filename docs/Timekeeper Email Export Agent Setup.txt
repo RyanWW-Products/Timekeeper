@@ -1,6 +1,6 @@
 TIMEKEEPER EMAIL EXPORT AGENT - SETUP GUIDE
 OWNER REFERENCE ONLY - DO NOT PASTE THIS FILE INTO AGENT INSTRUCTIONS
-Revision: 2026-10-06
+Revision: 2026-10-13
 
 1. Paste "Timekeeper Email Export Agent Instructions.txt" into the shared agent's Instructions field. This is the actual instruction file and is under 8,000 characters.
 
@@ -9,7 +9,7 @@ Revision: 2026-10-06
 - Timekeeper Email Export Agent Import Format.txt
 - Timekeeper Email Export Agent Report Format.txt
 
-3. Replace the older Email Export instructions and knowledge. Keeping conflicting copies can mix the old confirmation-first/PDF workflow with the revised draft-first/Word workflow. Leave the separate Toggl agent's files alone.
+3. Replace the older Email Export instructions and all three context files together. Remove superseded copies from agent knowledge. Older guidance using Activities.hours, blank final evidence IDs, or a full communication ledger in Evidence conflicts with the current contract. Leave the separate Toggl agent's files alone.
 
 4. Supply a sanitized Josh Boyd report for the desired layout. These texts describe a fallback but cannot reproduce an unavailable reference exactly. Do not upload employee mailbox exports as shared knowledge.
 
@@ -38,3 +38,6 @@ Update the main instructions and all three context files together. Review Excel 
 
 TIMEKEEPER 0.6.2
 Provide Timekeeper Email Workbook Example - REVIEW.xlsx as a layout reference with the agent context. All sample data must be replaced. Update the main instructions and context files together. The importer accepts Excel date cells, General/text serials and unambiguous date text, but exports should still prefer YYYY-MM-DD. Saved workbooks can remain open in Excel; save changes before importing. The template's Needs attention guidance belongs only in the example; generated daily files use actual day-specific notes.
+
+TIMEKEEPER 0.6.3
+The example applies only to the supported Review workbook. Final Activities exports retain their separate schema. Review Minutes and Decimal Hours show underlying time; quarter-hour projections belong in Word/chat. The app now accepts quoted Review filter ranges created by Excel. Replace the main instructions and all three context files with this revision to remove contradictory legacy wording. Setup is owner guidance, not an additional agent context file.

@@ -358,6 +358,7 @@ Test("review formula cannot substitute another row or an external calculation", 
     }
 });
 WorkbookValueTests.Register(Test);
+WorkbookNameTests.Register(Test);
 if (args.Length == 2 && args[0] == "--inspect-workbook")
 {
     try

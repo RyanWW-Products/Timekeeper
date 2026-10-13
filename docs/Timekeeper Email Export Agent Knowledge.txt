@@ -1,6 +1,6 @@
 TIMEKEEPER EMAIL EXPORT AGENT KNOWLEDGE
 CONTEXT FILE 1 - UPLOAD AS AGENT KNOWLEDGE
-Revision: 2026-10-06
+Revision: 2026-10-13
 
 This file expands the actual agent instructions. It replaces the older confirmation-first workflow and optional-PDF guidance. Import Format defines the app's accepted workbook. Report Format defines Word and review Excel. Instructions cannot grant access to Microsoft 365, Quickbase, complete inventories, stable IDs or file-generation tools.
 
@@ -9,7 +9,7 @@ Produce useful best-effort review Excel and Word files before asking routine que
 
 Ask before drafting only if essential scope is unknown or unsafe: employee/mailbox, date or timezone when it changes scope. If there is no usable evidence from any source, say so; do not fabricate a timecard. If file creation fails, provide useful content in chat and disclose which files could not be created.
 
-Draft readiness and import readiness are separate. Timekeeper currently requires confirmation, whole minutes and real stable evidence IDs. Its later review screen does not remove those requirements. One approval after displaying work, minutes, billing, dates and limitations is sufficient. Do not require a question for every email, matter or unchanged billing classification. Bundle material remaining issues.
+Draft readiness and final-activity readiness are separate. Final Activities exports require chat confirmation, whole minutes and real stable evidence IDs. Supported Review workbooks may instead be confirmed inside Timekeeper with limited duplicate checks even when stable IDs are unavailable. Follow Report Format for Review and Import Format for final Activities; never mix their schemas. One chat approval after displaying work, minutes, billing, dates and limitations is sufficient for a final export. Do not require a question for every email, matter or unchanged billing classification. Bundle material remaining issues.
 
 Accepted coverage gaps may remain in the final report and retrieval_limitations. Each imported activity must have approved work/minutes/billing and valid source IDs. An unresolved item can remain untimed in the communication ledger if that omission is explicit and approved. Never silently omit a proposed activity to pass validation. Clearly identify an approved subset.
 
@@ -27,7 +27,7 @@ State concrete limitations: source unavailable, searched subset, result cap, ina
 3. IDENTIFIERS AND DEDUPLICATION
 Prefer real immutable individual-message identifiers such as Internet Message-ID; retain exact characters and case on regeneration. Use real stable event/call/message IDs for other sources. Subjects, conversation IDs, citations, row numbers and generated hashes of guessed metadata are not individual source IDs.
 
-A local ledger key may identify a search hit for review bookkeeping. Label it local-only and leave an unavailable source-ID field blank. Never put that key in Activities.evidence_ids. Missing IDs do not block review files, but prevent those activities from becoming import-ready until an authorized source/export supplies usable IDs.
+A local ledger key may identify a search hit for review bookkeeping. Label it local-only and leave an unavailable source-ID field blank. Never put that key in Activities.evidence_ids. Missing IDs do not block review files or their supported locally confirmed Review import, but prevent a final Activities export until an authorized source/export supplies usable IDs.
 
 Deduplicate repeated hits and quoted copies. Keep one canonical communication entry per unique non-spam message; repeated hits point to it without extra time. Similar subjects alone do not prove duplication. Normalize RE/FW/FWD for grouping while preserving matter numbers and disambiguating unrelated threads.
 
@@ -61,7 +61,7 @@ Prefer actual timing evidence. Otherwise estimate grouped effort from supported 
 
 Use best_effort_estimate in drafts. After approval, reconstructed time becomes employee_confirmed_estimate. Use measured only when actual duration evidence supports the entire allocation. Any estimated component makes the group estimated; approval does not make estimates measured.
 
-Retain whole underlying minutes. For quarter-hour review, group first and round positive totals UP to the next 15 minutes. Show rounding separately from actual effort. Final Activities.minutes contains approved underlying minutes. Select 15-minute rounding in Timekeeper to obtain the same policy. Live mapping may merge/split groups, so final app totals can differ.
+Retain whole underlying minutes. For quarter-hour planning in Word/chat, group first and round positive totals UP to the next 15 minutes. Show rounding separately from actual effort. Review Minutes and Decimal Hours use underlying time: Decimal Hours = Minutes/60 rounded to two decimals. Final Activities.minutes also contains underlying minutes. Select 15-minute rounding in Timekeeper to obtain the planning policy. Live mapping may merge/split groups, so final app totals can differ.
 
 6. DAILY TARGET AND INTERNAL REMAINDER
 Propose an 8.00-hour total for an ordinary full workday unless leave, a partial day, another established total or supported work above eight hours applies. This is a planning policy, not proof of eight hours worked. Never stretch estimates, manufacture case activity or reduce valid work to fit it. Do not silently fill partial days to eight.
