@@ -726,6 +726,7 @@ await Check("selected-day pending outcomes reconcile against the retained full s
 });
 await BillingApiTests.Run(Check);
 await SubmissionBillingEmailTests.Run(Check);
+await CredentialVaultTests.Run(Check);
 Console.WriteLine($"{passed} API/storage/submission tests passed; {failures.Count} failed.");
 foreach (var failure in failures) Console.Error.WriteLine(failure);
 return failures.Count == 0 ? 0 : 1;

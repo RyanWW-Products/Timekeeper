@@ -25,6 +25,8 @@ internal static class CredentialVault
     [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CredWrite(ref Credential value, uint flags);
     [DllImport("advapi32.dll", EntryPoint="CredReadW", CharSet=CharSet.Unicode, SetLastError=true)]
     [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CredRead(string target, uint type, uint flags, out IntPtr credential);
+    [DllImport("advapi32.dll", EntryPoint="CredDeleteW", CharSet=CharSet.Unicode, SetLastError=true)]
+    [return: MarshalAs(UnmanagedType.Bool)] private static extern bool CredDelete(string target, uint type, uint flags);
     [DllImport("advapi32.dll")] private static extern void CredFree(IntPtr buffer);
 
     public static Credentials Load(AppSettings settings) => new(Read(Key(settings,"Toggl")), Read(Key(settings,"Quickbase")));
@@ -46,13 +48,32 @@ internal static class CredentialVault
         }
         try
         {
+            if (pointer == IntPtr.Zero) throw InvalidCredential();
             var item = Marshal.PtrToStructure<Credential>(pointer);
-            return Marshal.PtrToStringUni(item.CredentialBlob, checked((int)item.CredentialBlobSize / 2)) ?? "";
+            return DecodeBlob(item.CredentialBlob, item.CredentialBlobSize);
         }
         finally { CredFree(pointer); }
     }
+    internal static string DecodeBlob(IntPtr pointer, uint byteCount)
+    {
+        // Credential Manager can return a null blob for an existing empty token.
+        // Handle older saved credentials as well as an optional token being cleared.
+        if (byteCount == 0) return "";
+        if (pointer == IntPtr.Zero || byteCount > 2560 || byteCount % 2 != 0) throw InvalidCredential();
+        return Marshal.PtrToStringUni(pointer, (int)byteCount / 2) ?? "";
+    }
+    private static InvalidOperationException InvalidCredential() => new("Windows returned an invalid saved credential. Open Settings and save your tokens again.");
     private static void Write(string key, string email, string token)
     {
+        if (token.Length == 0)
+        {
+            if (!CredDelete(key, 1, 0))
+            {
+                int code = Marshal.GetLastWin32Error();
+                if (code != 1168) throw new Win32Exception(code, "Windows could not clear the saved Timekeeper credential.");
+            }
+            return;
+        }
         byte[] bytes = Encoding.Unicode.GetBytes(token);
         if (bytes.Length > 2560) throw new ArgumentException("That API token is too long.");
         var pointer = Marshal.AllocHGlobal(bytes.Length);
