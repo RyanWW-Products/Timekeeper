@@ -291,13 +291,13 @@ public partial class MainWindow : Window
         {
             StatusText.Text="Checking the email workbook…";
             var workbook=EmailWorkbookReader.Read(path);
-            if(workbook.IsReviewWorkbook)
+            if(workbook.UsesLocalFingerprints)
             {
-                var errors=EmailWorkbookReader.Validate(workbook,_settings,allowReviewDraft:true);
+                var errors=EmailWorkbookReader.Validate(workbook,_settings,allowReviewDraft:workbook.IsReviewWorkbook,allowMinimalAcknowledgement:workbook.IsMinimalImport);
                 if(errors.Count>0) throw new InvalidDataException(string.Join("\n",errors));
                 var confirmation=new ReviewWorkbookWindow(this,workbook);
-                if(confirmation.ShowDialog()!=true) { StatusText.Text="Review workbook cancelled. Nothing was submitted."; return; }
-                workbook=EmailWorkbookReader.ConfirmReview(workbook);
+                if(confirmation.ShowDialog()!=true) { StatusText.Text="Email import cancelled. Nothing was submitted."; return; }
+                workbook=workbook.IsMinimalImport ? EmailWorkbookReader.ConfirmMinimalImport(workbook) : EmailWorkbookReader.ConfirmReview(workbook);
             }
             using var api=MakeApi();
             var session=await api.ReadEmailBaselineAsync(workbook,new Progress<string>(text=>StatusText.Text=text),ct);

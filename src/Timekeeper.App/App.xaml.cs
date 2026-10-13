@@ -125,6 +125,14 @@ public partial class App : Application
                 var workbookWindow=new ReviewWorkbookWindow(window,reviewWorkbook,smoke:true);
                 File.AppendAllText(report,workbookWindow.SmokeSummary());
                 RenderWindow(workbookWindow,Path.Combine(output,"timekeeper-confirm-review-workbook.png"),860,790); workbookWindow.Close();
+                var minimalWorkbook=EmailSmoke.Session().EmailWorkbook!;
+                minimalWorkbook=minimalWorkbook with { Metadata=minimalWorkbook.Metadata with { Format="timekeeper_email_import",EmployeeConfirmed=true },ReviewConfirmedAtUtc=null };
+                var minimalWindow=new ReviewWorkbookWindow(window,minimalWorkbook,smoke:true);
+                File.AppendAllText(report,minimalWindow.SmokeSummary());
+                RenderWindow(minimalWindow,Path.Combine(output,"timekeeper-confirm-minimal-import.png"),760,590);
+                Appearance.Apply(new("Dark","Theme color",120,"Compact"));
+                RenderWindow(minimalWindow,Path.Combine(output,"timekeeper-confirm-minimal-import-dark-120.png"),760,590);
+                Appearance.Apply(new()); minimalWindow.Close();
                 var emailSession=EmailSmoke.Session();
                 var emailWindow=new EmailImportWindow(window,emailSession,null,smoke:true);
                 File.AppendAllText(report,emailWindow.SmokeSummary());

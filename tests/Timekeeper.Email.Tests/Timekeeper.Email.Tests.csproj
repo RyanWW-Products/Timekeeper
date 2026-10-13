@@ -4,4 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../../src/Timekeeper.Core/Timekeeper.Core.csproj" /></ItemGroup>
+  <ItemGroup>
+    <Content Include="../../docs/templates/Timekeeper Email Import Template.xlsx" Link="TestData/Timekeeper Email Import Template.xlsx" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

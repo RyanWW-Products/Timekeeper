@@ -19,6 +19,7 @@ public static partial class EmailWorkbookReader
             {
                 "Metadata" when number > 1 && row.GetValueOrDefault(1) is "period_start" or "period_end" => 2,
                 "Activities" when number > 1 => 2,
+                "Timecards" when number > 1 => 1,
                 "Review" when reviewHeader > 0 && number > reviewHeader && !string.Equals(row.GetValueOrDefault(1), "TOTAL", StringComparison.OrdinalIgnoreCase) => 1,
                 _ => 0
             };

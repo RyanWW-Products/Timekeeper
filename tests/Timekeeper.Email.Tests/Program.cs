@@ -359,14 +359,16 @@ Test("review formula cannot substitute another row or an external calculation", 
 });
 WorkbookValueTests.Register(Test);
 WorkbookNameTests.Register(Test);
+MinimalWorkbookTests.Register(Test);
 if (args.Length == 2 && args[0] == "--inspect-workbook")
 {
     try
     {
         var workbook = EmailWorkbookReader.Read(args[1]);
-        Console.WriteLine($"Reference workbook: {workbook.Activities.Count} activities, {workbook.Activities.Sum(a => a.Minutes)} minutes, review={workbook.IsReviewWorkbook}, confirmed={workbook.Metadata.EmployeeConfirmed}, {workbook.ReviewNotes.Count} notes.");
-        True(workbook.IsReviewWorkbook && !workbook.Metadata.EmployeeConfirmed);
-        Equal(EmailWorkbookReader.Validate(EmailWorkbookReader.ConfirmReview(workbook)).Count, 0);
+        Console.WriteLine($"Reference workbook: {workbook.Activities.Count} activities, {workbook.Activities.Sum(a => a.Minutes)} minutes, format={workbook.Metadata.Format}, confirmed={workbook.Metadata.EmployeeConfirmed}, {workbook.ReviewNotes.Count} notes.");
+        var confirmed = workbook.IsMinimalImport ? EmailWorkbookReader.ConfirmMinimalImport(workbook)
+            : workbook.IsReviewWorkbook ? EmailWorkbookReader.ConfirmReview(workbook) : workbook;
+        Equal(EmailWorkbookReader.Validate(confirmed).Count, 0);
         Console.WriteLine("PASS reference workbook parses and validates after local confirmation; no network calls or records written.");
     }
     catch (Exception error)

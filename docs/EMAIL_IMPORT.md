@@ -1,112 +1,90 @@
-# Email-based timecards
+﻿# Email-based timecards
 
-Use this workflow for work reconstructed from emails and other Microsoft 365 activity. The shared email export agent prepares an Excel workbook. Timekeeper matches its activities to Quickbase, lets you review the timecards, and writes them only when you submit.
+Timekeeper 0.7.0 uses **Word for review, then a small Excel file for import**. The agent prepares the Word report first. Once you approve it, the agent exports only the data Timekeeper needs. Excel has no review pages, totals, communication ledger or formulas.
 
 ## Set up the shared agent
 
-The agent owner pastes [Timekeeper Email Export Agent Instructions.txt](Timekeeper%20Email%20Export%20Agent%20Instructions.txt) into the Microsoft 365 agent's Instructions field, then uploads three context files: [Knowledge](Timekeeper%20Email%20Export%20Agent%20Knowledge.txt), [Import Format](Timekeeper%20Email%20Export%20Agent%20Import%20Format.txt), and [Report Format](Timekeeper%20Email%20Export%20Agent%20Report%20Format.txt). Replace older versions to avoid conflicting guidance. The [setup guide](Timekeeper%20Email%20Export%20Agent%20Setup.txt) identifies each file's purpose. The owner shares this agent with the team; employees do not create individual agents.
+The owner replaces the [main instructions](Timekeeper%20Email%20Export%20Agent%20Instructions.txt) and all three context files: [Knowledge](Timekeeper%20Email%20Export%20Agent%20Knowledge.txt), [Import Format](Timekeeper%20Email%20Export%20Agent%20Import%20Format.txt), and [Report Format](Timekeeper%20Email%20Export%20Agent%20Report%20Format.txt). Follow the [owner setup guide](Timekeeper%20Email%20Export%20Agent%20Setup.txt); employees use the shared agent rather than creating their own.
 
-In Agent Builder, open **Configure > Knowledge**, select the search bar, and add **My emails**. Add permitted Teams/meeting sources if needed. Sharing the agent does not give employees access to the owner's email. Employees use their own Microsoft 365 work accounts, and the owner should verify personal-mail access with a team member before rollout. Source availability depends on licensing and tenant configuration. [Microsoft: Add knowledge sources](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/agent-builder-add-knowledge)
+Replace the old REVIEW workbook in the agent's knowledge with [Timekeeper Email Import Template.xlsx](templates/Timekeeper%20Email%20Import%20Template.xlsx). Remove superseded email-agent files so the agent receives one consistent contract. Keep a sanitized Josh Boyd report as a Word layout reference if available. The template is fictional and deliberately unapproved. The agent must replace all sample data and set confirmation to true only after approval of the actual Word report.
 
-Under **Capabilities**, enable **Create documents, charts, and code** if the toggle is shown. Some Agent Builder experiences include code interpreter automatically. This capability supports downloadable Excel workbooks and optional PDFs. Test that the agent produces an actual `.xlsx` download and ask employees to save it while the session is active. [Microsoft: Build agents](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/agent-builder-build-agents), [Microsoft: Code interpreter](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/code-interpreter)
+The agent needs authorized access to the employee's email and any additional sources used, plus document and workbook generation. Test using a team member's own account. Shared access does not grant access to the owner's mailbox, and these files do not install a Quickbase connector. Never put API tokens or employee mailbox exports into shared knowledge.
 
-The agent must retrieve stable IDs for individual messages or events before producing an import-ready workbook. A conversation ID or generated citation label is insufficient for duplicate checks. Test inventory coverage and usable IDs in your tenant; instructions do not guarantee either. Missing IDs do not block the draft Word report and review workbook, but must be disclosed. The agent must not invent IDs. Missing IDs prevent a final activity export, but the supported review workbook can be confirmed locally in Timekeeper with limited duplicate detection. File-generation failures must also be disclosed.
-
-Never put Quickbase or Toggl tokens in the agent or exported files. Configure your own Quickbase credentials in Timekeeper. Toggl credentials are optional for this workflow. Do not embed an employee's mailbox export as shared agent knowledge. Supply a sanitized Josh Boyd reference report if the agent should reproduce its layout.
+Update the app to **0.7.0 or later** for the new format. Quickbase setup is required for matching and submission. Toggl is optional; email-only employees leave its token blank in Settings.
 
 ## Prepare and import a day
 
-1. Give the email agent the reporting date, your verified Quickbase sign-in email, and the timezone configured in Timekeeper. Confirm that it is reviewing your own mailbox.
-2. Review the agent's best-effort Word report and `-REVIEW.xlsx` workbook. It provides drafts before routine confirmation questions, labels estimates and coverage gaps, and accounts for every retrieved non-spam message, including untimed items. Email timestamps do not establish how long you worked.
-3. Correct the proposal as needed, then approve the displayed work, underlying minutes, billing, account, dates and limitations once. The agent creates a separate import `.xlsx` using the exact schema below when approval and real stable source IDs are available. Word is for personal review. Version 0.6.0 can also import the supported `-REVIEW.xlsx` format after confirmation inside Timekeeper, with limited duplicate detection. Unresolved activities must be resolved or explicitly excluded from an approved subset.
-4. Choose **Import email Excel** in Timekeeper, or drag the downloaded workbook into the file drop area. For a multi-day workbook, select the dates to include. In **Match your activities**, select the matching Quickbase assignments and tasks using live lookup results. Use **Find assignment** if needed. The workbook supplies name hints, not authoritative Quickbase record IDs. If work already exists, select its actual record under **Already in Quickbase?** instead of submitting it again.
-5. Confirm **These activities and confirmed minutes are mine**, then choose **Review timecards**. Review dates, grouped hours, descriptions, assignments, tasks, and billing. Timekeeper applies the selected rounding once per group. The agent supplies confirmed whole minutes without rounding or automatic additions.
-6. Choose **Write to Quickbase** after reviewing the result. Check **Submission history** for the saved receipt.
+1. Give the agent the date, your verified Quickbase email and the timezone configured in Timekeeper. It uses your authorized Microsoft 365 sources.
+2. Review its Word report. It includes worked matters, underlying minutes, billing, evidence context, estimates, coverage gaps, communication accounting and projected totals. Email timestamps alone do not establish duration.
+3. Request corrections if needed, then approve the work, minutes, billing, account, dates and disclosed limitations once. The agent creates the minimal Excel from that approved allocation. It reuses the analysis instead of repeating the entire mailbox search.
+4. Choose **Import email Excel** or drag the downloaded workbook into its drop area. Briefly acknowledge that you approved the Word report and understand the limited duplicate checks. For multiple dates, choose the dates to include.
+5. In **Match your activities**, select live Quickbase assignments and tasks. Use **Find assignment** as needed. Hints in Excel are names, not authoritative record IDs. Link work already entered to its actual record under **Already in Quickbase?**
+6. Confirm the activities and minutes are yours, then choose **Review timecards**. Check dates, grouped hours, descriptions, assignments, tasks and billing.
+7. Choose **Write to Quickbase** when ready. Keep the receipt in **Submission history**.
 
-Keep related work together, but use separate rows when its date, assignment, task, or billing choice differs. Each source message/event belongs to one imported activity. Re-exporting a workbook must preserve the underlying source IDs so a new filename cannot disguise previously submitted work.
+Word remains your supporting review file. You do not need to upload it into Timekeeper. Importing Excel and confirming its source do not write timecards.
 
-In **Settings > Time policy > Email imports**, choose confirmed minutes without additional rounding, or round grouped time up to 5 or 15 minutes. The default is 5 minutes. Automatic Timecards and weekday fill are off for email imports by default; select **Apply my Timecards and weekday fill settings to email imports** to enable your existing daily defaults.
+## Time policy and billing
 
-## What the agent checks and reports
+Excel contains approved positive whole minutes before app rounding. In **Settings > Time policy > Email imports**, choose no additional rounding or round grouped work up to 5 or 15 minutes. The default is 5 minutes. Word may show a separate quarter-hour projection; select 15-minute rounding to use that policy. Live mapping can change grouping and projected totals.
 
-The agent keeps a raw activity ledger and a reconciliation ledger so a polished report cannot hide missing classifications. Every confirmed worked matter must appear in the main report and import. Incoming mail you did not review or act on gets an explicit no-work disposition without invented hours. Related work is consolidated, with separate rows when date, assignment, task, or billing requires them.
+Automatic Timecards and weekday fill are off for email imports by default. Enable **Apply my Timecards and weekday fill settings to email imports** if wanted. Word shows these policy additions separately, and the new Excel excludes filler. Actual supported internal work is imported normally. The app preserves work over eight hours and the full configured Timecards addition.
 
-The Word report includes employee/date, executive summary, verified metrics, numbered matter entries, separate received/sent communications, computed totals, coverage limitations and an estimate disclosure. It follows the supplied Josh Boyd reference when accessible, with a documented fallback otherwise. Review Excel contains the full non-spam communication ledger. Search hits, unique messages, threads and timecard rows remain separate counts; unavailable sources are labeled unavailable, not zero.
+The Billing dropdown appears only when Quickbase confirms Modify access to Billable Override. Other accounts see read-only billing. Defaults show **Billable - Default** or **Nonbillable - Default** when the rule and required source values can be read. Otherwise **Default unavailable** avoids guessing. Green means billable, dim red means nonbillable, and gray means unknown. Explicit non-billable case work keeps its case, assignment and task. An override without permission must be cleared deliberately or its permission issue resolved before submission.
 
-The review separates underlying minutes, grouped quarter-hour allocations and proposed daily additions. Select 15-minute email rounding in Timekeeper to use the same rounding policy. The revised agent previews an eight-hour ordinary-day target and any internal policy remainder, while preserving supported work above eight hours. Those additions are separate from evidence-backed import rows and require the corresponding app settings. **Billable + non-billable + Quickbase default** equals the total on each displayed basis. Default is not treated as non-billable. Live mapping, existing records and actual settings determine the final app review and receipt.
+Double-click Hours, or focus the box and press F2, for a last-minute duration change. Saving changes that row only and requires acknowledgement of the updated total. Original hours remain in the receipt. Make duration changes after matching and billing changes, which can regroup the proposal.
 
-Ledgers stay in the authorized chat or a separate review artifact. Do not add ledger worksheets to the import workbook. Its optional `Evidence` sheet contains only source IDs referenced by `Activities`, without excluded/personal/no-action ledger records. Complete mailbox coverage and stable IDs still depend on the actual Microsoft 365 tools available; the instructions cannot guarantee them.
+## Minimal workbook contract
 
-## Billing during review
+Use exactly two worksheets, **Metadata** and **Timecards**, with exact row-1 headers, plain saved values and no extra columns or sheets. No title rows, totals, hours, formulas, merged cells, macros, external links, evidence IDs or review content.
 
-The Billing dropdown appears only when Quickbase confirms Modify access to its Billable Override field. Otherwise, billing is read-only. Default labels show **Billable - Default** or **Nonbillable - Default** from the live rule and readable project/task fields. If those inputs are hidden or the formula is unsupported, **Default unavailable** avoids guessing. Green means billable, dim red means nonbillable, and gray means unknown. An explicit imported override without permission must be cleared with **Use default**, or the permission issue resolved, before submission.
-
-Double-click Hours (or focus it and press F2) to edit decimal hours. Saving changes that row only and requires confirmation of the updated total. Original hours remain in the receipt. New proposals and billing regrouping reset manual edits, so make duration changes last.
-
-## Confirmed review workbooks (0.6.0+)
-
-Toggl is optional. Leave its token blank in Settings and test/save the Quickbase account normally.
-
-Use `format=timekeeper_email_review` in Metadata. Required keys: format, employee_email, time_zone, period_start, period_end, employee_confirmed, retrieval_limitations. Preserve `employee_confirmed=false` in an unapproved draft. Timekeeper always asks for local confirmation even if this cell says true. The workbook email and time zone must match the verified account.
-
-Required sheet: `Review`, with these exact headers in one row:
-`Date | Matter / Project | Assignment / Category | Detailed work summary | Billing | Minutes | Decimal Hours | Evidence Reviewed | Needs Attention`
-
-Prefer ISO date text. Version 0.6.2 also accepts normal Excel date cells, General/text serials, native ISO date cells, English month names and unambiguous numeric date text. Both Excel date systems are supported. Ambiguous text such as `10/12/2026` requires correction; use `2026-10-12` or an actual Excel date cell. Work-date fields retain the written calendar date and ignore time of day. Minutes are positive whole numbers. Billing is `BILLABLE`, `NON-BILLABLE` or `QUICKBASE DEFAULT`. Hours must agree with Minutes / 60 to two decimals. An optional TOTAL row must match total minutes and total minutes / 60 rounded to two decimals. Optional sheets are exactly `Communication Accounting` and `Needs attention`. A title may be merged in row 1; a TOTAL label may span A:E.
-
-[Example Review workbook](templates/Timekeeper%20Email%20Workbook%20Example%20-%20REVIEW.xlsx) provides the supported layout for M365. Its sample data must be replaced, including employee email, dates, activities and limitations. Replace template guidance with actual daily attention notes. It does not contain evidence for any real employee.
-
-Version 0.6.2 reads a bounded snapshot of the saved workbook, including when Excel has it open for editing. Save changes before importing; unsaved edits are not included. Exclusive locks or unreadable files show recovery instructions. Numeric values and numeric text are accepted for durations; Boolean cells, true/false text (any case) and 1/0 are accepted for Boolean fields. These conversions do not change minutes, IDs, confirmation, duplicate checks or submission permissions. UTC evidence/generated timestamps still require explicit ISO text ending in `Z`.
-
-Plain values are preferred. The reader also recalculates same-row `F[row]/60` formulas in G and whole-table `SUM` totals in F/G. Excel cached values are ignored for these formulas. Other formulas, external links, macros and merged activity data are rejected. Filter-range names for Review/Communication Accounting are supported; version 0.6.3 also accepts Excel's quoted `'Review'` filter references. Rejected workbook defined names are identified in the error. Review Decimal Hours always represents underlying Minutes / 60 to two decimals; quarter-hour projections belong in Word/chat and Timekeeper's final review.
-
-The confirmation screen displays every activity, attention note and retrieval limitation. Both activity confirmation and limited-duplicate acknowledgement are required. Timekeeper records the confirmation time, original workbook hash and local row fingerprints. These fingerprints are not email IDs: edited/regrouped exports and crossover with final activity exports may escape duplicate matching. Check existing Quickbase time before submitting. No records are written by import or confirmation.
-
-Review rows may already include a disclosed policy allocation. Keep automatic email additions off unless they are deliberately needed; do not add the same time twice. Final imports below retain their stricter real-source-ID contract.
-
-## Workbook contract
-
-The machine-readable format is version 1. Worksheet names and headers must match exactly. Prefer dates as ISO text and always preserve IDs as text. Use plain values, and omit formulas, macros, external workbook links, and merged data cells. Date compatibility described above also applies to final Activities and Metadata reporting-period fields. The maximum file size is 10 MB, the maximum range is 31 dates, and the maximum activity count is 1,000.
-
-`Metadata` has columns `key,value` and these keys:
+Metadata has columns **key,value** and exactly four entries:
 
 | Key | Value |
 | --- | --- |
-| `format` | `timekeeper_email_activity` |
-| `schema_version` | `1` |
-| `employee_email` | Email matching Timekeeper's verified Quickbase account |
-| `time_zone` | Windows or IANA timezone equivalent to the Timekeeper profile |
-| `period_start` | `YYYY-MM-DD` |
-| `period_end` | Inclusive `YYYY-MM-DD` |
-| `generated_at_utc` | ISO 8601 UTC timestamp ending in `Z` |
-| `employee_confirmed` | `true`, only after confirmation in chat |
-| `retrieval_limitations` | Specific limitations, or `none` when coverage is verified |
+| format | timekeeper_email_import |
+| employee_email | Email matching the verified Quickbase account |
+| time_zone | Windows or IANA timezone equivalent to the app profile |
+| employee_confirmed | true, only after actual Word approval |
 
-`Activities` has these columns in order:
+Timecards has seven columns in this exact order:
 
 ```text
-activity_id,date,minutes,matter_hint,assignment_hint,task_hint,description,billable,time_basis,evidence_ids
+date,minutes,matter_hint,assignment_hint,task_hint,description,billable
 ```
 
-- `activity_id` is unique, stable text of at most 256 characters.
-- `date` falls within the metadata period. `minutes` is a positive whole number, at most 1,440, confirmed before rounding.
-- Matter, assignment, and task hints help the user choose actual Quickbase relationships, with at most 1,000 characters per hint. Unknown assignment/task hints may be blank. The description records what the employee did, with at most 4,000 characters.
-- `billable` is `true`, `false`, or blank for the Quickbase default.
-- `time_basis` is `employee_confirmed_estimate` or `measured`. A group containing estimated time uses the first value.
-- `evidence_ids` contains actual stable individual source IDs separated by semicolons. Each ID is at most 2,048 characters, is case-sensitive, and appears in only one activity across the workbook. Do not generate substitute IDs.
+- **date:** Local work date, preferably YYYY-MM-DD text.
+- **minutes:** Approved positive whole minutes, before app rounding.
+- **matter_hint:** Required matter/project/internal name.
+- **assignment_hint** and **task_hint:** Descriptive matching hints; may be blank.
+- **description:** Required concise account of the employee's work.
+- **billable:** true, false, or blank for deliberate Quickbase default. Blank does not mean nonbillable.
 
-An optional `Evidence` sheet uses:
+Timekeeper derives dates from the rows. No schema version, reporting-period fields, generated timestamp, hours calculation or evidence sheet is needed. The app treats minimal-format rows as employee-confirmed estimates; measurement detail stays in Word.
 
-```text
-evidence_id,source_type,timestamp_utc,direction,subject,action
-```
+Limits are 10 MiB, 1,000 rows, 31 inclusive calendar dates and 1,440 underlying minutes per date. Hints allow 1,000 characters each; descriptions allow 4,000. See [Import Format](Timekeeper%20Email%20Export%20Agent%20Import%20Format.txt) for complete generation rules.
 
-Evidence corroborates the activity; it does not add time. Every Evidence ID must belong to Activities. Keep it concise and avoid raw message bodies or the complete reconciliation ledger. Estimated minutes remain estimates even after the workbook passes structural checks.
+Normal Excel date cells, General/text serials and unambiguous date text remain supported. ISO text avoids locale ambiguity: use 2026-10-12 rather than ambiguous 10/12/2026 text. Numeric text and common Boolean representations are accepted. Saved workbooks can remain open in Excel, but unsaved edits are not imported.
+
+## Duplicate checks and corrections
+
+The minimal format does not require stable message IDs. The app uses local row fingerprints from normalized employee, date, matter, assignment, task and description. Minutes, billing and row order are excluded. Editing only those values or changing the filename does not make the same work new.
+
+Two otherwise identical rows are treated as duplicates even if minutes or billing differ. Distinct real activities need truthful descriptions of their distinct work. Do not add meaningless words to bypass a warning.
+
+These checks are limited. Changed descriptions/hints, regrouping, another import format or work entered elsewhere may evade matching. Check live existing Quickbase time and receipts. Preserve unchanged approved descriptions and grouping when regenerating a workbook, especially after a partial submission.
+
+For a correction, update the affected Word allocation, approve the revised proposal and generate a replacement Excel. Do not overwrite history or disguise previously sent rows as new work. Import alone is not a timecard replacement operation.
+
+## Older workbooks
+
+The app still accepts legacy **timekeeper_email_review** workbooks and rich **timekeeper_email_activity** workbooks under their existing contracts. Review files require local confirmation; rich Activities files retain their real-source-ID requirements. These are backward-compatible inputs. The revised agent should generate only the new **timekeeper_email_import** format and should not use the old REVIEW template.
 
 ## If something goes wrong
 
-- **Workbook rejected:** Correct the specific format, identity, date, confirmation, or source-ID error. Do not bypass a source-ID error by inventing new IDs.
-- **Ambiguous assignment:** Select the intended live Quickbase relationship. Return to the agent if the actual activity or duration is uncertain.
-- **Incomplete mailbox coverage:** Obtain the missing evidence or explicitly confirm the documented subset with the agent. Do not treat a relevance-ranked search as proof of complete coverage.
-- **Partial or unknown submission:** Keep the receipt and use **Check selected result**. Do not resubmit the workbook under a new filename to try again; successful rows may already exist in Quickbase.
-- **A regenerated activity mixes old and new work:** After resolving the receipt, ask the agent to split already-recorded and new work into separate activities with disjoint original source IDs and confirmed minutes. Link the old activity to its actual Quickbase record during mapping. Do not invent replacement IDs or automatically divide time by message count.
+- **Unapproved workbook:** Review and approve Word, then have the agent regenerate Excel with the actual approval recorded. Do not change the template's false flag just to import sample data.
+- **Invalid format or date:** Correct the named field or cell using the exact two-sheet contract. Use ISO dates when text is ambiguous.
+- **Uncertain work or assignment:** Correct the work or duration with the agent; use live lookup for Quickbase relationships.
+- **Incomplete coverage:** Obtain missing evidence or explicitly approve the documented subset. A relevance-ranked search does not prove complete mailbox coverage.
+- **Partial or unknown submission:** Keep the receipt and use **Check selected result** before trying again. Some rows may already exist.
+- **Deleted timecards:** Use **Recover deleted entries**, then import/read fresh data and review again. Renaming the workbook does not replace recovery.

@@ -50,7 +50,7 @@ If you read several dates but asked Copilot to prepare only one, version 0.4.3 o
 
 ## Review and write
 
-Each row includes a **Billing** dropdown: **Quickbase default**, **Billable** (green light) or **Non-billable** (dim red light). Default shows gray because the final status depends on Quickbase's project/task rules. Changing billing keeps the project, assignment and task. If override access cannot be confirmed, explicit choices are unavailable; ask your Quickbase administrator for Modify access to the Timecards **Billable Override** field. A returned record with an unconfirmed or mismatched override is retained in history and must be checked in Quickbase, not submitted again.
+Each row shows its **Billing** status. When Quickbase exposes the required rules, the default reads **Billable - Default** (green light) or **Nonbillable - Default** (dim red light). An unknown default stays gray as **Default unavailable**. A dropdown appears only when your Quickbase permissions allow billing overrides. Changing billing keeps the project, assignment and task. If override access cannot be confirmed, ask your Quickbase administrator for Modify access to the Timecards **Billable Override** field. A returned record with an unconfirmed or mismatched override is retained in history and must be checked in Quickbase, not submitted again.
 
 Review every date, project, assignment, task, category, description, and number of hours. Select a row and choose **View selected row details**, or double-click the row, to see complete descriptions, reference IDs, and Toggl source IDs. The table separates work from automatic additions. Timekeeper computes the hours and additions; the agent cannot invent extra source time.
 
@@ -84,14 +84,16 @@ Recovery does not delete or write Quickbase records. The original creation resul
 ## Import a day reconstructed from email
 
 1. Open your team's shared email export agent in Microsoft 365. Ask it to review the desired day in your timezone. Answer its questions about work performed, estimated minutes, matter and billing. Incoming messages alone do not prove work was performed.
-2. Download its `.xlsx` file. The optional PDF is for personal review only.
-3. Choose **Import email Excel** in Timekeeper, or drop the workbook in the file area. If it contains several dates, choose the dates to include.
+2. Review the Word report, correct any estimates or classifications, and explicitly approve its work, underlying minutes, billing, account, dates and disclosed limitations. The agent then creates a minimal `.xlsx` containing only approved timecard inputs. Word is the review document; Excel only drives the application. An optional PDF can be requested separately.
+3. Download the Excel file. In Timekeeper 0.7.0 or later, click **Import email Excel** or drop the workbook onto it. Briefly acknowledge that you approved the Word report and understand the limited duplicate checks. If it contains several dates, choose the dates to include.
 4. In **Match your activities**, select each activity's Quickbase assignment and task. Use **Find assignment** if needed. For work already in Quickbase, select the matching record under **Already in Quickbase?**. Confirm the activities are yours and choose **Review timecards**.
-5. Review the hours and billing dropdowns, acknowledge any estimates or existing-time warnings, and choose **Write to Quickbase**. Keep the receipt. Reimport a fresh workbook/baseline to prepare remaining work after a partial result; map successful activities to their existing records.
+5. Review the resulting hours and billing, acknowledge any estimates or existing-time warnings, and choose **Write to Quickbase**. Keep the receipt. Reimport a fresh workbook/baseline to prepare remaining work after a partial result; map successful activities to their existing records.
 
 Email imports use confirmed minutes and round up once per date/assignment/task/billing group, defaulting to five minutes. **Settings → Time policy → Email imports** offers no additional rounding, five minutes or fifteen minutes, and an option to apply your normal Timecards/fill settings. Automatic additions are off for email imports by default. Worked hours above the target are retained.
 
-The workbook email and timezone must match your verified account and settings. Timekeeper uses stable message/event IDs to prevent resubmission on this installation, including files regenerated with new descriptions or grouping. Check for records created manually or on another computer as well. After intentionally deleting an email-based record, use the same recovery action above, then import the workbook again instead of reading Toggl.
+The workbook email and timezone must match your verified account and settings. The new Excel contains exactly **Metadata** and **Timecards** sheets, with no review notes, formulas or source-message IDs. Timekeeper creates local row fingerprints for duplicate checks. Reworded or regrouped exports, imports through another format, and records created elsewhere may not be recognized. Check existing Quickbase time and receipts before submitting. After intentionally deleting an email-based record, use the same recovery action above, then import the workbook again instead of reading Toggl.
+
+The supplied **Timekeeper Email Import Template.xlsx** is a structural example with fictional rows and `employee_confirmed=false`. Replace all sample data and obtain Word approval before generating a real import. Older Review and Activities workbooks remain readable, but the email agent should generate only the new minimal format. Replace its old instructions, three context files and review template together using **Timekeeper Email Export Agent Setup.txt**.
 
 ## Update Timekeeper
 

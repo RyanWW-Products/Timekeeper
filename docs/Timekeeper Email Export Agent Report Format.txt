@@ -1,41 +1,48 @@
-TIMEKEEPER EMAIL EXPORT AGENT REPORT FORMAT
+﻿TIMEKEEPER EMAIL EXPORT AGENT REPORT FORMAT
 CONTEXT FILE 3 - UPLOAD AS AGENT KNOWLEDGE
-Revision: 2026-10-13
+Revision: 2026-10-13 | Word is the review file | Timekeeper 0.7.0+
 
-REQUIRED OUTPUTS
-Create detailed Word .docx on every run and real Excel review workbook for the initial proposal. Disclose incomplete coverage, estimated effort and missing IDs without withholding useful review files. Word is for personal review. The supported REVIEW.xlsx format can be imported and confirmed inside Timekeeper 0.6.0+. After chat approval and validation with genuine source IDs, create the separate final Activities workbook when possible.
+OUTPUT SEQUENCE
+First create one detailed Word .docx report for employee review. Ask for one explicit approval after delivery. Only after approval, create the minimal Excel file defined in Import Format. Excel exists solely to drive Timekeeper and contains no review pages, communication ledger, totals or explanatory notes. Do not create a REVIEW.xlsx.
 
-Filenames:
-timekeeper-email-YYYY-MM-DD.docx
-timekeeper-email-YYYY-MM-DD-REVIEW.xlsx
-timekeeper-email-YYYY-MM-DD.xlsx (confirmed import only)
-For ranges, use YYYY-MM-DD-to-YYYY-MM-DD.
+Word filename: timekeeper-email-YYYY-MM-DD-REVIEW.docx
+Approved machine import: timekeeper-email-YYYY-MM-DD.xlsx
+For ranges use YYYY-MM-DD-to-YYYY-MM-DD.
+
+The Word report remains the supporting review artifact after export. Approval is recorded in chat; do not regenerate an unchanged document only to change its draft label. If the employee changes allocations, update the affected report content and obtain approval for the revised proposal. Preserve all required review detail in Word.
 
 1. JOSH BOYD VISUAL REFERENCE
-When the actual supplied Josh Boyd daily activity report is accessible, inspect and reproduce its page setup, hierarchy, section order, matter grouping, heading typography, spacing, table styles, borders, shading, alignment, labels and detail density as closely as possible. Preserve separate received/sent communication sections. Do not replace an accessible reference with a generic design.
+When the supplied Josh Boyd daily activity report is accessible, inspect and reproduce its page setup, hierarchy, section order, matter grouping, typography, spacing, tables, borders, shading, alignment, labels and detail density as closely as practical. Preserve separate received/sent communication sections. Do not replace an accessible reference with a generic design.
 
-Use it only as a layout reference. Never copy its employee, cases, counts, hours or conclusions into another day's report. Layout does not override required uncertainty labels, billing buckets or import schema.
+Use it for style only. Never copy its employee, matters, counts, hours or conclusions into another day. Layout does not override uncertainty labels, billing buckets or the import schema.
 
-If missing/unreadable, do not claim an exact match. Note "Reference layout unavailable; standard report layout used" and deliver useful files using the fallback below. Do not stall reconstruction to request it. The shared-agent owner should supply a sanitized reference without private employee/client content.
+If unavailable, disclose "Reference layout unavailable; standard report layout used" and use the fallback below. Do not stall useful reconstruction. The agent owner should supply a sanitized reference without private employee/client data.
 
-2. FIRST PAGE AND STATUS
-Include the reference's title treatment, employee, date/range and timezone.
-Before approval: DRAFT - REVIEW ONLY.
-After approval: EMPLOYEE-APPROVED REVIEW.
-State import readiness separately; IDs or file generation may still be missing.
+2. FIRST PAGE, STATUS AND SCOPE
+Show the title, employee, verified Quickbase import email, reporting date/range and timezone. Initial status: DRAFT - REVIEW ONLY. A revised report may say EMPLOYEE-APPROVED REVIEW only when that actual revision was approved. Approval in chat can accompany the original draft without regenerating it.
 
-Add a concise executive summary and prominent Needs attention for major missing sources, low-confidence allocations and import blockers. Include a dashboard of calculated, clearly scoped metrics.
+Include a concise executive summary and prominent Needs attention for major coverage gaps, uncertain estimates and unresolved work. State the exact proposed export scope and any approved/excluded subset. Missing stable source IDs do not block the new workbook, but source and duplicate limitations must remain clear.
 
-Suggested dashboard: worked matters, supported attended meetings, available Teams call time, billable hours, non-billable hours, Quickbase-default hours and total. Label the hours' basis: underlying estimates, grouped rounded allocations, or proposed totals including policy additions. Do not mix bases without labels.
+Use a compact dashboard of calculated metrics: worked matters, supported attended meetings, available Teams call time, billable hours, non-billable hours, Quickbase-default hours and total. Identify whether each time value is underlying work, projected rounded time or a projected total with additions. Never mix bases.
 
-Optional metrics: verified retrieved sent messages, verified retrieved received messages, unique non-spam messages and distinct threads. These are different metrics. Search hits are not total emails. If uniqueness/coverage cannot be verified, say so. Unavailable sources do not imply zero.
+Optional metrics include verified retrieved sent/received messages, unique non-spam messages and threads. Search hits are not whole-day mailbox counts. Do not imply zero when a source is unavailable, and disclose when uniqueness or coverage is unverified.
 
-3. MATTER ENTRIES
-Number supported worked matters consistently with the reference. Prominent heading examples: "1. 31000 - Northbridge matter" when the actual display project number is known; otherwise "1. Northbridge matter". Display numbers are not assumed Quickbase record IDs. Internal work uses the configured label. Separate policy remainder from evidenced internal activity.
+3. MATTER ENTRIES AND EXACT EXPORT ALLOCATIONS
+Number every supported worked matter in the main report. Use prominent names and verified display numbers when available, such as "1. 31000 - Northbridge matter." Display project numbers are not assumed Quickbase record IDs. Use the configured name for actual internal work and separate it from policy filler.
 
-Under each heading, show compact category/task, hours, billing and time-basis metadata. Show underlying minutes when rounded hours differ. Assignment/category names are proposed until live matching unless a current authorized Quickbase lookup verified them.
+Within each matter show the actual proposed export allocation:
+- Local work date.
+- Underlying positive whole minutes.
+- Matter/project name, assignment hint and task hint; unknown assignment/task may be blank.
+- BILLABLE, NON-BILLABLE or QUICKBASE DEFAULT.
+- Concise action-oriented timecard description.
+- Measured or estimated basis and any material assumptions.
 
-Follow with a concise action-oriented account of the employee's work and relevant sections in this order:
+If a matter has multiple tasks, dates or billing treatments, distinguish those underlying allocations. This provides all seven Excel values without a separate duplicated review spreadsheet. A simple compact table inside the matter entry is sufficient; do not add another full duplicate of the report just to export.
+
+Keep projected rounded hours visually separate from the underlying minutes. Assignment and task names are proposed until live matching, unless verified by current authorized Quickbase lookup. Identify already-recorded work and whether it is excluded or will be linked to an existing record during Timekeeper matching.
+
+Follow with the reference's relevant sections:
 Communications received
 Communications sent
 Meetings
@@ -45,67 +52,49 @@ Deliverables / actions advanced
 Delegation
 Attachments / source material reviewed
 
-Separate received requests from employee responses. Each bullet captures a meaningful request, decision, action, result, deadline or deliverable impact. Never invent responses, attendance, file review or completion. Mentioning an attachment does not establish review. Omit empty sections unless the reference requires them; use Unavailable instead of false zero.
+Distinguish received requests from employee replies/actions. Each bullet should convey a meaningful request, decision, action, result, deadline or deliverable impact. Never invent responses, attendance, file review or completion. Mentioning an attachment does not establish review. Omit empty sections unless the reference requires them; label unavailable sources honestly.
 
-Prefer "Reviewed requested layout changes, directed revisions and coordinated delivery" when supported. Avoid "Worked on emails", copied bodies, signatures and disclaimers. Every worked matter belongs in the main timecard section; an appendix is insufficient. Untimed matter mentions need communication accounting, not invented time.
+Prefer "Reviewed layout changes, directed revisions and coordinated delivery" when supported. Avoid "Worked on emails," copied message bodies, signatures and disclaimers. Untimed mentions belong in communication accounting, not invented matter timecards.
 
 4. BILLING AND FALLBACK STYLE
-Use explicit BILLABLE, NON-BILLABLE and QUICKBASE DEFAULT labels in summaries/details. Do not rely on color alone. Follow the reference when available. Otherwise use restrained green for billable, muted red for non-billable and neutral slate for default, with readable contrast. Default billing is pending Quickbase, not non-billable.
+Use explicit BILLABLE, NON-BILLABLE and QUICKBASE DEFAULT text, not color alone. Follow the reference when available. Otherwise use restrained green for billable, muted red for non-billable and neutral slate for default, with readable contrast. Default is pending Quickbase, not non-billable.
 
-Fallback: professional Word document, consistent headings, dark-blue labels, light table shading, compact metadata rows and readable body spacing. Right-align hours with two decimal places. Repeat table headers, keep headings with following content and avoid splitting short metadata blocks. Include page numbers. No decorative slogans, novelty icons or excessive color.
+Fallback: professional Word document, consistent headings, dark-blue labels, light table shading, compact metadata and readable body spacing. Right-align decimal hours to two places, and show minutes as whole numbers. Repeat table headers, keep headings with following content, avoid splitting short metadata blocks, and include page numbers. No slogans, novelty icons or excessive decoration.
 
-Do not shrink content to an arbitrary page count. Let long tables flow without clipping or overlap. Wrap concise communication summaries or use a landscape ledger section when needed.
+Do not shrink content to an arbitrary page count. Let long tables flow without clipping or overlap. A landscape appendix is acceptable for a long communication ledger.
 
-5. COMPLETE NON-SPAM ACCOUNTING
-Account for every retrieved in-scope non-spam message, even if untimed. Main matter sections may summarize groups; the accounting ledger provides one canonical row per unique message, disposition and destination. Repeated hits may appear as duplicate references without inflating unique counts.
+5. COMPLETE NON-SPAM COMMUNICATION ACCOUNTING
+Word includes the complete concise accounting of retrieved in-scope non-spam messages. Main matter sections can summarize groups; an appendix supplies one canonical row per unique message, its disposition and destination. Do not point readers to Excel for the rest of the ledger.
 
-Ledger fields: local date/time, direction, concise subject or neutral personal label, matter/internal label, disposition, destination activity/section and brief reason. Keep real IDs in a reference field or review Excel when long. Mark missing IDs; local ledger keys are not import evidence IDs.
+Use local date/time, direction, concise subject or neutral personal label, matter/internal label, disposition, destination section and brief reason. Real IDs may be retained in working evidence or short Word references when useful; do not clutter each row with long IDs. Clearly label local bookkeeping keys and uncertain identity.
 
-Include personal, promotional, automated no-action, excluded-from-time and unresolved messages. Minimize sensitive personal content. Exclude spam entirely. Never allocate time merely to make each message timed.
+Include personal, promotional, automated no-action, excluded-from-time and unresolved messages, with minimal sensitive content. Exclude spam. Do not assign work merely to make every message timed. Repeated hits can reference the canonical row without inflating unique counts or effort.
 
-For extensive ledgers, Word can show concise accounting and direct cross-references to complete rows in REVIEW.xlsx, with reconciled counts. Do not call a Word summary the full ledger if rows are elsewhere.
+Reconcile counts against main entries and untimed dispositions. A message spanning multiple matters remains one communication, even if supported effort is allocated across matters. Disclose source limitations rather than claim unverified completeness.
 
 6. TIME AND TOTALS
-Show quarter-hour grouped allocations in Word/chat, separately from underlying minutes. Round positive grouped underlying minutes UP to 15 minutes, not each email. In the Review worksheet, Minutes and Decimal Hours remain underlying time: Decimal Hours is Minutes/60 rounded to two decimals, not rounded to a quarter hour. Final Activities also contains underlying minutes; Timekeeper rounds after live mapping. This avoids rounding twice.
+For each work allocation retain the approved underlying minutes. Optionally show grouped quarter-hour planning time by rounding each positive group UP to 15 minutes. Never round individual messages or export rounded planning minutes. Timekeeper uses actual selected rounding after live matching; its default is 5 minutes, with 15-minute and no-additional-rounding options.
 
-Separate:
+Show separately:
 1. Underlying supported/reconstructed minutes and hours.
-2. Grouped quarter-hour allocations and rounding difference.
+2. Grouped projected rounded time and rounding difference.
 3. Known existing Quickbase time, checked for overlap.
-4. Proposed configured Timecards and Misc internal additions.
-5. Proposed daily total and assumptions.
+4. Proposed configured Timecards and Misc internal policy additions.
+5. Projected daily total and assumptions.
 
-Use the ordinary-day 8.00-hour planning target described in Knowledge. Label remainder as policy allocation, not measured/evidenced work. Preserve supported work above target. If existing records or app settings are unknown, mark totals provisional. Show large remainder prominently. Do not claim projected totals exactly predict the saved receipt.
+Use Knowledge's 8.00-hour ordinary-day planning target. Policy remainder is not measured/evidenced work and never goes into the new Excel. Actual supported internal activity does. Preserve work above target and the full configured Timecards addition. If existing records/settings are unknown, mark projections provisional. Large remainders need prominent attention.
 
-For each layer, billable + non-billable + Quickbase default = total on that same basis. Calculate from entries. Explain differences between raw minutes, rounded display hours and later app grouping. For ranges, show daily subtotals and a range total; eight hours is not a single target for the entire range.
+For each layer, billable + non-billable + Quickbase default = total on that same basis. Compute from entries. For ranges show daily subtotals and range total; eight hours is not a target for the whole range. Rounded display hours can differ slightly from exact-minute sums; calculate totals from underlying minutes and clearly label the basis.
 
 Include: "Estimated hours are reconstructed from available evidence and are not a timer record."
 
-7. REVIEW EXCEL (TIMEKEEPER 0.6.0+)
-Use REVIEW in the filename and label unapproved files DRAFT - REVIEW ONLY. These can be confirmed in Timekeeper; they are not final activity exports. Do not invent evidence IDs when M365 cannot provide them.
+7. QUALITY CHECK, APPROVAL AND EXPORT
+Before Word delivery, reconcile dispositions, worked-matter entries, received/sent summaries, underlying minutes, rounded projections, billing buckets and coverage claims. Selected dates and identity must be consistent. Ensure each proposed import row's underlying minutes, billing and work are reviewable.
 
-Use exactly these sheets: Metadata, Review, and optional Communication Accounting and Needs attention. Do not add Summary or Proposed Activities sheets to this supported layout.
+Create an actual .docx download. If rendering tools exist, inspect every page for missing rows, clipping, overflow, awkward splits, spacing and billing readability. Disclose when visual inspection was unavailable. Optional PDF may be supplied on request, but does not replace Word. Never claim files or previews that were not created.
 
-Metadata has key,value headers in row 1. Required keys: format=timekeeper_email_review, employee_email, time_zone, period_start, period_end, employee_confirmed=false for drafts, retrieval_limitations. Dates use yyyy-MM-dd; identify missing stable IDs and incomplete coverage explicitly. Timekeeper asks for local confirmation regardless of the employee_confirmed cell.
+After delivery, ask one approval question covering work, underlying minutes, billing, account, dates and limitations. Do not make Excel until the employee explicitly approves. If they request changes, update the affected work and obtain approval for that revised proposal.
 
-Review columns in exact order: Date | Matter / Project | Assignment / Category | Detailed work summary | Billing | Minutes | Decimal Hours | Evidence Reviewed | Needs Attention
-A title may precede the headers. Prefer ISO date text; Timekeeper 0.6.2 also accepts real Excel dates and unambiguous date text. Minutes is a positive whole number, Decimal Hours is Minutes/60 rounded to two decimals. Billing is BILLABLE, NON-BILLABLE or QUICKBASE DEFAULT. Use clear mapping hints, detailed descriptions, concise evidence subjects and all unresolved notes. Optional final TOTAL sums Minutes and rounds total Minutes/60 to two decimals. Each day's minutes must be at most 1440.
+On approval, use the existing reconciled allocation to create only the exact Metadata/Timecards workbook. Reopen it when tools permit and check the saved values against Word. Do not reproduce ledgers, review formatting, hours, totals or caveats in Excel. Do not redo whole-mailbox retrieval or regenerate unchanged Word.
 
-Use saved plain values. Timekeeper also supports G-row formulas F[row]/60 and whole-table SUM totals in F/G, calculated locally, not from cached results. Only a row-1 title and the TOTAL label A:E may be merged. No external links, macros, arbitrary formulas, credentials or raw message bodies. Review/Communication Accounting filter ranges are supported, including Excel's quoted 'Review' sheet name in Timekeeper 0.6.3+. Avoid other workbook defined names; they are not cell values and can cause rejection.
-
-Communication Accounting contains the full non-spam ledger with direction/source, matter/thread, most recent subject, disposition, whether time bearing and notes. Needs attention contains assumptions, coverage gaps, missing IDs and approval decisions. Keep policy allocations clearly disclosed and separate where possible; do not duplicate automatic app additions.
-
-On import, the employee reviews activities and notes and accepts limited duplicate detection before matching live Quickbase relationships. These files have row fingerprints, not stable message IDs. Changed or regrouped files can escape duplicate matching. The employee must check existing time. The app records confirmation; the agent must not pretend it already occurred.
-
-If supplied, use Timekeeper Email Workbook Example - REVIEW.xlsx as the layout reference. Replace all sample activities, subjects, employee identity, dates and limitations. Keep exact sheet names/headers. Replace template guidance in Needs attention with the actual day's assumptions and coverage notes. The example provides no evidence or approved duration for any employee.
-
-When genuine source IDs and chat approval are available, generate a separate final workbook using Metadata, Activities and optional Evidence from Import Format. Its exact schema remains unchanged. Explain any approved subset or differences in rounding/policy totals.
-
-8. QUALITY CHECK AND DELIVERY
-Reconcile source dispositions, worked-matter entries, received/sent summaries, raw/rounded totals, billing buckets, coverage claims and cross-file identities. Selected dates must match all outputs. Preserve earlier approved work unless changed.
-
-Create actual local .docx/.xlsx with available file tools and attach real downloads. Chat tables/code do not replace files. Do not promise previews the platform does not supply. If one type fails, say which and deliver the useful remaining output.
-
-When rendering tools exist, visually inspect every Word page for missing rows, clipping, overflow, awkward splits, spacing and billing legibility. Reopen Excel to check stored values. Disclose unavailable inspection instead of claiming a visual pass. Optional PDF may be supplied on request, but does not replace Word.
-
-Keep chat concise: filenames, draft/approved/import status, important limitations and next step. Invite draft corrections or one approval when the employee is ready. For a confirmed import, direct them to import in Timekeeper, select live assignments/tasks, review hours/billing and explicitly submit. File generation does not post timecards.
+Keep delivery chat concise: file, approval/import status, important limitations and next step. Direct the employee to Timekeeper 0.7.0+, the brief approved-Word/limited-duplicate acknowledgement, live assignment/task matching, final timecard review and explicit submission. Neither artifact generation nor import writes timecards automatically.
