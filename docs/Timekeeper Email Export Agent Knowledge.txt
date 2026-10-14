@@ -1,6 +1,6 @@
-﻿TIMEKEEPER EMAIL EXPORT AGENT KNOWLEDGE
+TIMEKEEPER EMAIL EXPORT AGENT KNOWLEDGE
 CONTEXT FILE 1 - UPLOAD AS AGENT KNOWLEDGE
-Revision: 2026-10-14 | Word-first workflow | Timekeeper 0.7.1+
+Revision: 2026-10-14 | Word-first workflow | Timekeeper 0.8.0+
 
 This file expands the actual agent instructions. Word contains review, evidence context and communication accounting. Import Format defines the minimal two-sheet Excel file. Report Format defines Word presentation. These files replace older guidance calling for a review Excel or real message IDs in every import. They cannot grant source access, full mailbox coverage or file-generation capabilities.
 
@@ -68,7 +68,7 @@ Use TEI Internal Tampa / Internal / Other / Misc. internal / NON-BILLABLE for th
 
 Proposed remainder = max(0, target - known existing recorded hours - proposed NEW grouped hours - applicable Timecards addition). Include existing time only when amount and coverage are known. Otherwise mark the preview provisional and let Timekeeper calculate with fresh Quickbase data. Already-recorded work must not be counted as new work.
 
-Timekeeper's configurable daily defaults are 0.17 hours Timecards, then fill eligible weekdays toward 8.00 hours. Daily additions are OFF for email imports by default. The employee can enable "Apply my Timecards and weekday fill settings to email imports." They can change the target or disable either addition. Do not claim settings changed automatically. Policy depends on work dates and totals, not time of day.
+Timekeeper's configurable daily defaults are 0.17 hours Timecards, then fill eligible weekdays toward 8.00 hours. Daily additions are OFF for email imports by default. The employee can enable "Apply my Timecards and weekday fill settings to email imports." They can also change the target or enable/disable either addition in the activity table for one import, without changing saved preferences. Do not claim settings changed automatically. Policy depends on work dates and totals, not time of day.
 
 Examples with no existing time and enabled additions, after grouping/rounding:
 7.00 work + 0.17 Timecards + 0.83 Misc internal = 8.00 hours.
@@ -86,7 +86,7 @@ Non-billable case work retains its case/assignment/task. A second case manager's
 
 Use an authorized read-only Quickbase tool when available to search case number, caption, client, aliases and assignment text. Verify candidates against multiple details and current relationships. Distinguish display project numbers from record IDs. Stale references do not establish live verification. Without a connector, give descriptive hints for Timekeeper's live matching. Instructions alone do not install tools.
 
-Timekeeper 0.7.1 presents all imported activities in a matching table. Assignment/task dropdowns start with the best plausible guesses from the available Quickbase choices. These are editable suggestions, not verified selections; unmatched fields remain Choose. The employee checks them before final review. Existing timecards are never linked automatically and require deliberate selection. The single checkbox on final review confirms hours, mapping choices, estimates, coverage and duplicate limits. Word approval still happens before Excel generation; no additional opening acknowledgement or personal-confirmation checkbox is required during mapping.
+Timekeeper 0.8.0 presents imported activities in a table with editable best-guess assignment/task selections; unmatched fields remain Choose. Existing records require manual linking. Hours display as decimals with double-click/F2 editing, and billing is editable only with Quickbase permission. Edited hours are exact; unedited activities retain configured group rounding. The employee can enable weekday fill, set its target and include Timecards for this import; fill recalculates. They can choose Review in Timekeeper dashboard or inspect the submission preview and Submit directly to Quickbase. The chosen route has one final checkbox covering hours, mappings, estimates, coverage and duplicate limits. Changes reset confirmation. Word approval still precedes Excel generation; no separate opening acknowledgement is required. Excel still contains whole minutes.
 
 Overrides depend on permission to modify the actual Quickbase override field. The agent cannot grant access. Timekeeper hides unsupported override controls and checks permissions again before submission. A default result may be unavailable if the source fields are hidden. Do not silently change an explicitly approved non-billable case row to Quickbase default to avoid a permission error.
 

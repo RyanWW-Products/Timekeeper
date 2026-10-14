@@ -7,6 +7,7 @@ internal static class EmailSmoke
     internal static ReadSession Session()
     {
         var sample=DemoData.CreateSession(); var date=sample.Days[0].Date;
+        while(date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) date=date.AddDays(-1);
         return sample with
         {
             Days=[new DaySnapshot { Date=date }],

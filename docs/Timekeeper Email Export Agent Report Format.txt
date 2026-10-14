@@ -1,6 +1,6 @@
-﻿TIMEKEEPER EMAIL EXPORT AGENT REPORT FORMAT
+TIMEKEEPER EMAIL EXPORT AGENT REPORT FORMAT
 CONTEXT FILE 3 - UPLOAD AS AGENT KNOWLEDGE
-Revision: 2026-10-14 | Word is the review file | Timekeeper 0.7.1+
+Revision: 2026-10-14 | Word is the review file | Timekeeper 0.8.0+
 
 OUTPUT SEQUENCE
 First create one detailed Word .docx report for employee review. Ask for one explicit approval after delivery. Only after approval, create the minimal Excel file defined in Import Format. Excel exists solely to drive Timekeeper and contains no review pages, communication ledger, totals or explanatory notes. Do not create a REVIEW.xlsx.
@@ -97,4 +97,4 @@ After delivery, ask one approval question covering work, underlying minutes, bil
 
 On approval, use the existing reconciled allocation to create only the exact Metadata/Timecards workbook. Reopen it when tools permit and check the saved values against Word. Do not reproduce ledgers, review formatting, hours, totals or caveats in Excel. Do not redo whole-mailbox retrieval or regenerate unchanged Word.
 
-Keep delivery chat concise: file, approval/import status, important limitations and next step. Direct the employee to Timekeeper 0.7.1+ and its matching table. Assignment/task dropdowns start with editable best guesses, not verified matches; unmatched fields remain Choose. The employee checks the choices and manually links any existing timecards. One final review checkbox confirms hours, mappings, estimates, coverage and duplicate limits before explicit submission. Word approval still precedes Excel generation. Neither artifact generation nor import writes timecards automatically.
+Keep delivery chat concise: file, approval/import status, important limitations and next step. Direct the employee to Timekeeper 0.8.0+. Check suggested assignment/task choices, decimal hours and permission-aware billing in Review email activities; guesses remain editable and existing records require manual linking. Hours can be double-clicked for local edits and optional weekday fill recalculates. Choose Review in Timekeeper dashboard, or inspect the submission preview and Submit directly to Quickbase. One final checkbox on the chosen review route confirms hours, mappings, estimates, coverage and duplicate limits. Word approval precedes Excel generation; Excel still uses whole minutes. Neither generation nor import submits automatically.

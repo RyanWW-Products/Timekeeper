@@ -61,6 +61,83 @@ Test("Email-only session validates without any Toggl timer or automatic filler",
     Equal(result.Rows.Count, 1); Equal(result.Rows[0].Hours, 0.08m); Equal(result.Rows[0].SourceEntryIds.Count, 0);
     True(result.Warnings.Any(w => w.Contains("estimated time")));
 });
+Test("Table hours edits are exact while unedited fragments still round once", () =>
+{
+    var session = Session(1, 1); var source = JsonSerializer.Serialize(session, JsonDefaults.Options);
+    var edit = EmailReviewEdits.FromSettings(session.Settings) with { ActivityHours = [new("a0", 1, .10m)] };
+    var result = EmailRules.Validate(session, Proposal(session), emailEdits: edit); Valid(result);
+    Equal(result.Rows.Single().Hours, .18m); Equal(result.Rows.Single().OriginalHours, (decimal?).08m);
+    True(result.Warnings.Any(w => w.Contains("changed from")));
+    Equal(JsonSerializer.Serialize(session, JsonDefaults.Options), source);
+    var precise = Session(15);
+    var exact = EmailRules.Validate(precise, Proposal(precise), emailEdits: new() { ActivityHours = [new("a0", 15, .26m)] });
+    Valid(exact); Equal(exact.Rows.Single().Hours, .26m);
+});
+Test("Table fill recalculates after hour edits and counts existing Quickbase time", () =>
+{
+    var session = Existing(Session(5), 1m); var settings = session.Settings;
+    var edits = new EmailReviewEdits { ActivityHours = [new("a0", 5, .50m)], FillWeekdays = true, TargetHours = 8m, AddTimecards = true };
+    var result = EmailRules.Validate(session, Proposal(session), emailEdits: edits); Valid(result);
+    Equal(result.Rows.Single(r => r.Kind == "work").Hours, .50m);
+    Equal(result.Rows.Single(r => r.Kind == "timecards").Hours, .17m);
+    Equal(result.Rows.Single(r => r.Kind == "misc_internal").Hours, 6.33m);
+    Equal(session.Settings, settings);
+    var above = Session(5); var overtime = EmailRules.Validate(above, Proposal(above), emailEdits: edits with { ActivityHours = [new("a0", 5, 9m)] });
+    Valid(overtime); Equal(overtime.Rows.Sum(r => r.Hours), 9.17m); True(overtime.Rows.All(r => r.Kind != "misc_internal"));
+});
+Test("Table weekday additions remain off on weekends", () =>
+{
+    var session = Session(15); var date = new DateOnly(2026, 10, 11); var workbook = session.EmailWorkbook!;
+    session = session with { Days = [new() { Date = date }], EmailWorkbook = workbook with { Metadata = workbook.Metadata with { PeriodStart = date, PeriodEnd = date }, Activities = workbook.Activities.Select(a => a with { Date = date }).ToList() } };
+    var result = EmailRules.Validate(session, Proposal(session), emailEdits: new() { FillWeekdays = true, AddTimecards = true, TargetHours = 8m });
+    Valid(result); Equal(result.Rows.Count, 1); Equal(result.Rows.Single().Hours, .25m);
+});
+Test("Table edits reject invalid values stale source identity and duplicate edits", () =>
+{
+    var session = Session(5);
+    foreach (var edits in new EmailReviewEdits[]
+    {
+        new() { ActivityHours = [new("a0", 4, .25m)] }, new() { ActivityHours = [new("missing", 5, .25m)] },
+        new() { ActivityHours = [new("a0", 5, .25m), new("a0", 5, .5m)] }, new() { ActivityHours = null! },
+        new() { ActivityHours = [null!] }, new() { TargetHours = 24.01m }, new() { TargetHours = 7.555m },
+        new() { ActivityHours = [new("a0", 5, 0)] }, new() { ActivityHours = [new("a0", 5, decimal.MaxValue)] },
+        new() { ActivityHours = [new("a0", 5, .123m)] }
+    }) True(!EmailRules.Validate(session, Proposal(session), emailEdits: edits).IsValid);
+    var two = Session(5, 5);
+    Reject(EmailRules.Validate(two, Proposal(two), emailEdits: new() { ActivityHours = [new("a0", 5, 13), new("a1", 5, 12)] }), "24 hours");
+});
+Test("Already recorded activities cannot silently carry table duration edits", () =>
+{
+    var session = Existing(Session(5), 1m); var proposal = Proposal(session) with { Rows = [], EmailAlreadyRecorded = [new() { ActivityId = "a0", ExistingRecordId = 8001 }] };
+    Reject(EmailRules.Validate(session, proposal, emailEdits: new() { ActivityHours = [new("a0", 5, .5m)] }), "already-recorded");
+});
+Test("Billing regrouping retains explicit table hours and dashboard edits layer on that baseline", () =>
+{
+    var session = Session(1, 1); var proposal = Proposal(session);
+    var edits = new EmailReviewEdits { ActivityHours = [new("a0", 1, .10m), new("a1", 1, .20m)] };
+    var split = proposal with { Rows = [proposal.Rows[0] with { BillableOverride = true }, proposal.Rows[1] with { BillableOverride = false }] };
+    var separated = EmailRules.Validate(session, split, emailEdits: edits); Valid(separated); Equal(separated.Rows.Sum(r => r.Hours), .30m);
+    var merged = EmailRules.Validate(session, proposal, emailEdits: edits); Valid(merged); Equal(merged.Rows.Single().Hours, .30m);
+    var row = merged.Rows.Single(); var changed = ReviewDurations.Apply(session, merged, [new(ReviewDurations.Key(row), .30m, .50m)]);
+    Valid(changed); Equal(changed.Rows.Single().Hours, .50m); Equal(changed.Rows.Single().OriginalHours, (decimal?).08m);
+});
+Test("Email table options cannot apply to a Toggl proposal", () =>
+{
+    var session = DemoData.CreateSession();
+    Reject(Rules.Validate(session, DemoData.CreateProposal(session), emailEdits: new()), "email import");
+});
+Test("Changing selected dates scopes table hours and fill without losing original edits", () =>
+{
+    var session = Session(15, 15); var workbook = session.EmailWorkbook!; var next = session.Days[0].Date.AddDays(1);
+    session = session with { Days = [session.Days[0], new() { Date = next }], EmailWorkbook = workbook with { Metadata = workbook.Metadata with { PeriodEnd = next }, Activities = [workbook.Activities[0], workbook.Activities[1] with { Date = next }] } };
+    var edits = new EmailReviewEdits { ActivityHours = [new("a0", 15, .5m), new("a1", 15, 1m)], FillWeekdays = true, TargetHours = 8m };
+    var scope = ProposalScope.Select(session, Proposal(session), [next]);
+    var selected = EmailRules.Validate(scope.Session, scope.Proposal, emailEdits: edits); Valid(selected);
+    Equal(selected.Rows.Sum(r => r.Hours), 8m); True(selected.Rows.All(r => r.Date == next));
+    Equal(selected.Rows.Single(r => r.Kind == "work").Hours, 1m);
+    var restored = EmailRules.Validate(session, Proposal(session), emailEdits: edits); Valid(restored);
+    Equal(restored.Rows.Sum(r => r.Hours), 16m); Equal(restored.Rows.Single(r => r.Kind == "work" && r.Date != next).Hours, .5m);
+});
 Test("Confirmed fragments combine before five-minute rounding", () =>
 {
     var session = Session(1, 1, 1); var result = EmailRules.Validate(session, Proposal(session)); Valid(result);

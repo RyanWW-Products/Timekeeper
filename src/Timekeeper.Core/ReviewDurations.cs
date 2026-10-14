@@ -27,7 +27,7 @@ public static class ReviewDurations
             { result.Errors.Add("Edited hours must be greater than zero, at most 24, and have no more than two decimal places."); continue; }
             var (row, index) = matches[0];
             if (edit.Hours == row.Hours) continue;
-            result.Rows[index] = row with { Hours = edit.Hours, OriginalHours = row.Hours };
+            result.Rows[index] = row with { Hours = edit.Hours, OriginalHours = row.OriginalHours ?? row.Hours };
             result.Warnings.Add($"{row.Date:yyyy-MM-dd} · {row.Description}: hours changed in review from {row.Hours:0.00} to {edit.Hours:0.00}. Other rows, including Misc internal, are unchanged. Confirm the daily total.");
             if (session.Days.SelectMany(d => d.Existing).Any(c => c.Date == row.Date && c.Project == row.Project && c.Assignment == row.Assignment && c.Task == row.Task && c.Hours == edit.Hours))
                 result.Warnings.Add($"Possible duplicate after editing hours: {row.Date:yyyy-MM-dd}, {row.TaskName}, {edit.Hours:0.00} hours matches an existing Quickbase timecard.");

@@ -50,11 +50,12 @@ public static class Rules
     private static decimal Hours(long seconds) => decimal.Round(seconds / 3600m, 2, MidpointRounding.AwayFromZero);
     private static bool Named(string? name, string expected) => string.Equals(name?.Trim(), expected, StringComparison.OrdinalIgnoreCase);
 
-    public static ValidationResult Validate(ReadSession session, ProposalEnvelope proposal, DateTimeOffset? now = null)
+    public static ValidationResult Validate(ReadSession session, ProposalEnvelope proposal, DateTimeOffset? now = null, EmailReviewEdits? emailEdits = null)
     {
-        if (session?.EmailWorkbook is not null) return EmailRules.Validate(session, proposal, now);
+        if (session?.EmailWorkbook is not null) return EmailRules.Validate(session, proposal, now, emailEdits);
         var result = new ValidationResult();
         var errors = result.Errors;
+        if (emailEdits is not null) errors.Add("Email review edits require an email import.");
         var warnings = result.Warnings;
         if (proposal is not null && ((proposal.EmailAlreadyRecorded?.Count ?? 0) > 0 || proposal.Rows?.Any(r => r?.SourceActivityIds?.Count > 0) == true))
             errors.Add("Email activity cannot be included in a Toggl proposal. Import the email workbook separately.");

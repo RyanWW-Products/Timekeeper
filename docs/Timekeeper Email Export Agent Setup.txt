@@ -1,9 +1,9 @@
-﻿TIMEKEEPER EMAIL EXPORT AGENT - SETUP GUIDE
+TIMEKEEPER EMAIL EXPORT AGENT - SETUP GUIDE
 OWNER REFERENCE ONLY - DO NOT PASTE OR UPLOAD THIS FILE AS AGENT INSTRUCTIONS/KNOWLEDGE
-Revision: 2026-10-14 | Word-first workflow | Requires Timekeeper 0.7.1+
+Revision: 2026-10-14 | Word-first workflow | Requires Timekeeper 0.8.0+
 
 REPLACE THE AGENT PACKAGE
-1. Update Timekeeper to version 0.7.1 or later for the matching table and single final confirmation described here. The minimal timekeeper_email_import workbook schema is unchanged from 0.7.0; earlier releases cannot read it.
+1. Update Timekeeper to version 0.8.0 or later for decimal hours, protected edits, billing, per-import fill and direct submission from the matching table. The minimal timekeeper_email_import workbook schema is unchanged from 0.7.0; earlier releases cannot read it.
 
 2. Replace the shared agent's Instructions field with "Timekeeper Email Export Agent Instructions.txt." That is the actual instruction file, kept below 8,000 characters. Do not paste this Setup guide there.
 
@@ -24,7 +24,8 @@ NEW DAILY WORKFLOW
 - The agent creates a small Excel file from the approved allocation. It does not repeat mailbox retrieval or regenerate unchanged Word.
 - Excel contains only Metadata and Timecards: four metadata values and seven columns of work data. No review sheets, totals, hours formulas, ledgers, evidence IDs or generated timestamps.
 - The employee imports into Timekeeper and checks a matching table with assignment/task dropdowns prefilled with best plausible guesses. Guesses are editable, not verified matches; unmatched fields remain Choose. Existing timecards are never linked automatically.
-- The employee reviews the resulting timecards and confirms hours, mappings, estimates, coverage and duplicate limits with one final checkbox before explicit submission. Word approval before Excel generation remains required.
+- The employee can double-click decimal hours to edit, adjust permitted billing, and set optional weekday fill and Timecards additions. The table shows 0.25 h for 15 minutes; Excel still contains whole minutes.
+- Choose Review in Timekeeper dashboard, or open the submission preview and Submit directly to Quickbase. The chosen route requires one final checkbox covering hours, mappings, estimates, coverage and duplicate limits. Both routes retain live checks and receipts. Word approval before Excel generation remains required.
 
 TEMPLATE AND SAFETY
 The new template contains fictional examples, not anyone's work. It intentionally has employee_confirmed=false and will be rejected as an unapproved import. The agent replaces all sample data, then sets true only after approval of the actual Word report. It must never change that flag merely to get an unapproved workbook accepted.
@@ -34,7 +35,7 @@ Real message IDs are no longer a prerequisite for this minimal format. Missing e
 BILLING AND TIME POLICY
 Explicit non-billable case work keeps its case/assignment/task. Billing overrides require the employee's actual Quickbase permission; a new export schema does not grant it. If the default rule's inputs are hidden, Timekeeper may display Default unavailable.
 
-Whole minutes in Excel represent approved work before app rounding. Default email rounding is 5 minutes; select 15 minutes for quarter-hour output or no additional rounding for exact confirmed minutes. Automatic Timecards and weekday fill are off for email imports by default. Enable "Apply my Timecards and weekday fill settings to email imports" only when desired. Word previews those additions separately; Excel excludes filler so the app does not add it twice.
+Whole minutes in Excel represent approved work before app rounding. Default email rounding is 5 minutes; select 15 minutes for quarter-hour output or no additional rounding for exact confirmed minutes. Automatic Timecards and weekday fill are off for email imports by default. Set persistent defaults with "Apply my Timecards and weekday fill settings to email imports", or use the activity-table controls for one import. Local activity-hour edits are exact and recalculate fill; unedited activities keep grouped rounding. Use imported restores the original duration. Later final-row edits in the dashboard leave other rows and filler unchanged. Word previews those additions separately; Excel excludes filler so the app does not add it twice.
 
 Toggl remains optional for email-only employees. Quickbase account setup remains required for matching and submission.
 
@@ -44,7 +45,7 @@ Use a known day and verify:
 2. Every supported worked matter and every retrieved non-spam communication has a place in Word. Estimates, coverage gaps and untimed items are clear.
 3. Word exposes the exact underlying minutes, billing, hints and descriptions that will be exported. Time over eight hours is preserved.
 4. One explicit approval leads to a real Excel download with exactly Metadata/Timecards, four keys and seven columns. No redundant review content or made-up IDs.
-5. The app imports the approved file, checks identity and dates, and opens the matching table. Assignment/task guesses are editable; unmatched fields remain Choose, and existing records require manual selection. There is no opening acknowledgement or personal-confirmation checkbox during mapping. A single final review checkbox confirms hours, mappings, estimates, coverage and duplicate limits. Import alone writes nothing.
+5. The app imports the approved file, checks identity and dates, and opens the matching table. Assignment/task guesses are editable; unmatched fields remain Choose, and existing records require manual selection. There is no opening acknowledgement or personal-confirmation checkbox during mapping. Check decimal hours, double-click edits, permission-aware billing and optional weekday fill. Confirm exact rows and warnings in the submission preview for direct submission, or choose dashboard review. A single final checkbox on the chosen route confirms hours, mappings, estimates, coverage and duplicate limits. Import alone writes nothing.
 6. Corrections affect the revised approved allocation, while unchanged data stays stable. A partial receipt is reconciled before another write.
 
 Applying these files does not automatically edit the live M365 agent or employee app installations. The owner must replace the agent files, distribute the new template and update the application before team rollout. This Setup file is owner guidance only.

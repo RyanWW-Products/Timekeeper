@@ -1,6 +1,6 @@
 ﻿# Email-based timecards
 
-Timekeeper uses **Word for review, then a small Excel file for import**. The agent prepares the Word report first. Once you approve it, the agent exports only the data Timekeeper needs. Version 0.7.1 puts imported activities in a matching table with suggested assignments/tasks and one final review confirmation. Excel has no review pages, totals, communication ledger or formulas.
+Timekeeper uses **Word for review, then a small Excel file for import**. The agent prepares the Word report first. Once you approve it, the agent exports only the data Timekeeper needs. Version 0.8.0 adds decimal hours, protected edits, billing and per-import weekday fill to the matching table, with a final preview for direct submission. Excel has no review pages, totals, communication ledger or formulas.
 
 ## Set up the shared agent
 
@@ -10,7 +10,7 @@ Replace the old REVIEW workbook in the agent's knowledge with [Timekeeper Email 
 
 The agent needs authorized access to the employee's email and any additional sources used, plus document and workbook generation. Test using a team member's own account. Shared access does not grant access to the owner's mailbox, and these files do not install a Quickbase connector. Never put API tokens or employee mailbox exports into shared knowledge.
 
-Update the app to **0.7.1 or later** for the workflow below. The minimal workbook format is unchanged from 0.7.0. Quickbase setup is required for matching and submission. Toggl is optional; email-only employees leave its token blank in Settings.
+Update the app to **0.8.0 or later** for the workflow below. The minimal workbook format is unchanged from 0.7.0. Quickbase setup is required for matching and submission. Toggl is optional; email-only employees leave its token blank in Settings.
 
 ## Prepare and import a day
 
@@ -18,9 +18,9 @@ Update the app to **0.7.1 or later** for the workflow below. The minimal workboo
 2. Review its Word report. It includes worked matters, underlying minutes, billing, evidence context, estimates, coverage gaps, communication accounting and projected totals. Email timestamps alone do not establish duration.
 3. Request corrections if needed, then approve the work, minutes, billing, account, dates and disclosed limitations once. The agent creates the minimal Excel from that approved allocation. It reuses the analysis instead of repeating the entire mailbox search.
 4. Choose **Import email Excel** or drag the downloaded workbook into its drop area. For multiple dates, choose the dates to include.
-5. In **Match your activities**, check the table's assignment and task dropdowns. They start with the best plausible guesses from available Quickbase choices. Guesses are editable, not verified matches; unmatched fields remain **Choose**. Change selections as needed, using **Find assignment** when a choice is missing. Hints in Excel are names, not authoritative record IDs.
-6. For work already entered, manually select its actual record under **Already in Quickbase?** Existing records are never linked automatically. Choose **Review timecards**, then check dates, grouped hours, descriptions, assignments, tasks and billing.
-7. Use the single final review checkbox to confirm the hours, mapping choices, estimates, coverage and duplicate limits. Choose **Write to Quickbase** when ready, then keep the receipt in **Submission history**.
+5. In **Review email activities**, check the assignment and task dropdowns. They start with the best plausible guesses from available Quickbase choices. Guesses are editable, not verified matches; unmatched fields remain **Choose**. Use **Find assignment** when needed. Hints in Excel are names, not authoritative record IDs. Hours display as decimals: **0.25 h = 15 minutes**. Double-click an hours box or press F2 to edit. Billing is editable only with the required Quickbase permission.
+6. For work already entered, manually select its actual record under **Quickbase record**. Existing records are never linked automatically. Choose **Fill weekdays to** and a target if wanted; **Add Timecards** is a separate option. These settings apply only to this import. Open **Show submission preview** to inspect exact grouped rows, additions, totals and warnings; **Back to activity table** returns to editing.
+7. Choose **Review in Timekeeper dashboard** to use its final review and **Write to Quickbase**, or confirm the single checkbox in the table's submission preview and choose **Submit directly to Quickbase**. All changes clear that confirmation. Both routes use live permission/duplicate checks and save a receipt in **Submission history**. **Cancel** closes without submitting.
 
 Word remains your supporting review file, and approval in M365 is still required before the agent creates Excel. You do not need to upload Word into Timekeeper. There is no separate opening acknowledgement or personal-confirmation checkbox during mapping. Importing Excel does not write timecards.
 
@@ -28,11 +28,11 @@ Word remains your supporting review file, and approval in M365 is still required
 
 Excel contains approved positive whole minutes before app rounding. In **Settings > Time policy > Email imports**, choose no additional rounding or round grouped work up to 5 or 15 minutes. The default is 5 minutes. Word may show a separate quarter-hour projection; select 15-minute rounding to use that policy. Live mapping can change grouping and projected totals.
 
-Automatic Timecards and weekday fill are off for email imports by default. Enable **Apply my Timecards and weekday fill settings to email imports** if wanted. Word shows these policy additions separately, and the new Excel excludes filler. Actual supported internal work is imported normally. The app preserves work over eight hours and the full configured Timecards addition.
+Automatic Timecards and weekday fill are off for email imports by default. Set persistent preferences with **Apply my Timecards and weekday fill settings to email imports**, or adjust the options in the activity table for this import only. Weekday fill counts existing Quickbase time and recalculates after table edits. Work above the target and the full configured Timecards addition are retained; weekends receive no automatic additions. Word shows policy additions separately, and Excel excludes filler. Actual supported internal work is imported normally.
 
 The Billing dropdown appears only when Quickbase confirms Modify access to Billable Override. Other accounts see read-only billing. Defaults show **Billable - Default** or **Nonbillable - Default** when the rule and required source values can be read. Otherwise **Default unavailable** avoids guessing. Green means billable, dim red means nonbillable, and gray means unknown. Explicit non-billable case work keeps its case, assignment and task. An override without permission must be cleared deliberately or its permission issue resolved before submission.
 
-Double-click Hours, or focus the box and press F2, for a last-minute duration change. Saving changes that row only and requires acknowledgement of the updated total. Original hours remain in the receipt. Make duration changes after matching and billing changes, which can regroup the proposal.
+Double-click Hours, or focus the box and press F2, for a duration change. In the activity table, edited decimal hours are used exactly while unedited activities are grouped and rounded as configured. **Use imported** restores the original duration. Table edits survive mapping/billing changes and recalculate weekday fill. Later edits to final dashboard rows change only that row and leave Misc internal unchanged. Check the total and confirm again. Receipts retain local corrections and original/submitted hours; Excel remains unchanged.
 
 ## Minimal workbook contract
 

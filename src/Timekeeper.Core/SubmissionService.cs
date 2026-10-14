@@ -5,14 +5,14 @@ namespace Timekeeper.Core;
 /// <summary>One reviewed row per request. Every possible side effect has a durable pending journal first.</summary>
 public sealed class SubmissionService(TimecardApi api, SessionStore store)
 {
-    public async Task<SubmissionReceipt> SubmitAsync(ReadSession session, ProposalEnvelope proposal, IReadOnlyList<VerifiedRow> reviewedRows, CancellationToken ct = default, bool warningsAcknowledged = false, IReadOnlyCollection<DateOnly>? selectedDates = null, IReadOnlyList<ReviewDuration>? durationEdits = null)
+    public async Task<SubmissionReceipt> SubmitAsync(ReadSession session, ProposalEnvelope proposal, IReadOnlyList<VerifiedRow> reviewedRows, CancellationToken ct = default, bool warningsAcknowledged = false, IReadOnlyCollection<DateOnly>? selectedDates = null, IReadOnlyList<ReviewDuration>? durationEdits = null, EmailReviewEdits? emailEdits = null)
     {
         using var localLock = store.AcquireSubmissionLock();
         if (session.Demo) throw new InvalidOperationException("Demo sessions cannot write to Quickbase.");
         if (!Same(session.Settings, api.Settings)) throw new InvalidOperationException("Account or policy settings changed. Read the day again before submitting.");
         if (reviewedRows.Count == 0) throw new InvalidOperationException("There are no new rows to submit.");
         var scope = ProposalScope.Select(session, proposal, selectedDates);
-        var validation = ReviewDurations.Apply(scope.Session, Rules.Validate(scope.Session, scope.Proposal), durationEdits);
+        var validation = ReviewDurations.Apply(scope.Session, Rules.Validate(scope.Session, scope.Proposal, emailEdits: emailEdits), durationEdits);
         if (!validation.IsValid) throw new InvalidOperationException("The proposal is no longer valid: " + string.Join(" ", validation.Errors));
         if (validation.Warnings.Count > 0 && !warningsAcknowledged)
             throw new InvalidOperationException("Review and acknowledge every proposal warning before writing to Quickbase.");
@@ -34,6 +34,7 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
         {
             SessionId = session.SessionId, ProfileKey = session.Settings.ProfileKey,
             SelectedDates = selectedDates?.Order().ToList(),
+            EmailReviewEdits = emailEdits,
             ReviewedWarnings = validation.Warnings.ToList(),
             WarningsAcknowledgedAtUtc = validation.Warnings.Count > 0 ? DateTimeOffset.UtcNow : null,
             Rows = reviewedRows.Select(r => new RowOutcome { Row = r, Status = "not_sent", Message = "Not sent." }).ToList()

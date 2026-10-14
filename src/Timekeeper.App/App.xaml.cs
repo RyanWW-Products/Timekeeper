@@ -125,6 +125,7 @@ public partial class App : Application
                 File.AppendAllText(report,emailWindow.SmokeSummary());
                 RenderWindow(emailWindow,Path.Combine(output,"timekeeper-email-mapping.png"),(int)emailWindow.Width,(int)emailWindow.Height);
                 File.AppendAllText(report,emailWindow.SmokeRenderedSummary());
+                File.AppendAllText(report,emailWindow.SmokeEditingSummary());
                 var emailReview=new MainWindow(new SessionStore(Path.Combine(output,"email-review-data")),true);
                 File.AppendAllText(report,emailReview.SmokeEmailReview(emailSession,emailWindow.Proposal));
                 ((ScrollViewer)emailReview.FindName("WorkScroll")).ScrollToEnd();
@@ -132,6 +133,10 @@ public partial class App : Application
                 Appearance.Apply(new("Dark","Theme color",120,"Compact"));
                 RenderWindow(emailWindow,Path.Combine(output,"theme-dark-email-mapping-120.png"),(int)emailWindow.Width,(int)emailWindow.Height);
                 RenderWindow(emailReview,Path.Combine(output,"theme-dark-email-review-120.png"),1040,720);
+                Appearance.Apply(new()); emailWindow.PreviewForSmoke();
+                RenderWindow(emailWindow,Path.Combine(output,"timekeeper-email-preview.png"),(int)emailWindow.Width,(int)emailWindow.Height);
+                Appearance.Apply(new("Dark","Theme color",120,"Compact"));
+                RenderWindow(emailWindow,Path.Combine(output,"timekeeper-email-preview-minimum.png"),(int)emailWindow.MinWidth,(int)emailWindow.MinHeight);
                 Appearance.Apply(new()); emailWindow.Close(); emailReview.Close();
                 var tableSource=emailSession.EmailWorkbook!;
                 var tableSession=emailSession with { EmailWorkbook=tableSource with

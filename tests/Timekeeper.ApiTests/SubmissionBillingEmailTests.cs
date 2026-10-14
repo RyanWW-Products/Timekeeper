@@ -8,6 +8,26 @@ static class SubmissionBillingEmailTests
 {
     public static async Task Run(Func<string, Func<Task>, Task> check)
     {
+        await check("table submission revalidates hours and fill and records edits without changing source", async () =>
+        {
+            using var f = new SubmissionEmailFixture(); var (session, proposal) = await f.ReadEmail();
+            var activity = session.EmailWorkbook!.Activities.Single();
+            var edits = new EmailReviewEdits { ActivityHours = [new(activity.ActivityId, activity.Minutes, .50m)], FillWeekdays = true, TargetHours = 8m, AddTimecards = true };
+            var rows = Rules.Validate(session, proposal, emailEdits: edits).Rows;
+            Equal(8m, rows.Sum(r => r.Hours));
+            await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(session, proposal, rows, emailEdits: edits));
+            await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(session, proposal, rows, warningsAcknowledged: true));
+            await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(session, proposal, rows, warningsAcknowledged: true, emailEdits: edits with { TargetHours = 7m }));
+            Equal(0, f.Server.WriteCount); Equal(0, f.Store.LoadReceipts().Count);
+            var receipt = await f.Service.SubmitAsync(session, proposal, rows, warningsAcknowledged: true, emailEdits: edits);
+            Equal("complete", receipt.Status); Equal(3, f.Server.WriteCount);
+            Equal(.50m, receipt.Rows.Single(r => r.Row.Kind == "work").Row.Hours);
+            Equal<decimal?>(.17m, receipt.Rows.Single(r => r.Row.Kind == "work").Row.OriginalHours);
+            var saved = f.Store.LoadReceipts().Single(); Equal(8m, saved.EmailReviewEdits!.TargetHours); Equal(.50m, saved.EmailReviewEdits.ActivityHours.Single().Hours);
+            Equal(activity.Minutes, f.Store.LoadSession(session.SessionId)!.EmailWorkbook!.Activities.Single().Minutes);
+            await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(session, proposal, rows, warningsAcknowledged: true, emailEdits: edits));
+            Equal(3, f.Server.WriteCount);
+        });
         await check("all email formats require one final acknowledgement and retain original source approval", async () =>
         {
             foreach (var format in new[] { "timekeeper_email_activity", "timekeeper_email_review", "timekeeper_email_import" })

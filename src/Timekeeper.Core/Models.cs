@@ -161,6 +161,8 @@ public sealed record RowOutcome
 }
 public sealed record SubmissionReceipt
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public EmailReviewEdits? EmailReviewEdits { get; init; }
     public string SubmissionId { get; init; } = Guid.NewGuid().ToString("N");
     public string SessionId { get; init; } = "";
     public string ProfileKey { get; init; } = "";

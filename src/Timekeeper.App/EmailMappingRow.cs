@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.RegularExpressions;
+using System.Windows.Media;
 using Timekeeper.Core;
 
 namespace Timekeeper.App;
@@ -8,6 +9,17 @@ internal sealed record EmailMappingChoice(int? Id, string Label, string? Detail 
 {
     public string Tooltip => Detail ?? Label;
     public override string ToString() => Label;
+}
+
+internal sealed class EmailBillingChoice(string label) : INotifyPropertyChanged
+{
+    public string Label { get; private set; } = label;
+    public void Update(string value)
+    {
+        if (Label == value) return;
+        Label = value; PropertyChanged?.Invoke(this, new(nameof(Label)));
+    }
+    public event PropertyChangedEventHandler? PropertyChanged;
 }
 
 internal sealed class EmailMappingRow : INotifyPropertyChanged
@@ -25,7 +37,37 @@ internal sealed class EmailMappingRow : INotifyPropertyChanged
     public IReadOnlyList<EmailMappingChoice> AssignmentChoices { get; private set; } = [];
     public IReadOnlyList<EmailMappingChoice> TaskChoices { get; private set; } = [];
     public IReadOnlyList<EmailMappingChoice> ExistingChoices { get; private set; } = [];
-    public string DateAndMinutes => $"{Activity.Date:MMM d}\n{Activity.Minutes} min";
+    public string WorkDate => Activity.Date.ToString("MMM d");
+    public decimal? EditedHours { get; private set; }
+    public decimal Hours => EditedHours ?? decimal.Round(Activity.Minutes / 60m, 2, MidpointRounding.AwayFromZero);
+    public string HoursLabel => $"{Hours:0.00} h{(EditedHours.HasValue ? " *" : "")}";
+    public string HoursHint => $"Imported: {Activity.Minutes / 60m:0.00} h. Double-click or press F2 to edit. Edited hours are exact; unedited activities are grouped and rounded in the submission preview.";
+    public bool? BillableOverride { get; private set; }
+    public bool CanOverride => CanEditNew && _session.Reference.Billing?.CanOverride == true;
+    public bool HasUnavailableOverride => CanEditNew && !CanOverride && BillableOverride.HasValue;
+    private int ProjectId => Internal ? _session.Reference.InternalProject!.Id : _session.Reference.Assignments.FirstOrDefault(a => a.Id == Assignment)?.ProjectId ?? 0;
+    private bool? EffectiveBillable => Existing is int id
+        ? _session.Days.SelectMany(d => d.Existing).Single(r => r.RecordId == id).Billable
+        : BillableOverride ?? _session.Reference.Billing?.DefaultFor(ProjectId, Task ?? 0);
+    public string DefaultBillingLabel => _session.Reference.Billing?.DefaultFor(ProjectId, Task ?? 0) switch { true => "Billable - Default", false => "Nonbillable - Default", _ => "Default unavailable" };
+    public IReadOnlyList<EmailBillingChoice> BillingChoices { get; } = [new("Default unavailable"), new("Billable"), new("Nonbillable")];
+    public string BillingLabel => Existing.HasValue ? EffectiveBillable switch { true => "Billable - Recorded", false => "Nonbillable - Recorded", _ => "Recorded billing unavailable" } : BillableOverride switch { true => "Billable", false => "Nonbillable", _ => DefaultBillingLabel };
+    public Brush BillingLight => new SolidColorBrush(EffectiveBillable switch { true => Color.FromRgb(63,203,125), false => Color.FromRgb(139,75,78), _ => Color.FromRgb(125,133,143) });
+    public int BillingIndex
+    {
+        get => BillableOverride is null ? 0 : BillableOverride.Value ? 1 : 2;
+        set
+        {
+            if (!CanEditNew || value is < 0 or > 2 || value == BillingIndex || (!CanOverride && value != 0)) return;
+            BillableOverride = value == 0 ? null : value == 1; Changed();
+        }
+    }
+    public void SetHours(decimal? hours)
+    {
+        if (!CanEditNew) return;
+        if (hours is decimal value && (value is <= 0 or > 24 || decimal.Round(value, 2) != value)) throw new InvalidOperationException("Enter decimal hours greater than 0 and at most 24, with up to two decimal places.");
+        EditedHours = hours; Changed();
+    }
     public string ActivitySummary => Short(Activity.Description, 130);
     public string MatterSummary => Short(Activity.MatterHint, 70);
     public bool CanEditNew => !Existing.HasValue;
@@ -73,7 +115,7 @@ internal sealed class EmailMappingRow : INotifyPropertyChanged
 
     public EmailMappingRow(EmailActivity activity, ReadSession session, Action changed)
     {
-        Activity = activity; _session = session; _changed = changed;
+        Activity = activity; _session = session; _changed = changed; BillableOverride = activity.Billable;
         var suggestion = EmailSuggestions.Suggest(activity, session);
         Assignment = suggestion.AssignmentId; Internal = suggestion.Internal; Task = suggestion.TaskId;
         _suggestionReason = suggestion.Reason;
@@ -83,6 +125,7 @@ internal sealed class EmailMappingRow : INotifyPropertyChanged
     public void RefreshChoices(ReadSession session)
     {
         _session = session;
+        BillingChoices[0].Update(DefaultBillingLabel);
         _refreshing = true;
         try
         {
@@ -100,23 +143,25 @@ internal sealed class EmailMappingRow : INotifyPropertyChanged
                     return new EmailMappingChoice(r.RecordId, $"#{r.RecordId} · {r.Hours:0.00} h · {Short(r.Description, 44)}",
                         $"#{r.RecordId} · {r.Hours:0.00} h\n{project}\n{assignment?.Name ?? (r.Assignment is int id ? $"Assignment #{id}" : "Internal")} · {task}\n\n{r.Description}");
                 })).ToList();
-            foreach (var property in new[] { nameof(AssignmentChoices), nameof(TaskChoices), nameof(ExistingChoices), nameof(AssignmentSelection), nameof(TaskSelection), nameof(ExistingSelection) })
+            foreach (var property in new[] { nameof(AssignmentChoices), nameof(TaskChoices), nameof(ExistingChoices), nameof(AssignmentSelection), nameof(TaskSelection), nameof(ExistingSelection), nameof(CanOverride), nameof(DefaultBillingLabel), nameof(BillingIndex), nameof(BillingLabel), nameof(BillingLight), nameof(HasUnavailableOverride) })
                 PropertyChanged?.Invoke(this, new(property));
         }
         finally { _refreshing = false; }
     }
 
-    internal sealed record Selection(int? Assignment, bool Internal, int? Task, int? Existing, bool AssignmentEdited, bool TaskEdited, string SuggestionReason);
-    internal Selection Capture() => new(Assignment, Internal, Task, Existing, _assignmentEdited, _taskEdited, _suggestionReason);
+    internal sealed record Selection(int? Assignment, bool Internal, int? Task, int? Existing, bool AssignmentEdited, bool TaskEdited, string SuggestionReason, decimal? EditedHours, bool? BillableOverride);
+    internal Selection Capture() => new(Assignment, Internal, Task, Existing, _assignmentEdited, _taskEdited, _suggestionReason, EditedHours, BillableOverride);
     internal void Restore(Selection value)
     {
         Assignment = value.Assignment; Internal = value.Internal; Task = value.Task; Existing = value.Existing;
         _assignmentEdited = value.AssignmentEdited; _taskEdited = value.TaskEdited; _suggestionReason = value.SuggestionReason;
+        EditedHours = value.EditedHours; BillableOverride = value.BillableOverride;
         Changed();
     }
     private void Changed()
     {
-        foreach (var property in new[] { nameof(AssignmentSelection), nameof(TaskSelection), nameof(ExistingSelection), nameof(CanEditNew), nameof(IsResolved), nameof(State), nameof(Reason) })
+        BillingChoices[0].Update(DefaultBillingLabel);
+        foreach (var property in new[] { nameof(AssignmentSelection), nameof(TaskSelection), nameof(ExistingSelection), nameof(CanEditNew), nameof(IsResolved), nameof(State), nameof(Reason), nameof(Hours), nameof(HoursLabel), nameof(HoursHint), nameof(CanOverride), nameof(DefaultBillingLabel), nameof(BillingIndex), nameof(BillingLabel), nameof(BillingLight), nameof(HasUnavailableOverride) })
             PropertyChanged?.Invoke(this, new(property));
         _changed();
     }

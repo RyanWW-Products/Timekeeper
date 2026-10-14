@@ -1,6 +1,6 @@
 # Timekeeper
 
-Timekeeper is a Windows application for turning Toggl entries or confirmed email activities into reviewed Quickbase timecards. It validates imported files locally, shows the exact rows, and writes only after the user chooses **Write to Quickbase**.
+Timekeeper is a Windows application for turning Toggl entries or confirmed email activities into reviewed Quickbase timecards. It validates imported files locally, shows the exact rows, and writes only after explicit submission from the dashboard or email review.
 
 The installed application includes its .NET runtime. End users do not need Python, a terminal, or a separate .NET installation.
 
@@ -26,11 +26,13 @@ For short, fragmented work, the shared email agent reconstructs the requested da
 
 Billing shows **Billable - Default** or **Nonbillable - Default** when Quickbase exposes the fields needed to resolve its rule. Accounts with Modify access can choose a billing override; other accounts see a read-only status. If Quickbase hides the default inputs or uses an unsupported formula, the label is **Default unavailable**. Green means billable, dim red means nonbillable, and gray means unknown. Overrides preserve the assignment and task and are checked again before writing.
 
-Double-click an hours box, or focus it and press F2, to make a last-minute duration edit. Enter decimal hours and save. Other rows, including Misc internal, stay unchanged. Review the updated daily total and acknowledge the warning. Receipts keep the original and submitted hours; source and duplicate checks still apply.
+Double-click an hours box, or focus it and press F2, to make a duration edit. Enter decimal hours and save. In the email activity table, edited hours are exact and weekday fill recalculates; **Use imported** restores the source duration and rounding. Later edits to final dashboard rows leave other rows, including Misc internal, unchanged. Review the updated daily total and acknowledge the warning. Receipts keep original and submitted hours; source and duplicate checks still apply.
 
 Version 0.7.0 adds `timekeeper_email_import`: exactly **Metadata** and **Timecards**, four metadata values and seven work columns. Excel contains no review pages, totals, formulas, ledgers or evidence IDs. Word retains the review detail and source limitations. Local row fingerprints provide limited duplicate detection, so check existing Quickbase time and receipts before writing. Legacy Review and rich Activities formats remain supported for existing files; the revised agent generates only the minimal format. Email-only users leave the Toggl token blank in Settings; Quickbase remains required.
 
 Version 0.7.1 presents email matching as a table with assignment/task dropdowns prefilled with the best plausible guesses. These are editable suggestions, not verified matches; unmatched fields remain **Choose**. Existing Quickbase records are never linked automatically. The single final review checkbox replaces the opening acknowledgement and the personal-confirmation checkbox during mapping. M365 Word approval and the workbook's `employee_confirmed=true` requirement remain unchanged.
+
+Version 0.8.0 displays decimal hours in the email table, with protected duration edits, permission-aware billing and per-import weekday fill controls. Choose **Review in Timekeeper dashboard**, or open the submission preview, confirm its exact timecards and warnings, and choose **Submit directly to Quickbase**. Both routes use the same live checks and saved receipts. The Excel format remains unchanged and still contains whole minutes.
 
 Use the [minimal Excel template](docs/templates/Timekeeper%20Email%20Import%20Template.xlsx) as M365 context and remove the old REVIEW example from the shared email agent. Replace every sample value; the template deliberately has `employee_confirmed=false`, while actual generated exports require approval first. Update the main instructions and all three context files together. Normal Excel dates, General/text serial dates, clear date text and mixed numeric/Boolean cells remain supported. Ambiguous dates identify the cell needing correction. Save changes before importing a workbook that remains open in Excel.
 

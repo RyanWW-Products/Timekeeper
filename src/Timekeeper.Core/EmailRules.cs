@@ -17,7 +17,7 @@ public static class EmailRules
         return decimal.Round(rounded / 60m, 2, MidpointRounding.AwayFromZero);
     }
 
-    public static ValidationResult Validate(ReadSession session, ProposalEnvelope proposal, DateTimeOffset? now = null)
+    public static ValidationResult Validate(ReadSession session, ProposalEnvelope proposal, DateTimeOffset? now = null, EmailReviewEdits? emailEdits = null)
     {
         var result = new ValidationResult();
         var errors = result.Errors;
@@ -73,6 +73,29 @@ public static class EmailRules
         }
         if (errors.Count > 0) return result;
         var activities = session.EmailWorkbook.Activities.Where(a => days.ContainsKey(a.Date)).ToDictionary(a => a.ActivityId, StringComparer.Ordinal);
+        var policy = emailEdits ?? EmailReviewEdits.FromSettings(session.Settings);
+        var hourEdits = new Dictionary<string, decimal>(StringComparer.Ordinal);
+        if (policy.TargetHours is < 0 or > 24 || decimal.Round(policy.TargetHours, 2) != policy.TargetHours)
+            errors.Add("The weekday fill target must be between 0 and 24 hours, with up to two decimal places.");
+        if (policy.ActivityHours is null || policy.ActivityHours.Count > EmailWorkbookReader.MaximumActivities)
+            errors.Add("Email duration edits are missing or exceed the supported size.");
+        else foreach (var edit in policy.ActivityHours)
+        {
+            var source = edit is null ? null : session.EmailWorkbook.Activities.SingleOrDefault(a => a.ActivityId == edit.ActivityId);
+            if (edit is null || source is null || source.Minutes != edit.OriginalMinutes || !hourEdits.TryAdd(edit.ActivityId, edit.Hours))
+            { errors.Add("An email duration edit no longer matches its original activity. Import and review again."); continue; }
+            if (edit.Hours is <= 0 or > 24 || decimal.Round(edit.Hours, 2) != edit.Hours)
+                errors.Add("Edited email hours must be greater than zero, at most 24, and have up to two decimal places.");
+            if (!activities.ContainsKey(edit.ActivityId)) continue; // A date selection may exclude a valid original edit.
+            if (proposal.EmailAlreadyRecorded.Any(link => link?.ActivityId == edit.ActivityId)) errors.Add("An already-recorded activity cannot also have edited hours. Return it to new work to change its hours.");
+            warnings.Add($"{source.Date:yyyy-MM-dd} · {source.Description}: email hours changed from {source.Minutes / 60m:0.00} to {edit.Hours:0.00}. Edited hours are exact; unedited activities use your rounding preference. Weekday fill is recalculated.");
+        }
+        if (errors.Count > 0) return result;
+        foreach (var day in activities.Values.GroupBy(a => a.Date))
+            if (day.Sum(a => hourEdits.GetValueOrDefault(a.ActivityId, a.Minutes / 60m)) > 24m) errors.Add($"{day.Key:yyyy-MM-dd}: edited email activity exceeds 24 hours.");
+        if (errors.Count > 0) return result;
+        if (emailEdits is not null && (policy.FillWeekdays || policy.AddTimecards))
+            warnings.Add($"Import additions: weekday fill {(policy.FillWeekdays ? $"to {policy.TargetHours:0.00} hours" : "off")}; Timecards {(policy.AddTimecards ? $"{session.Settings.TimecardsHours:0.00} hours" : "off")}. Existing Quickbase time counts toward the target; work above it is retained.");
         var covered = new HashSet<string>(StringComparer.Ordinal);
         var linkedMinutes = new Dictionary<int, long>();
         foreach (var link in proposal.EmailAlreadyRecorded)
@@ -138,9 +161,12 @@ public static class EmailRules
             var description = string.Join("; ", group.Descriptions);
             if (description.Length > 4000) { errors.Add($"Grouped description for task {row.Task} exceeds 4,000 characters."); continue; }
             var assignment = row.Assignment is int id ? assignments[id] : null;
+            var originalHours = RoundedHours(minutes, session.Settings.EmailRoundingMinutes);
+            var hours = RoundedHours(group.Activities.Where(a => !hourEdits.ContainsKey(a.ActivityId)).Sum(a => (long)a.Minutes), session.Settings.EmailRoundingMinutes)
+                + group.Activities.Where(a => hourEdits.ContainsKey(a.ActivityId)).Sum(a => hourEdits[a.ActivityId]);
             result.Rows.Add(new VerifiedRow
             {
-                Date = row.Date, Hours = RoundedHours(minutes, session.Settings.EmailRoundingMinutes), Project = row.Project, ProjectName = assignment?.ProjectName ?? reference.InternalProject!.Name,
+                Date = row.Date, Hours = hours, OriginalHours = hours != originalHours ? originalHours : null, Project = row.Project, ProjectName = assignment?.ProjectName ?? reference.InternalProject!.Name,
                 Assignment = row.Assignment, AssignmentName = assignment?.Name ?? "Internal", Task = row.Task, TaskName = tasks[row.Task].Name, Category = row.Category, CategoryName = categories[row.Category].Name,
                 Description = description, Kind = "work", BillableOverride = row.BillableOverride,
                 SourceActivityIds = group.Activities.Select(a => a.ActivityId).Order(StringComparer.Ordinal).ToList(),
@@ -153,19 +179,19 @@ public static class EmailRules
             var work = result.Rows.Where(r => r.Date == day.Date).ToList();
             if (source.Any(a => a.TimeBasis == "employee_confirmed_estimate")) warnings.Add($"{day.Date:yyyy-MM-dd}: email activity includes employee-confirmed estimated time. Confirm the allocations represent work performed and do not overlap meetings, timers or other timecards.");
             if (day.Existing.Count > 0 && work.Count > 0) warnings.Add($"{day.Date:yyyy-MM-dd}: Quickbase already contains {day.Existing.Sum(c => c.Hours):0.00} hours. Confirm the proposed email work is additional. Link already-covered activities to existing records instead of adding them again.");
-            if (session.Settings.EmailApplyDailyDefaults && source.Count > 0 && day.Date.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday))
+            if ((policy.FillWeekdays || policy.AddTimecards) && source.Count > 0 && day.Date.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday))
             {
                 var total = day.Existing.Sum(c => c.Hours) + work.Sum(r => r.Hours);
                 bool Timecards(string text) => string.Equals(text.Trim(), "Timecards", StringComparison.OrdinalIgnoreCase);
                 var hasTimecards = day.Existing.Any(c => c.Project == reference.InternalProject!.Id && Timecards(c.Description))
                     || work.Any(r => r.Project == reference.InternalProject!.Id && (Timecards(r.Description) || r.SourceActivityIds.Any(id => Timecards(activities[id].Description))))
                     || proposal.EmailAlreadyRecorded.Any(link => activities[link.ActivityId].Date == day.Date && Timecards(activities[link.ActivityId].Description) && existing[link.ExistingRecordId].Project == reference.InternalProject!.Id);
-                if (session.Settings.AddTimecards && session.Settings.TimecardsHours > 0 && !hasTimecards)
+                if (policy.AddTimecards && session.Settings.TimecardsHours > 0 && !hasTimecards)
                 {
                     AddAutomatic(day.Date, "Timecards", "timecards", session.Settings.TimecardsHours);
                     total += session.Settings.TimecardsHours;
                 }
-                var gap = session.Settings.FillWeekdays ? Math.Max(0m, session.Settings.TargetHours - total) : 0m;
+                var gap = policy.FillWeekdays ? Math.Max(0m, policy.TargetHours - total) : 0m;
                 if (gap > 0)
                 {
                     AddAutomatic(day.Date, "Misc internal", "misc_internal", gap);

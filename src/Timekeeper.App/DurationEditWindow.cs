@@ -8,7 +8,8 @@ namespace Timekeeper.App;
 internal sealed class DurationEditWindow : Window
 {
     public decimal Hours { get; private set; }
-    public DurationEditWindow(Window owner, VerifiedRow row, bool smoke = false)
+    public bool ResetRequested { get; private set; }
+    public DurationEditWindow(Window owner, VerifiedRow row, bool smoke = false, bool emailActivity = false)
     {
         if (!smoke) Owner = owner;
         Title = "Timekeeper · Edit hours"; Width = 450; SizeToContent = SizeToContent.Height;
@@ -19,9 +20,16 @@ internal sealed class DurationEditWindow : Window
         panel.Children.Add(new TextBlock { Text = $"{row.Date:MMM d} · {row.TaskName}\n{row.Description}", TextWrapping = TextWrapping.Wrap, MaxHeight = 120 });
         var input = new TextBox { Text = row.Hours.ToString("0.00", CultureInfo.CurrentCulture), Margin = new Thickness(0, 16, 0, 10) };
         System.Windows.Automation.AutomationProperties.SetName(input, "Duration in decimal hours"); panel.Children.Add(input);
-        panel.Children.Add(new TextBlock { Text = "Decimal hours, for example 0.25 = 15 minutes. Other timecards and Misc internal stay unchanged. Review the daily total after saving.", TextWrapping = TextWrapping.Wrap, FontSize = 12 });
+        panel.Children.Add(new TextBlock { Text = emailActivity
+            ? "Decimal hours, for example 0.25 = 15 minutes. Your edit is used exactly. Unedited activities follow your rounding setting, and weekday fill recalculates. Use imported to restore the original duration."
+            : "Decimal hours, for example 0.25 = 15 minutes. Other timecards and Misc internal stay unchanged. Review the daily total after saving.", TextWrapping = TextWrapping.Wrap, FontSize = 12 });
         var error = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 10) }; error.SetResourceReference(TextBlock.ForegroundProperty, "Danger"); panel.Children.Add(error);
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        var buttons = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right };
+        if (emailActivity)
+        {
+            var reset = new Button { Content = "Use imported", Margin = new Thickness(0, 0, 8, 0) };
+            reset.Click += (_, _) => { ResetRequested = true; DialogResult = true; }; buttons.Children.Add(reset);
+        }
         buttons.Children.Add(new Button { Content = "Cancel", IsCancel = true, Margin = new Thickness(0, 0, 8, 0) });
         var save = new Button { Content = "Save hours", IsDefault = true, Style = (Style)FindResource("Primary") };
         save.Click += (_, _) =>
