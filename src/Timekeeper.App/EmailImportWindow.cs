@@ -189,7 +189,8 @@ internal sealed class EmailImportWindow : Window
         var light = new FrameworkElementFactory(typeof(System.Windows.Shapes.Ellipse)); light.SetValue(FrameworkElement.WidthProperty, 9d); light.SetValue(FrameworkElement.HeightProperty, 9d); light.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 0, 6, 5)); light.SetBinding(System.Windows.Shapes.Shape.FillProperty, new Binding(nameof(EmailMappingRow.BillingLight))); light.SetBinding(FrameworkElement.ToolTipProperty, new Binding(nameof(EmailMappingRow.BillingLabel))); line.AppendChild(light);
         var label = Text(nameof(EmailMappingRow.BillingLabel)); label.SetValue(TextBlock.MaxWidthProperty, 145d); label.SetValue(FrameworkElement.StyleProperty, Visible(typeof(TextBlock), nameof(EmailMappingRow.CanOverride), false)); line.AppendChild(label); panel.AppendChild(line);
         var combo = new FrameworkElementFactory(typeof(ComboBox)); combo.SetBinding(ItemsControl.ItemsSourceProperty, new Binding(nameof(EmailMappingRow.BillingChoices))); combo.SetBinding(System.Windows.Controls.Primitives.Selector.SelectedIndexProperty, new Binding(nameof(EmailMappingRow.BillingIndex)) { Mode = BindingMode.TwoWay, UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged });
-        combo.SetValue(ItemsControl.DisplayMemberPathProperty, nameof(EmailBillingChoice.Label));
+        var choiceLabel = new FrameworkElementFactory(typeof(TextBlock)); choiceLabel.SetBinding(TextBlock.TextProperty, new Binding(nameof(EmailBillingChoice.Label)));
+        combo.SetValue(ItemsControl.ItemTemplateProperty, new DataTemplate { VisualTree = choiceLabel });
         combo.SetValue(FrameworkElement.StyleProperty, Visible(typeof(ComboBox), nameof(EmailMappingRow.CanOverride), true)); combo.SetValue(AutomationProperties.NameProperty, "Activity billing status"); combo.SetValue(Control.FontSizeProperty, 12d); combo.SetValue(Control.PaddingProperty, new Thickness(6)); panel.AppendChild(combo);
         var clear = new FrameworkElementFactory(typeof(Button)); clear.SetValue(ContentControl.ContentProperty, "Use default"); clear.SetValue(Control.PaddingProperty, new Thickness(6, 4, 6, 4)); clear.SetValue(Control.FontSizeProperty, 11d);
         clear.SetValue(FrameworkElement.StyleProperty, Visible(typeof(Button), nameof(EmailMappingRow.HasUnavailableOverride), true));
@@ -432,8 +433,9 @@ internal sealed class EmailImportWindow : Window
         }
         _activities.UpdateLayout();
         foreach (var combo in VisualDescendants(_activities).OfType<ComboBox>().Where(c => AutomationProperties.GetName(c) == "Activity billing status"))
-            if (combo.DataContext is EmailMappingRow row && (combo.SelectedIndex != row.BillingIndex || combo.SelectedItem is not EmailBillingChoice))
-                throw new InvalidOperationException("Billing selections disappeared after table changes.");
+            if (combo.DataContext is EmailMappingRow row && (combo.SelectedIndex != row.BillingIndex || combo.SelectedItem is not EmailBillingChoice
+                || !VisualDescendants(combo).OfType<TextBlock>().Any(t => t.Text == row.BillingLabel)))
+                throw new InvalidOperationException("Billing selections disappeared or failed to render their labels after table changes.");
         return "PASS: decimal email hours, protected editors, billing permissions, target recalculation and direct-submit confirmation gates\n";
     }
     internal void PreviewForSmoke()
