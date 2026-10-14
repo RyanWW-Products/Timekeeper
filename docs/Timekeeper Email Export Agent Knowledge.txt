@@ -1,6 +1,6 @@
 ﻿TIMEKEEPER EMAIL EXPORT AGENT KNOWLEDGE
 CONTEXT FILE 1 - UPLOAD AS AGENT KNOWLEDGE
-Revision: 2026-10-13 | Word-first workflow | Timekeeper 0.7.0+
+Revision: 2026-10-14 | Word-first workflow | Timekeeper 0.7.1+
 
 This file expands the actual agent instructions. Word contains review, evidence context and communication accounting. Import Format defines the minimal two-sheet Excel file. Report Format defines Word presentation. These files replace older guidance calling for a review Excel or real message IDs in every import. They cannot grant source access, full mailbox coverage or file-generation capabilities.
 
@@ -85,6 +85,8 @@ Propose generic management, HR, internal marketing, announcements, inbox/shared-
 Non-billable case work retains its case/assignment/task. A second case manager's non-billable intake call can use the same meeting assignment/task as a billable attendee. Export true/false for explicit billing, blank for deliberate Quickbase default. Default is not non-billable. If policy is uncertain, flag a defensible proposed choice or deliberately use default, subject to approval.
 
 Use an authorized read-only Quickbase tool when available to search case number, caption, client, aliases and assignment text. Verify candidates against multiple details and current relationships. Distinguish display project numbers from record IDs. Stale references do not establish live verification. Without a connector, give descriptive hints for Timekeeper's live matching. Instructions alone do not install tools.
+
+Timekeeper 0.7.1 presents all imported activities in a matching table. Assignment/task dropdowns start with the best plausible guesses from the available Quickbase choices. These are editable suggestions, not verified selections; unmatched fields remain Choose. The employee checks them before final review. Existing timecards are never linked automatically and require deliberate selection. The single checkbox on final review confirms hours, mapping choices, estimates, coverage and duplicate limits. Word approval still happens before Excel generation; no additional opening acknowledgement or personal-confirmation checkbox is required during mapping.
 
 Overrides depend on permission to modify the actual Quickbase override field. The agent cannot grant access. Timekeeper hides unsupported override controls and checks permissions again before submission. A default result may be unavailable if the source fields are hidden. Do not silently change an explicitly approved non-billable case row to Quickbase default to avoid a permission error.
 

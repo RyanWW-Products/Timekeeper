@@ -1,12 +1,12 @@
 ﻿TIMEKEEPER EMAIL EXPORT AGENT IMPORT FORMAT
 CONTEXT FILE 2 - UPLOAD AS AGENT KNOWLEDGE
-Revision: 2026-10-13 | Minimal machine import | Timekeeper 0.7.0+
+Revision: 2026-10-14 | Minimal machine import | Timekeeper 0.7.1+ workflow
 
 PURPOSE
 Excel only carries approved work into Timekeeper. Word is the sole generated review document. Generate Word, obtain one explicit approval of the proposed work and limitations, then generate this workbook. Do not produce a review Excel, an alternate Activities workbook or a second export schema. Older formats remain readable by the application only for backward compatibility.
 
 1. REQUIRED APPROVAL
-The employee must approve the Word report's work, underlying whole minutes, billing, account, dates/timezone and disclosed limitations. Missing source IDs do not block this format. Missing approval does. A download, silence or a request for Excel without approval is insufficient. Set employee_confirmed=true only after actual approval; the app's later acknowledgement is not a substitute.
+The employee must approve the Word report's work, underlying whole minutes, billing, account, dates/timezone and disclosed limitations. Missing source IDs do not block this format. Missing approval does. A download, silence or a request for Excel without approval is insufficient. Set employee_confirmed=true only after actual approval; the app's final review confirmation is not a substitute.
 
 Resolve disputed timed work or identify an explicitly approved subset in Word. Accepted retrieval gaps may remain disclosed in Word. Do not silently omit activities to pass validation. No supported approved work means there is nothing to import.
 
@@ -80,4 +80,4 @@ Verify exactly two sheets, four Metadata keys and seven Timecards columns. No fo
 
 Save and reopen the file when tools allow, then attach a real download. Reuse the reconciled approved work instead of repeating mailbox retrieval. Do not regenerate unchanged Word merely because Excel is now available. If file creation fails, disclose the failure; CSV/chat text renamed as .xlsx is not a workbook.
 
-The employee imports into Timekeeper 0.7.0+, briefly acknowledges the approved report and limited duplicate detection, selects live Quickbase relationships, reviews the resulting timecards and chooses Write to Quickbase. Excel generation, import and approval do not submit timecards automatically.
+In Timekeeper 0.7.1+, import opens a matching table with assignment/task dropdowns prefilled with the best plausible guesses. These are editable suggestions, not verified matches. Unmatched rows remain Choose. Check every selection and select existing Quickbase records manually where applicable; the app never links those records automatically. Choose Review timecards, then use the single final review checkbox to confirm hours, mapping choices, estimates, coverage and duplicate limits before Write to Quickbase. Word approval and employee_confirmed=true remain required before this workflow. Excel generation, import and approval do not submit timecards automatically.

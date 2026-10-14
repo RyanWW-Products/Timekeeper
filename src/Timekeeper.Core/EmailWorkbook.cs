@@ -253,6 +253,11 @@ public static partial class EmailWorkbookReader
         catch { snapshot.Dispose(); throw; }
     }
 
+    // Import and mapping do not imply approval. Submission requires the single final
+    // reviewer acknowledgement, recorded in its receipt. Keep source metadata intact.
+    public static List<string> ValidateForReview(EmailWorkbook? workbook, AppSettings? settings = null, DateTimeOffset? now = null) =>
+        Validate(workbook, settings, now, allowReviewDraft: workbook?.Metadata?.Format == "timekeeper_email_review", allowMinimalAcknowledgement: workbook?.Metadata?.Format == "timekeeper_email_import");
+
     public static List<string> Validate(EmailWorkbook? workbook, AppSettings? settings = null, DateTimeOffset? now = null, bool allowReviewDraft = false, bool allowMinimalAcknowledgement = false)
     {
         var errors = new List<string>();

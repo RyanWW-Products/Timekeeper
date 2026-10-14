@@ -8,6 +8,32 @@ static class SubmissionBillingEmailTests
 {
     public static async Task Run(Func<string, Func<Task>, Task> check)
     {
+        await check("all email formats require one final acknowledgement and retain original source approval", async () =>
+        {
+            foreach (var format in new[] { "timekeeper_email_activity", "timekeeper_email_review", "timekeeper_email_import" })
+            {
+                using var f = new SubmissionEmailFixture(); var (original, proposal) = await f.ReadEmail();
+                var source = original.EmailWorkbook!;
+                var session = original with { EmailWorkbook = source with
+                {
+                    Metadata = source.Metadata with { Format = format, EmployeeConfirmed = format != "timekeeper_email_review", RetrievalLimitations = "none" },
+                    ReviewConfirmedAtUtc = null,
+                    Activities = source.Activities.Select(a => a with { TimeBasis = "measured" }).ToList()
+                } };
+                f.Store.SaveSession(session);
+                var result = Rules.Validate(session, proposal); True(result.IsValid);
+                True(result.Warnings.Any(w => w.StartsWith("Email review:")));
+                await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(session, proposal, result.Rows));
+                Equal(0, f.Server.WriteCount); Equal(0, f.Store.LoadReceipts().Count);
+                var receipt = await f.Service.SubmitAsync(session, proposal, result.Rows, warningsAcknowledged: true);
+                Equal("complete", receipt.Status); Equal(1, f.Server.WriteCount);
+                True(receipt.WarningsAcknowledgedAtUtc.HasValue);
+                True(receipt.ReviewedWarnings.Any(w => w.StartsWith("Email review:")));
+                var saved = f.Store.LoadSession(session.SessionId)!.EmailWorkbook!;
+                Equal(format != "timekeeper_email_review", saved.Metadata.EmployeeConfirmed);
+                True(!saved.ReviewConfirmedAtUtc.HasValue);
+            }
+        });
         await check("manual hours require explicit edits and acknowledgement before submission", async () =>
         {
             using var f = new SubmissionEmailFixture(); var (session, proposal) = await f.ReadEmail();

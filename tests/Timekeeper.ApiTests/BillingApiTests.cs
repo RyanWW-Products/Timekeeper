@@ -42,6 +42,25 @@ static class BillingApiTests
             True(ReferenceEquals(workbook, session.EmailWorkbook)); Equal(0, session.Days.Single().Entries.Count);
             Equal(1, session.Days.Single().Existing.Count); Equal(0, f.Server.TogglRequests); True(session.Reference.Billing!.CanOverride);
         });
+        await check("local email confirmation is deferred to final review without changing source approval", async () =>
+        {
+            foreach (var format in new[] { "timekeeper_email_review", "timekeeper_email_import" })
+            {
+                using var f = new BillingFixture(""); var source = Workbook();
+                var workbook = source with { Metadata = source.Metadata with { Format = format, EmployeeConfirmed = format != "timekeeper_email_review" }, ReviewConfirmedAtUtc = null };
+                var session = await f.Api.ReadEmailBaselineAsync(workbook);
+                True(ReferenceEquals(workbook, session.EmailWorkbook)); True(!session.EmailWorkbook!.ReviewConfirmedAtUtc.HasValue);
+                Equal(format != "timekeeper_email_review", session.EmailWorkbook.Metadata.EmployeeConfirmed);
+                Equal(0, f.Server.TogglRequests); Equal(0, f.Server.WriteCount);
+            }
+        });
+        await check("minimal imports still require Word approval before network access", async () =>
+        {
+            using var f = new BillingFixture(""); var source = Workbook();
+            var workbook = source with { Metadata = source.Metadata with { Format = "timekeeper_email_import", EmployeeConfirmed = false } };
+            await Throws<InvalidDataException>(() => f.Api.ReadEmailBaselineAsync(workbook));
+            Equal(0, f.Server.Requests); Equal(0, f.Server.WriteCount);
+        });
         await check("unconfirmed or wrong-account email workbook fails before network access", async () =>
         {
             foreach (var metadata in new[] { Workbook().Metadata with { EmployeeConfirmed = false }, Workbook().Metadata with { EmployeeEmail = "someone.else@example.com" } })

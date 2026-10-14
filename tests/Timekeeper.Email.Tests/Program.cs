@@ -37,6 +37,24 @@ ProposalEnvelope Proposal(ReadSession session) => new()
 };
 ReadSession Existing(ReadSession session, decimal hours, string description = "Already recorded") => session with { Days = [session.Days[0] with { Existing = [new ExistingTimecard(8001, session.Days[0].Date, hours, 100, 60, 20, 501, description)] }] };
 
+Test("Pending local review preserves source approval and carries legacy notes to final reviewer", () =>
+{
+    True(EmailWorkbookReader.ValidateForReview(new EmailWorkbook { Metadata = null! }).Count > 0);
+    var session = Session(); var original = session.EmailWorkbook!;
+    var workbook = original with
+    {
+        Metadata = original.Metadata with { Format = "timekeeper_email_review", EmployeeConfirmed = false },
+        ReviewNotes = ["Calendar coverage is incomplete."],
+        Activities = original.Activities.Select(a => a with { ReviewNotes = "Confirm meeting duration." }).ToList()
+    };
+    session = session with { EmailWorkbook = workbook };
+    Equal(EmailWorkbookReader.ValidateForReview(workbook, session.Settings).Count, 0);
+    True(!workbook.Metadata.EmployeeConfirmed && !workbook.ReviewConfirmedAtUtc.HasValue);
+    var result = EmailRules.Validate(session, Proposal(session)); Valid(result);
+    True(result.Warnings.Any(w => w.Contains("Calendar coverage is incomplete.")));
+    True(result.Warnings.Any(w => w.Contains("Confirm meeting duration.")));
+    True(result.Warnings.Any(w => w.StartsWith("Email review:")));
+});
 Test("Email-only session validates without any Toggl timer or automatic filler", () =>
 {
     var session = Session(); var result = EmailRules.Validate(session, Proposal(session)); Valid(result);
@@ -360,6 +378,7 @@ Test("review formula cannot substitute another row or an external calculation", 
 WorkbookValueTests.Register(Test);
 WorkbookNameTests.Register(Test);
 MinimalWorkbookTests.Register(Test);
+EmailSuggestionTests.Register(Test);
 if (args.Length == 2 && args[0] == "--inspect-workbook")
 {
     try

@@ -141,7 +141,7 @@ public sealed partial class TimecardApi : IDisposable
 
     public async Task<ReadSession> ReadEmailBaselineAsync(EmailWorkbook workbook, IProgress<string>? progress = null, CancellationToken ct = default)
     {
-        var errors = EmailWorkbookReader.Validate(workbook, settings);
+        var errors = EmailWorkbookReader.ValidateForReview(workbook, settings);
         if (errors.Count > 0) throw new InvalidDataException(string.Join("\n", errors));
         progress?.Report("Verifying your Quickbase identity...");
         await TestQuickbaseAsync(ct);

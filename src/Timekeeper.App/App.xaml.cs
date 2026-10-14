@@ -120,23 +120,11 @@ public partial class App : Application
                 File.AppendAllText(report,window.SmokeRenderedReviewControls());
                 var hoursWindow=new DurationEditWindow(window,new VerifiedRow { Hours=1.25m, TaskName="Case meeting", Description="Reviewed case materials", Date=DateOnly.FromDateTime(DateTime.Today) },smoke:true);
                 RenderWindow(hoursWindow,Path.Combine(output,"timekeeper-duration-editor.png"),450,440); hoursWindow.Close();
-                var reviewWorkbook=EmailSmoke.Session().EmailWorkbook!;
-                reviewWorkbook=reviewWorkbook with { Metadata=reviewWorkbook.Metadata with { Format="timekeeper_email_review",EmployeeConfirmed=false },ReviewNotes=["Email coverage is incomplete. Confirm the proposed estimates and check existing timecards."] };
-                var workbookWindow=new ReviewWorkbookWindow(window,reviewWorkbook,smoke:true);
-                File.AppendAllText(report,workbookWindow.SmokeSummary());
-                RenderWindow(workbookWindow,Path.Combine(output,"timekeeper-confirm-review-workbook.png"),860,790); workbookWindow.Close();
-                var minimalWorkbook=EmailSmoke.Session().EmailWorkbook!;
-                minimalWorkbook=minimalWorkbook with { Metadata=minimalWorkbook.Metadata with { Format="timekeeper_email_import",EmployeeConfirmed=true },ReviewConfirmedAtUtc=null };
-                var minimalWindow=new ReviewWorkbookWindow(window,minimalWorkbook,smoke:true);
-                File.AppendAllText(report,minimalWindow.SmokeSummary());
-                RenderWindow(minimalWindow,Path.Combine(output,"timekeeper-confirm-minimal-import.png"),760,590);
-                Appearance.Apply(new("Dark","Theme color",120,"Compact"));
-                RenderWindow(minimalWindow,Path.Combine(output,"timekeeper-confirm-minimal-import-dark-120.png"),760,590);
-                Appearance.Apply(new()); minimalWindow.Close();
                 var emailSession=EmailSmoke.Session();
                 var emailWindow=new EmailImportWindow(window,emailSession,null,smoke:true);
                 File.AppendAllText(report,emailWindow.SmokeSummary());
                 RenderWindow(emailWindow,Path.Combine(output,"timekeeper-email-mapping.png"),(int)emailWindow.Width,(int)emailWindow.Height);
+                File.AppendAllText(report,emailWindow.SmokeRenderedSummary());
                 var emailReview=new MainWindow(new SessionStore(Path.Combine(output,"email-review-data")),true);
                 File.AppendAllText(report,emailReview.SmokeEmailReview(emailSession,emailWindow.Proposal));
                 ((ScrollViewer)emailReview.FindName("WorkScroll")).ScrollToEnd();
@@ -145,6 +133,25 @@ public partial class App : Application
                 RenderWindow(emailWindow,Path.Combine(output,"theme-dark-email-mapping-120.png"),(int)emailWindow.Width,(int)emailWindow.Height);
                 RenderWindow(emailReview,Path.Combine(output,"theme-dark-email-review-120.png"),1040,720);
                 Appearance.Apply(new()); emailWindow.Close(); emailReview.Close();
+                var tableSource=emailSession.EmailWorkbook!;
+                var tableSession=emailSession with { EmailWorkbook=tableSource with
+                {
+                    Metadata=tableSource.Metadata with { Format="timekeeper_email_import" },
+                    Activities=Enumerable.Range(0,8).Select(i=>tableSource.Activities[i%2] with
+                    {
+                        ActivityId=$"table-example-{i}", EvidenceIds=[$"table-message-{i}"], Minutes=5+i*3,
+                        MatterHint=i==2?"Internal":i==4?"New client intake":tableSource.Activities[i%2].MatterHint,
+                        AssignmentHint=i==2||i==4?"":tableSource.Activities[i%2].AssignmentHint,
+                        TaskHint=i==2||i==4?"":tableSource.Activities[i%2].TaskHint,
+                        Description=i==2?"Updated the internal scheduling checklist.":i==4?"Discussed requirements for a new matter.":$"Reviewed presentation revision {i+1} and coordinated the next delivery."
+                    }).ToList()
+                } };
+                var tableWindow=new EmailImportWindow(window,tableSession,null,smoke:true);
+                RenderWindow(tableWindow,Path.Combine(output,"timekeeper-email-table.png"),(int)tableWindow.Width,(int)tableWindow.Height);
+                Appearance.Apply(new("Dark","Theme color",120,"Compact"));
+                RenderWindow(tableWindow,Path.Combine(output,"timekeeper-email-table-dark-120.png"),(int)tableWindow.Width,(int)tableWindow.Height);
+                RenderWindow(tableWindow,Path.Combine(output,"timekeeper-email-table-minimum.png"),(int)tableWindow.MinWidth,(int)tableWindow.MinHeight);
+                Appearance.Apply(new()); tableWindow.Close();
 
                 var settingsWindow=new SettingsWindow(window,new AppSettings(),store,false);
                 File.AppendAllText(report,settingsWindow.SmokeSummary());

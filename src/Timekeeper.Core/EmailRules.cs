@@ -25,7 +25,10 @@ public static class EmailRules
         if (session?.EmailWorkbook is null || session.Settings is null || session.Reference is null || session.Days is null || proposal is null || proposal.Rows is null || proposal.AlreadyRecorded is null || proposal.EmailAlreadyRecorded is null)
         { errors.Add("The email workbook, source session and proposal are required."); return result; }
         errors.AddRange(Rules.ValidateSettings(session.Settings));
-        errors.AddRange(EmailWorkbookReader.Validate(session.EmailWorkbook, session.Settings, now));
+        errors.AddRange(EmailWorkbookReader.ValidateForReview(session.EmailWorkbook, session.Settings, now));
+        // Every email import, including measured time without other warnings, needs
+        // the final review checkbox. Suggestions and import never imply approval.
+        warnings.Add("Email review: confirm these activities are yours, check the suggested assignments and tasks, and verify the hours and billing before writing. Best guesses may need correction.");
         if (session.EmailWorkbook.IsReviewWorkbook) warnings.Add(EmailWorkbookReader.ReviewLimitations);
         if (session.EmailWorkbook.IsMinimalImport) warnings.Add(EmailWorkbookReader.MinimalImportLimitations);
         if (session.SchemaVersion != 1 || proposal.SchemaVersion != 1) errors.Add("Unsupported email session or proposal schema version.");
@@ -171,6 +174,9 @@ public static class EmailRules
             }
             if (day.Existing.Sum(c => c.Hours) + result.Rows.Where(r => r.Date == day.Date).Sum(r => r.Hours) > 24m) errors.Add($"{day.Date:yyyy-MM-dd}: existing and proposed time exceeds 24 hours.");
         }
+        foreach (var note in session.EmailWorkbook.ReviewNotes.Where(n => !string.IsNullOrWhiteSpace(n)).Distinct()) warnings.Add("Workbook review note: " + note);
+        foreach (var activity in activities.Values.Where(a => !string.IsNullOrWhiteSpace(a.ReviewNotes)))
+            warnings.Add($"{activity.Date:yyyy-MM-dd} · {activity.MatterHint}: {activity.ReviewNotes}");
         if (!string.IsNullOrWhiteSpace(session.EmailWorkbook.Metadata.RetrievalLimitations) && !string.Equals(session.EmailWorkbook.Metadata.RetrievalLimitations.Trim(), "none", StringComparison.OrdinalIgnoreCase)) warnings.Add("Email retrieval limitations: " + session.EmailWorkbook.Metadata.RetrievalLimitations.Trim());
         return result;
 

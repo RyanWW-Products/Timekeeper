@@ -1,6 +1,6 @@
 ﻿# Email-based timecards
 
-Timekeeper 0.7.0 uses **Word for review, then a small Excel file for import**. The agent prepares the Word report first. Once you approve it, the agent exports only the data Timekeeper needs. Excel has no review pages, totals, communication ledger or formulas.
+Timekeeper uses **Word for review, then a small Excel file for import**. The agent prepares the Word report first. Once you approve it, the agent exports only the data Timekeeper needs. Version 0.7.1 puts imported activities in a matching table with suggested assignments/tasks and one final review confirmation. Excel has no review pages, totals, communication ledger or formulas.
 
 ## Set up the shared agent
 
@@ -10,19 +10,19 @@ Replace the old REVIEW workbook in the agent's knowledge with [Timekeeper Email 
 
 The agent needs authorized access to the employee's email and any additional sources used, plus document and workbook generation. Test using a team member's own account. Shared access does not grant access to the owner's mailbox, and these files do not install a Quickbase connector. Never put API tokens or employee mailbox exports into shared knowledge.
 
-Update the app to **0.7.0 or later** for the new format. Quickbase setup is required for matching and submission. Toggl is optional; email-only employees leave its token blank in Settings.
+Update the app to **0.7.1 or later** for the workflow below. The minimal workbook format is unchanged from 0.7.0. Quickbase setup is required for matching and submission. Toggl is optional; email-only employees leave its token blank in Settings.
 
 ## Prepare and import a day
 
 1. Give the agent the date, your verified Quickbase email and the timezone configured in Timekeeper. It uses your authorized Microsoft 365 sources.
 2. Review its Word report. It includes worked matters, underlying minutes, billing, evidence context, estimates, coverage gaps, communication accounting and projected totals. Email timestamps alone do not establish duration.
 3. Request corrections if needed, then approve the work, minutes, billing, account, dates and disclosed limitations once. The agent creates the minimal Excel from that approved allocation. It reuses the analysis instead of repeating the entire mailbox search.
-4. Choose **Import email Excel** or drag the downloaded workbook into its drop area. Briefly acknowledge that you approved the Word report and understand the limited duplicate checks. For multiple dates, choose the dates to include.
-5. In **Match your activities**, select live Quickbase assignments and tasks. Use **Find assignment** as needed. Hints in Excel are names, not authoritative record IDs. Link work already entered to its actual record under **Already in Quickbase?**
-6. Confirm the activities and minutes are yours, then choose **Review timecards**. Check dates, grouped hours, descriptions, assignments, tasks and billing.
-7. Choose **Write to Quickbase** when ready. Keep the receipt in **Submission history**.
+4. Choose **Import email Excel** or drag the downloaded workbook into its drop area. For multiple dates, choose the dates to include.
+5. In **Match your activities**, check the table's assignment and task dropdowns. They start with the best plausible guesses from available Quickbase choices. Guesses are editable, not verified matches; unmatched fields remain **Choose**. Change selections as needed, using **Find assignment** when a choice is missing. Hints in Excel are names, not authoritative record IDs.
+6. For work already entered, manually select its actual record under **Already in Quickbase?** Existing records are never linked automatically. Choose **Review timecards**, then check dates, grouped hours, descriptions, assignments, tasks and billing.
+7. Use the single final review checkbox to confirm the hours, mapping choices, estimates, coverage and duplicate limits. Choose **Write to Quickbase** when ready, then keep the receipt in **Submission history**.
 
-Word remains your supporting review file. You do not need to upload it into Timekeeper. Importing Excel and confirming its source do not write timecards.
+Word remains your supporting review file, and approval in M365 is still required before the agent creates Excel. You do not need to upload Word into Timekeeper. There is no separate opening acknowledgement or personal-confirmation checkbox during mapping. Importing Excel does not write timecards.
 
 ## Time policy and billing
 
@@ -78,7 +78,7 @@ For a correction, update the affected Word allocation, approve the revised propo
 
 ## Older workbooks
 
-The app still accepts legacy **timekeeper_email_review** workbooks and rich **timekeeper_email_activity** workbooks under their existing contracts. Review files require local confirmation; rich Activities files retain their real-source-ID requirements. These are backward-compatible inputs. The revised agent should generate only the new **timekeeper_email_import** format and should not use the old REVIEW template.
+The app still accepts legacy **timekeeper_email_review** workbooks and rich **timekeeper_email_activity** workbooks. Legacy Review estimates and limitations are confirmed in the final app review; rich Activities files retain their real-source-ID requirements. These are backward-compatible inputs. The revised agent should generate only the new **timekeeper_email_import** format and should not use the old REVIEW template.
 
 ## If something goes wrong
 

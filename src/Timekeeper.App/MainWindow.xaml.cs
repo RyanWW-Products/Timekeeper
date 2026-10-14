@@ -174,7 +174,7 @@ public partial class MainWindow : Window
         {
             source.AppendLine($"{day.Date:dddd, MMMM d}");
             if(session.EmailWorkbook is not null)
-                foreach(var activity in session.EmailWorkbook.Activities.Where(a=>a.Date==day.Date)) source.AppendLine($"  {activity.ActivityId}   {activity.Minutes} confirmed minutes   {activity.TimeBasis}\n  {activity.Description}");
+                foreach(var activity in session.EmailWorkbook.Activities.Where(a=>a.Date==day.Date)) source.AppendLine($"  {activity.ActivityId}   {activity.Minutes} imported minutes   {activity.TimeBasis}\n  {activity.Description}");
             foreach(var entry in day.Entries) source.AppendLine($"  #{entry.Id}   {(entry.Running?"RUNNING":$"{entry.DurationSeconds/3600m:0.00} h")}   {entry.Description}");
             source.AppendLine($"Already in Quickbase: {day.Existing.Sum(r=>r.Hours):0.00} h");
             foreach(var card in day.Existing) source.AppendLine($"  Record #{card.RecordId}   {card.Hours:0.00} h   {card.Description}   [project {card.Project}, task {card.Task}]");
@@ -291,14 +291,8 @@ public partial class MainWindow : Window
         {
             StatusText.Text="Checking the email workbook…";
             var workbook=EmailWorkbookReader.Read(path);
-            if(workbook.UsesLocalFingerprints)
-            {
-                var errors=EmailWorkbookReader.Validate(workbook,_settings,allowReviewDraft:workbook.IsReviewWorkbook,allowMinimalAcknowledgement:workbook.IsMinimalImport);
-                if(errors.Count>0) throw new InvalidDataException(string.Join("\n",errors));
-                var confirmation=new ReviewWorkbookWindow(this,workbook);
-                if(confirmation.ShowDialog()!=true) { StatusText.Text="Email import cancelled. Nothing was submitted."; return; }
-                workbook=workbook.IsMinimalImport ? EmailWorkbookReader.ConfirmMinimalImport(workbook) : EmailWorkbookReader.ConfirmReview(workbook);
-            }
+            var errors=EmailWorkbookReader.ValidateForReview(workbook,_settings);
+            if(errors.Count>0) throw new InvalidDataException(string.Join("\n",errors));
             using var api=MakeApi();
             var session=await api.ReadEmailBaselineAsync(workbook,new Progress<string>(text=>StatusText.Text=text),ct);
             var fullSession=session;
@@ -404,7 +398,7 @@ public partial class MainWindow : Window
     private static string DateList(IEnumerable<DateOnly> dates)=>string.Join(", ",dates.Order().Select(d=>d.ToString("MMM d, yyyy")));
     private void UpdateMetrics(ReadSession session)
     {
-        TrackedLabel.Text=session.EmailWorkbook is null?"Tracked in Toggl":"Confirmed email time";
+        TrackedLabel.Text=session.EmailWorkbook is null?"Tracked in Toggl":"Imported email time";
         var hours=session.EmailWorkbook is null?session.Days.Sum(d=>d.Entries.Where(e=>!e.Running).Sum(e=>e.DurationSeconds/3600m)):session.EmailWorkbook.Activities.Where(a=>session.Days.Any(d=>d.Date==a.Date)).Sum(a=>a.Minutes/60m);
         TrackedMetric.Text=$"{hours:0.00} h";
         TargetMetric.Text=session.EmailWorkbook is not null && (!session.Settings.EmailApplyDailyDefaults||!session.Settings.FillWeekdays)?"Off":$"{session.Settings.TargetHours:0.00} h";
@@ -741,10 +735,17 @@ public partial class MainWindow : Window
         AcceptProposal("",emailProposal:mappedProposal);
         if(_validation is not {IsValid:true}||_reviewRows.Count!=2||WriteButton.IsEnabled||_exportPath is not null||TargetMetric.Text!="Off")
             throw new InvalidOperationException("Email mappings did not reach review independently of the Toggl JSON parser.");
+        if(AcknowledgeWarnings.Visibility!=Visibility.Visible||AcknowledgeWarnings.IsChecked==true||VerifiedBadge.Visibility!=Visibility.Collapsed)
+            throw new InvalidOperationException("Email import skipped the final review confirmation.");
+        AcknowledgeWarnings.IsChecked=true;
+        if(VerifiedBadge.Visibility!=Visibility.Visible||WriteButton.IsEnabled)
+            throw new InvalidOperationException("Final email confirmation did not verify review or enabled a demo write.");
         var originalHours=_reviewRows.Sum(r=>r.Hours);
         _reviewRows[1].BillingIndex=1;
         if(_reviewRows.Count!=1||_reviewRows[0].Row.SourceActivityIds.Count!=2||_reviewRows[0].Hours!=0.08m||_reviewRows[0].Hours>=originalHours||_reviewRows[0].Row.Assignment!=501||_reviewRows[0].Row.Task!=60)
             throw new InvalidOperationException("Billing changes did not preserve mappings and recompute grouped email hours.");
+        if(AcknowledgeWarnings.IsChecked==true||VerifiedBadge.Visibility!=Visibility.Collapsed)
+            throw new InvalidOperationException("Changed email billing retained the previous confirmation.");
         _reviewRows[0].BillingIndex=2;
         if(_reviewRows[0].Row.BillableOverride!=false||_proposal!.Rows.Any(r=>r.BillableOverride!=false)||WriteButton.IsEnabled)
             throw new InvalidOperationException("Non-billable review selection was lost or enabled a demo write.");
@@ -755,6 +756,6 @@ public partial class MainWindow : Window
             throw new InvalidOperationException("Restoring date selections lost automatic-row billing overrides.");
         // Leave both indicator states visible in the screenshot.
         PresentSession(session); AcceptProposal("",emailProposal:EmailSmoke.Proposal(session));
-        return "PASS: email mappings reach review without Toggl; no automatic fill by default\nPASS: billing edits keep assignment/task and regroup confirmed minutes; demo writes stay disabled\n";
+        return "PASS: email mappings reach review without Toggl; no automatic fill by default\nPASS: a single final email confirmation is required and resets after changes\nPASS: billing edits keep assignment/task and regroup confirmed minutes; demo writes stay disabled\n";
     }
 }
