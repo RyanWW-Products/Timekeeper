@@ -1,6 +1,6 @@
 TIMEKEEPER AGENT KNOWLEDGE
-For the Windows application 0.4.3; exchange/proposal schema 1
-Updated 2026-09-30
+For the Windows application 0.9.0; exchange/proposal schema 1
+Updated 2026-10-20
 
 PURPOSE AND AUTHORITY
 
@@ -45,6 +45,7 @@ policy: the effective rounding, target, Timecards, fill and eligibility rules. D
 reference.tasks: task IDs, names and category_id relationships.
 reference.categories: valid category IDs and names.
 reference.assignments: assignment IDs and names, project_id, project_name, client, status, notes, and any supplied employee/task/category hints.
+reference.projects: IDs and names of verified projects available for direct timecards. These are Quickbase record IDs, not display numbers.
 reference.internal_project: the configured internal project ID and name.
 days: each date's Toggl entries and existing Quickbase timecards.
 expected_envelope: the exact schema_version, session_id and employee_id for the returned proposal, plus empty rows and already_recorded arrays.
@@ -56,11 +57,15 @@ MATCHING AND ASSIGNMENT LOOKUP
 
 Use the source description, source project and supplied assignment details to identify a plausible assignment. Ask when several candidates fit or the evidence is weak. Do not assume the first result is correct. Assignment status and employee membership can require user confirmation in the app.
 
-If the needed assignment is missing, the user chooses Find assignment in Timekeeper and searches a few assignment, project or client words. Matching results are added to a refreshed export with a new session_id. Ask for that export before producing the proposal. If no results are found, try different search words or resolve the underlying reference in Quickbase. Do not invent a missing assignment.
+If the needed assignment is missing, use Find assignment and search assignment, project or client words. Search includes assignments belonging to other employees and statuses including Active, Case Intake, Proposal and Review; these are not the only searchable statuses. Quickbase account access still limits visible records. Choose Direct to project for case or project work that needs no assignment. Search and select the actual case/project, then add it to the export. Every refreshed export has a new session_id: the user must upload it again before the agent returns a proposal. Do not invent missing references.
 
-For an assigned row, project must equal the chosen assignment's project_id. A row with assignment set to null must use reference.internal_project.id. Select a task that describes the actual work; category must equal that task's category_id and exist in reference.categories. Do not hard-code a task, category, internal project or employee ID from this guide or another person's session.
+For an assigned row, project must equal the chosen assignment's project_id. A row with assignment set to null may use an ID from reference.projects or reference.internal_project.id. A management assignment is not required for minor administration performed directly on a case. Ask whether direct project time is intended when unclear, and use a suitable task. A project mentioned only in free text is insufficient; have the user search and add it to a fresh export. Select a task that describes the actual work; category must equal that task's category_id and exist in reference.categories. Do not hard-code a task, category, internal project or employee ID from this guide or another person's session.
 
 A short description states only work supported by the source and the user's clarification. It must not invent deliverables or progress. Group entries only when date, assignment, project and task match. Keep different dates and tasks separate. Timekeeper can merge rows with the same grouping keys and combine their descriptions.
+
+BILLING AND TASK CONTROLS
+
+In the email matching table, task dropdowns support search by name or ID. Direct to project in the lookup window selects a case without an assignment while preserving task/category validation. Billing defaults come from the live recognized Quickbase rule and readable inputs. Refresh billing retries failed reads; hover over Default unavailable for its reason. Missing required permissions or unsupported rules remain unknown, never inferred from historical timecards. Billing overrides still require actual Quickbase permission.
 
 SOURCE COVERAGE AND EXISTING TIME
 
@@ -92,7 +97,7 @@ Weekends use actual recorded work with no automatic additions. Days with no sour
 
 PROPOSAL FORMAT
 
-Return one JSON object, never a bare array or the original export. Required top-level fields are schema_version, session_id, employee_id, rows and already_recorded. Use exact lowercase snake_case names, numeric IDs, quoted ISO dates (YYYY-MM-DD), and valid JSON null for an internal row's absent assignment. No comments, trailing commas, duplicate keys, explanatory fields or Markdown inside the actual file.
+Return one JSON object, never a bare array or the original export. Required top-level fields are schema_version, session_id, employee_id, rows and already_recorded. Use exact lowercase snake_case names, numeric IDs, quoted ISO dates (YYYY-MM-DD), and valid JSON null for a referenced direct-project or internal row's absent assignment. No comments, trailing commas, duplicate keys, explanatory fields or Markdown inside the actual file.
 
 Each work row has date, source_entry_ids, assignment, project, task, category and description. Descriptions must contain 1-4000 characters. Omit hours; it is an optional schema field but the app rejects values inconsistent with its calculation. Each already_recorded link has only source_entry_id and existing_record_id. Empty arrays are valid when appropriate, provided all source entries are still accounted for. When confirmed already_recorded links cover every source, a proposal with no new work rows can still produce app-calculated additions on an eligible day; the user must review the final table.
 

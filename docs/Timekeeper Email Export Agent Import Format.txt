@@ -1,6 +1,6 @@
 TIMEKEEPER EMAIL EXPORT AGENT IMPORT FORMAT
 CONTEXT FILE 2 - UPLOAD AS AGENT KNOWLEDGE
-Revision: 2026-10-14 | Minimal machine import | Timekeeper 0.8.0+ workflow
+Revision: 2026-10-20 | Minimal machine import | Timekeeper 0.9.0+ workflow
 
 PURPOSE
 Excel only carries approved work into Timekeeper. Word is the sole generated review document. Generate Word, obtain one explicit approval of the proposed work and limitations, then generate this workbook. Do not produce a review Excel, an alternate Activities workbook or a second export schema. Older formats remain readable by the application only for backward compatibility.
@@ -45,7 +45,7 @@ minutes: approved positive whole minutes for this activity before application ro
 
 matter_hint: required descriptive matter/project/internal name, at most 1,000 characters. Include a known case/project display number if useful, but never manufacture one or treat it as a Quickbase record ID.
 
-assignment_hint: optional descriptive assignment name or useful matching hint, at most 1,000 characters. Blank if unknown. Do not put a guessed Quickbase relationship ID here.
+assignment_hint: optional descriptive assignment name or useful matching hint, at most 1,000 characters. Blank if unknown or if the work should charge directly to its case/project without an assignment. Keep matter_hint and the appropriate task_hint; do not invent a management assignment, extra column or relationship ID. The employee confirms Direct to project in Timekeeper's lookup window.
 
 task_hint: optional descriptive task name or hint, at most 1,000 characters. Blank if unknown. Keep a non-billable meeting under its actual matter/assignment/task when that is the approved classification.
 
@@ -80,4 +80,4 @@ Verify exactly two sheets, four Metadata keys and seven Timecards columns. No fo
 
 Save and reopen the file when tools allow, then attach a real download. Reuse the reconciled approved work instead of repeating mailbox retrieval. Do not regenerate unchanged Word merely because Excel is now available. If file creation fails, disclose the failure; CSV/chat text renamed as .xlsx is not a workbook.
 
-In Timekeeper 0.8.0+, import opens Review email activities. Assignment/task dropdowns start with editable best guesses; unmatched fields remain Choose. Check every selection and link existing records manually. Hours display as decimals (0.25 h = 15 minutes), with double-click/F2 editing. Billing follows Quickbase permissions. Optional weekday fill and Timecards controls apply to this import. Choose Review in Timekeeper dashboard, or inspect the submission preview and choose Submit directly to Quickbase. One final checkbox on the chosen review route confirms hours, mappings, estimates, coverage and duplicate limits. Word approval and employee_confirmed=true remain required. Excel continues to export whole minutes; application edits do not change this format. Generation and import do not submit automatically.
+In Timekeeper 0.9.0+, import opens Review email activities. Assignment/task dropdowns start with editable best guesses; unmatched fields remain Choose. Check every selection and link existing records manually. Find assignment includes accessible statuses such as Active, Case Intake, Proposal and Review across employees. Direct to project selects a case without an assignment; task dropdowns search by name or ID. Refresh billing retries unavailable defaults and their tooltips explain remaining limits. Hours display as decimals (0.25 h = 15 minutes), with double-click/F2 editing. Billing follows Quickbase permissions. Optional weekday fill and Timecards controls apply to this import. Choose Review in Timekeeper dashboard, or inspect the submission preview and choose Submit directly to Quickbase. One final checkbox on the chosen review route confirms hours, mappings, estimates, coverage and duplicate limits. Word approval and employee_confirmed=true remain required. Excel continues to export whole minutes; application edits do not change this format. Generation and import do not submit automatically.

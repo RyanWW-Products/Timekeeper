@@ -4,7 +4,10 @@ using System.Text.RegularExpressions;
 
 namespace Timekeeper.Core;
 
-public sealed record EmailMappingSuggestion(int? AssignmentId, bool Internal, int? TaskId, string Reason);
+public sealed record EmailMappingSuggestion(int? AssignmentId, bool Internal, int? TaskId, string Reason)
+{
+    public int? ProjectId { get; init; }
+}
 
 /// <summary>Proposes editable mappings from the loaded reference data. Never links existing timecards.</summary>
 public static class EmailSuggestions
@@ -30,6 +33,7 @@ public static class EmailSuggestions
         var internalWork = reference.InternalProject is { Id: > 0 } project
             && (Exact(matter, Normalize(project.Name)) || InternalLabels.Contains(matter));
         int? assignmentId = null;
+        int? directProjectId = null;
         string assignmentReason;
         if (internalWork)
         {
@@ -40,7 +44,17 @@ public static class EmailSuggestions
             var candidates = ValidAssignments(reference).Select(a => RankAssignment(activity, a, session.Settings.Email))
                 .Where(a => a.Score > 0).OrderByDescending(a => a.Score).ThenBy(a => a.Assignment.Id).ToList();
             if (candidates.Count == 0)
-                assignmentReason = "No matching assignment found. Choose an assignment or use Find assignment.";
+            {
+                var projects = (reference.Projects ?? []).Where(p => p is { Id: > 0 } && !string.IsNullOrWhiteSpace(p.Name) && p.Id != reference.InternalProject?.Id)
+                    .GroupBy(p => p.Id).Where(g => g.Count() == 1).Select(g => g.Single())
+                    .Where(p => Exact(matter, Normalize(p.Name))).ToList();
+                if (projects.Count == 1)
+                {
+                    directProjectId = projects[0].Id;
+                    assignmentReason = "Exact project match with no matching assignment. Review this direct-to-project choice.";
+                }
+                else assignmentReason = "No matching assignment found. Choose an assignment or find a project to apply time directly to it.";
+            }
             else
             {
                 var best = candidates[0]; assignmentId = best.Assignment.Id;
@@ -52,7 +66,7 @@ public static class EmailSuggestions
             }
         }
         var task = PickTask(activity, reference, assignmentId, internalWork, session.Settings.InternalTaskId);
-        return new(assignmentId, internalWork, task.Id, assignmentReason + " " + task.Reason);
+        return new(assignmentId, internalWork, task.Id, assignmentReason + " " + task.Reason) { ProjectId = directProjectId };
     }
 
     /// <summary>Recomputes a proposed task after a user changes the assignment.</summary>

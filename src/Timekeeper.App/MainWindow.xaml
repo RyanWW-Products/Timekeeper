@@ -100,7 +100,7 @@
               <TextBlock Text="Assignment added. Send the updated file to Copilot again." Foreground="{DynamicResource Warning}" FontWeight="SemiBold" FontSize="17" TextWrapping="Wrap"/>
               <TextBlock Foreground="{DynamicResource Warning}" TextWrapping="Wrap" Margin="0,8,0,0" FontSize="13" LineHeight="21">
                 <Run Text="1. Drag the updated file below into your Copilot chat again."/><LineBreak/>
-                <Run Text="2. Ask Copilot for a new proposal using the added assignment."/><LineBreak/>
+                <Run Text="2. Ask Copilot for a new proposal using the added assignment or project."/><LineBreak/>
                 <Run Text="3. Download the new proposal and bring it back here."/>
               </TextBlock>
               <TextBlock Text="Your previous proposal is no longer valid." Foreground="{DynamicResource Warning}" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,8,0,0" FontSize="12"/>
@@ -135,7 +135,7 @@
                     <TextBlock Text="Toggl JSON proposal or email Excel workbook." TextAlignment="Center" FontSize="12" Foreground="{DynamicResource Muted}" MinHeight="34"/>
                   </StackPanel>
                 </Border>
-                <WrapPanel Grid.Row="2"><Button x:Name="ImportButton" Content="Open file" Click="Import_Click" IsEnabled="False" FontSize="12" Padding="12,8" Margin="0,0,8,0"/><Button x:Name="PasteButton" Content="Paste" Click="Paste_Click" IsEnabled="False" Style="{StaticResource Quiet}" FontSize="12" Padding="9,8" Margin="0,0,5,0"/><Button x:Name="FindButton" Content="Find assignment" Click="Find_Click" IsEnabled="False" Style="{StaticResource Quiet}" FontSize="12" Padding="9,8"/></WrapPanel>
+                <WrapPanel Grid.Row="2"><Button x:Name="ImportButton" Content="Open file" Click="Import_Click" IsEnabled="False" FontSize="12" Padding="12,8" Margin="0,0,8,0"/><Button x:Name="PasteButton" Content="Paste" Click="Paste_Click" IsEnabled="False" Style="{StaticResource Quiet}" FontSize="12" Padding="9,8" Margin="0,0,5,0"/><Button x:Name="FindButton" Content="Find assignment / project" Click="Find_Click" IsEnabled="False" Style="{StaticResource Quiet}" FontSize="12" Padding="9,8"/></WrapPanel>
               </Grid>
             </Border>
           </Grid>
@@ -188,7 +188,10 @@
                 </DataGrid.Columns>
               </DataGrid>
               <TextBlock x:Name="BillingNotice" Visibility="Collapsed" TextWrapping="Wrap" Margin="20,10,20,0" FontSize="12" Foreground="{DynamicResource Muted}"/>
-              <Button x:Name="RowDetailsButton" Content="View selected row details ↗" Click="RowDetails_Click" Style="{StaticResource Quiet}" HorizontalAlignment="Left" FontSize="12" Margin="10,6,20,0" Padding="10,6" IsEnabled="False"/>
+              <WrapPanel>
+                <Button x:Name="RowDetailsButton" Content="View selected row details ↗" Click="RowDetails_Click" Style="{StaticResource Quiet}" HorizontalAlignment="Left" FontSize="12" Margin="10,6,10,0" Padding="10,6" IsEnabled="False"/>
+                <Button x:Name="RefreshBillingButton" Content="Refresh billing" Click="RefreshBilling_Click" Style="{StaticResource Quiet}" FontSize="12" Margin="0,6,20,0" Padding="10,6" Visibility="{Binding Visibility, ElementName=ReviewGrid}" IsEnabled="False"/>
+              </WrapPanel>
               <TextBlock x:Name="DailyTotals" Margin="20,9,20,14" FontFamily="{StaticResource MonoFont}" FontSize="12"/>
               <TextBlock x:Name="WarningsText" Margin="20,0,20,12" Foreground="{DynamicResource Warning}" FontSize="12" Visibility="Collapsed"/>
               <CheckBox x:Name="AcknowledgeWarnings" Margin="20,0,20,16" Visibility="Collapsed" Checked="Approval_Changed" Unchecked="Approval_Changed"><TextBlock Text="I reviewed the assignments, tasks, billing and warnings, confirmed these hours, and checked for existing timecards." TextWrapping="Wrap" FontSize="12"/></CheckBox>

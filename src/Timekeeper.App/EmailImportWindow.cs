@@ -36,7 +36,10 @@ internal sealed class EmailImportWindow : Window
     private readonly CheckBox _approve = new() { Content = new TextBlock { Text = "I reviewed the timecards, hours, billing and warnings, and checked for existing time.", TextWrapping = TextWrapping.Wrap }, Margin = new Thickness(0, 10, 0, 6) };
     private ValidationResult? _review;
     private bool _finding;
+    private bool _closed;
+    private readonly CancellationTokenSource _lifetime = new();
     private readonly Button _details = new() { Content = "View selected activity", HorizontalAlignment = HorizontalAlignment.Left };
+    private readonly Button _refreshBilling = new() { Content = "Refresh billing", Margin = new Thickness(10, 0, 0, 0) };
     public ReadSession Session { get; private set; }
     public ProposalEnvelope Proposal { get; private set; } = new();
     public EmailReviewEdits ReviewEdits { get; private set; } = new();
@@ -92,13 +95,17 @@ internal sealed class EmailImportWindow : Window
         var assignment = new FrameworkElementFactory(typeof(StackPanel));
         assignment.AppendChild(Choice(nameof(EmailMappingRow.AssignmentChoices), nameof(EmailMappingRow.AssignmentSelection), "Assignment and project", true));
         var find = new FrameworkElementFactory(typeof(Button));
-        find.SetValue(ContentControl.ContentProperty, "Find assignment"); find.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Left);
+        find.SetValue(ContentControl.ContentProperty, "Find assignment / project"); find.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Left);
         find.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 5, 0, 0)); find.SetValue(Control.PaddingProperty, new Thickness(9, 4, 9, 4));
         find.SetValue(FrameworkElement.MinHeightProperty, 26d); find.SetValue(Control.FontSizeProperty, 11d);
         find.SetBinding(UIElement.IsEnabledProperty, new Binding(nameof(EmailMappingRow.CanEditNew)));
         find.AddHandler(Button.ClickEvent, new RoutedEventHandler(Find_Click)); assignment.AppendChild(find);
         _activities.Columns.Add(new DataGridTemplateColumn { Header = "Assignment / project", Width = new DataGridLength(1.4, DataGridLengthUnitType.Star), MinWidth = 230, CellTemplate = new DataTemplate { VisualTree = assignment } });
-        _activities.Columns.Add(new DataGridTemplateColumn { Header = "Task", Width = new DataGridLength(0.8, DataGridLengthUnitType.Star), MinWidth = 145, CellTemplate = new DataTemplate { VisualTree = Choice(nameof(EmailMappingRow.TaskChoices), nameof(EmailMappingRow.TaskSelection), "Task", true) } });
+        var taskPicker = new FrameworkElementFactory(typeof(SearchableTaskComboBox));
+        taskPicker.SetBinding(SearchableTaskComboBox.ItemsSourceProperty, new Binding(nameof(EmailMappingRow.TaskChoices)));
+        taskPicker.SetBinding(SearchableTaskComboBox.SelectedItemProperty, new Binding(nameof(EmailMappingRow.TaskSelection)) { Mode = BindingMode.TwoWay, UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged });
+        taskPicker.SetBinding(UIElement.IsEnabledProperty, new Binding(nameof(EmailMappingRow.CanEditNew))); taskPicker.SetValue(AutomationProperties.NameProperty, "Task");
+        _activities.Columns.Add(new DataGridTemplateColumn { Header = "Task", Width = new DataGridLength(0.8, DataGridLengthUnitType.Star), MinWidth = 145, CellTemplate = new DataTemplate { VisualTree = taskPicker } });
         _activities.Columns.Add(new DataGridTemplateColumn { Header = "Billing", MinWidth = 178, CellTemplate = BillingTemplate() });
         _activities.Columns.Add(new DataGridTemplateColumn { Header = "Quickbase record", Width = new DataGridLength(0.9, DataGridLengthUnitType.Star), MinWidth = 165, CellTemplate = new DataTemplate { VisualTree = Choice(nameof(EmailMappingRow.ExistingChoices), nameof(EmailMappingRow.ExistingSelection), "New work or existing Quickbase record", false) } });
         _activities.Columns.Add(new DataGridTemplateColumn { Header = "Match", Width = new DataGridLength(0.8, DataGridLengthUnitType.Star), MinWidth = 115, CellTemplate = TextTemplate(nameof(EmailMappingRow.State), nameof(EmailMappingRow.Reason)) });
@@ -122,6 +129,7 @@ internal sealed class EmailImportWindow : Window
         var policyPanel = new WrapPanel { Margin = new Thickness(0, 10, 0, 4), VerticalAlignment = VerticalAlignment.Center };
         policyPanel.Children.Add(_fill); policyPanel.Children.Add(_target); policyPanel.Children.Add(new TextBlock { Text = "hours", VerticalAlignment = VerticalAlignment.Center }); policyPanel.Children.Add(_timecards);
         _details.Margin = new Thickness(22, 0, 0, 0); _details.Click += (_, _) => ShowDetails(); policyPanel.Children.Add(_details); footer.Children.Add(policyPanel);
+        _refreshBilling.Click += async (_, _) => await RefreshBillingAsync(); policyPanel.Children.Add(_refreshBilling);
         foreach (var box in new[] { _fill, _timecards }) { box.Checked += (_, _) => Update(); box.Unchecked += (_, _) => Update(); }
         _target.TextChanged += (_, _) => Update();
         _previewRows.Columns.Add(new DataGridTextColumn { Header = "Date", Binding = new Binding("Date") { StringFormat = "yyyy-MM-dd" }, Width = 100 });
@@ -129,7 +137,9 @@ internal sealed class EmailImportWindow : Window
         _previewRows.Columns.Add(new DataGridTextColumn { Header = "Project", Binding = new Binding("Project"), Width = 190 });
         _previewRows.Columns.Add(new DataGridTextColumn { Header = "Assignment", Binding = new Binding("Assignment"), Width = 170 });
         _previewRows.Columns.Add(new DataGridTextColumn { Header = "Task", Binding = new Binding("Task"), Width = 120 });
-        _previewRows.Columns.Add(new DataGridTextColumn { Header = "Billing", Binding = new Binding("Billing"), Width = 150 });
+        var previewBillingStyle = new Style(typeof(TextBlock), DataGridTextColumn.DefaultElementStyle);
+        previewBillingStyle.Setters.Add(new Setter(FrameworkElement.ToolTipProperty, new Binding("BillingHint")));
+        _previewRows.Columns.Add(new DataGridTextColumn { Header = "Billing", Binding = new Binding("Billing"), ElementStyle = previewBillingStyle, Width = 150 });
         _previewRows.Columns.Add(new DataGridTextColumn { Header = "Description", Binding = new Binding("Description"), Width = new DataGridLength(1, DataGridLengthUnitType.Star), MinWidth = 230 });
         _warnings.SetResourceReference(TextBlock.ForegroundProperty, "Warning");
         var previewContent = new StackPanel(); previewContent.Children.Add(_previewRows); previewContent.Children.Add(_totals); previewContent.Children.Add(_warnings); previewContent.Children.Add(_approve);
@@ -139,6 +149,7 @@ internal sealed class EmailImportWindow : Window
         _continue.Margin = new Thickness(0, 0, 10, 0); _continue.Click += (_, _) => Accept(false); buttons.Children.Add(_continue);
         _submit.Style = (Style)FindResource("Primary"); _submit.Click += (_, _) => Accept(true); buttons.Children.Add(_submit); footer.Children.Add(buttons);
         Grid.SetRow(footer, 2); outer.Children.Add(footer);
+        Closed += (_, _) => { _closed = true; _lifetime.Cancel(); _lifetime.Dispose(); };
         Content = outer; _activities.SelectedIndex = 0; Update(); Appearance.Attach(this);
     }
 
@@ -185,6 +196,7 @@ internal sealed class EmailImportWindow : Window
             var trigger = new DataTrigger { Binding = new Binding(property), Value = value }; trigger.Setters.Add(new Setter(UIElement.VisibilityProperty, Visibility.Visible)); style.Triggers.Add(trigger); return style;
         }
         var panel = new FrameworkElementFactory(typeof(StackPanel));
+        panel.SetBinding(FrameworkElement.ToolTipProperty, new Binding(nameof(EmailMappingRow.BillingHint)));
         var line = new FrameworkElementFactory(typeof(StackPanel)); line.SetValue(StackPanel.OrientationProperty, Orientation.Horizontal);
         var light = new FrameworkElementFactory(typeof(System.Windows.Shapes.Ellipse)); light.SetValue(FrameworkElement.WidthProperty, 9d); light.SetValue(FrameworkElement.HeightProperty, 9d); light.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 0, 6, 5)); light.SetBinding(System.Windows.Shapes.Shape.FillProperty, new Binding(nameof(EmailMappingRow.BillingLight))); light.SetBinding(FrameworkElement.ToolTipProperty, new Binding(nameof(EmailMappingRow.BillingLabel))); line.AppendChild(light);
         var label = Text(nameof(EmailMappingRow.BillingLabel)); label.SetValue(TextBlock.MaxWidthProperty, 145d); label.SetValue(FrameworkElement.StyleProperty, Visible(typeof(TextBlock), nameof(EmailMappingRow.CanOverride), false)); line.AppendChild(label); panel.AppendChild(line);
@@ -230,8 +242,9 @@ internal sealed class EmailImportWindow : Window
             ReviewEdits = BuildEdits(target); _review = EmailRules.Validate(Session, BuildProposal(), emailEdits: ReviewEdits);
         }
         _continue.IsEnabled = !_finding && _review is { IsValid: true };
+        _refreshBilling.IsEnabled = !_finding && _api is not null;
         _submit.IsEnabled = _continue.IsEnabled && _review!.Rows.Count > 0 && !_mappings.Any(m => m.HasUnavailableOverride) && !Session.Demo;
-        _previewRows.ItemsSource = _review?.Rows.Select(r => new { r.Date, r.Hours, Project = r.ProjectName, Assignment = r.AssignmentName, Task = r.TaskName, Billing = (r.BillableOverride ?? Session.Reference.Billing?.DefaultFor(r.Project, r.Task)) switch { true => "Billable", false => "Nonbillable", _ => "Default unavailable" }, r.Description }).ToList();
+        _previewRows.ItemsSource = _review?.Rows.Select(r => new { r.Date, r.Hours, Project = r.ProjectName, Assignment = r.AssignmentName, Task = r.TaskName, Billing = (r.BillableOverride ?? Session.Reference.Billing?.DefaultFor(r.Project, r.Task)) switch { true => "Billable", false => "Nonbillable", _ => "Default unavailable" }, BillingHint = r.BillableOverride.HasValue ? "Your requested billing override; project, assignment and task stay the same." : (Session.Reference.Billing?.DefaultUnavailableReason(r.Project, r.Task) ?? "Billing has not been checked. Refresh billing to read Quickbase again.") is { Length: > 0 } reason ? reason : "Uses the Quickbase default.", r.Description }).ToList();
         UpdatePreviewLabel();
         _totals.Text = _review is { IsValid: true } ? string.Join("\n", Session.Days.Select(d => $"{d.Date:MMM d}: {d.Existing.Sum(r => r.Hours):0.00} h existing + {_review.Rows.Where(r => r.Date == d.Date).Sum(r => r.Hours):0.00} h new = {d.Existing.Sum(r => r.Hours) + _review.Rows.Where(r => r.Date == d.Date).Sum(r => r.Hours):0.00} h total")) : "";
         _warnings.Text = _review is null ? "Complete the mappings and enter a valid fill target to preview timecards." : string.Join("\n\n", _review.Errors.Concat(_review.Warnings));
@@ -248,25 +261,29 @@ internal sealed class EmailImportWindow : Window
     }
     private async void Find_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { DataContext: EmailMappingRow map } || !map.CanEditNew) return;
+        if (_closed || _finding || sender is not FrameworkElement { DataContext: EmailMappingRow map } || !map.CanEditNew) return;
         _activities.SelectedItem = map;
         var picker = new AssignmentSearchWindow(this, Session.Reference.Assignments,
             (query, token) => _api is null ? System.Threading.Tasks.Task.FromResult(AssignmentSearchWindow.Filter(Session.Reference.Assignments, query)) : _api.FindAssignmentsAsync(query, token),
-            initialQuery: map.Activity.MatterHint);
-        if (picker.ShowDialog() == true && picker.SelectedAssignment is AssignmentRecord selected)
+            initialQuery: map.Activity.MatterHint, availableProjects: Session.Reference.Projects,
+            searchProjects: (query, token) => _api is null ? System.Threading.Tasks.Task.FromResult(AssignmentSearchWindow.FilterProjects(Session.Reference.Projects, query)) : _api.FindProjectsAsync(query, token));
+        if (picker.ShowDialog() == true && !_closed && (picker.SelectedAssignment is not null || picker.SelectedProject is not null))
         {
             _finding = true; _activities.IsEnabled = false; Update();
             try
             {
                 if (_api is not null)
                 {
-                    var billing = await _api.ReadBillingDefaultsAsync(Session.Reference.Assignments.Select(a => a.ProjectId).Append(selected.ProjectId).Append(Session.Reference.InternalProject!.Id));
+                    var selectedProjectId = picker.SelectedProject?.Id ?? picker.SelectedAssignment!.ProjectId;
+                    var billing = await _api.ReadBillingDefaultsAsync(Session.Reference.Assignments.Select(a => a.ProjectId).Concat(Session.Reference.Projects.Select(p => p.Id)).Append(selectedProjectId).Append(Session.Reference.InternalProject!.Id), _lifetime.Token);
+                    if (_closed) return;
                     Session = Session with { Reference = Session.Reference with { Billing = billing } };
                 }
-                ApplyAssignment(map, selected);
+                if (picker.SelectedAssignment is AssignmentRecord selected) ApplyAssignment(map, selected);
+                else ApplyProject(map, picker.SelectedProject!);
             }
-            catch (Exception error) { new TextDialog(this, "Assignment lookup", error.Message).ShowDialog(); }
-            finally { _finding = false; _activities.IsEnabled = true; Update(); }
+            catch (Exception error) { if (!_closed) new TextDialog(this, "Assignment lookup", error.Message).ShowDialog(); }
+            finally { _finding = false; if (!_closed) { _activities.IsEnabled = true; Update(); } }
         }
     }
     private void ApplyAssignment(EmailMappingRow map, AssignmentRecord selected)
@@ -275,6 +292,27 @@ internal sealed class EmailImportWindow : Window
         foreach (var row in _mappings) row.RefreshChoices(Session);
         map.AssignmentSelection = map.AssignmentChoices.Single(c => c.Id == selected.Id);
         Update();
+    }
+    private void ApplyProject(EmailMappingRow map, ProjectRecord selected)
+    {
+        Session = Session with { Reference = Session.Reference with { Projects = Session.Reference.Projects.Where(p => p.Id != selected.Id).Append(selected).ToList() } };
+        foreach (var row in _mappings) row.RefreshChoices(Session);
+        map.AssignmentSelection = selected.Id == Session.Reference.InternalProject!.Id ? map.AssignmentChoices.Single(c => c.Id == 0) : map.AssignmentChoices.Single(c => c.ProjectId == selected.Id);
+        Update();
+    }
+    private async System.Threading.Tasks.Task RefreshBillingAsync()
+    {
+        if (_closed || _finding || _api is null) return;
+        _finding = true; _activities.IsEnabled = false; Update();
+        try
+        {
+            var billing = await _api.ReadBillingDefaultsAsync(Session.Reference.Assignments.Select(a => a.ProjectId).Concat(Session.Reference.Projects.Select(p => p.Id)).Append(Session.Reference.InternalProject!.Id), _lifetime.Token, refresh: true);
+            if (_closed) return;
+            Session = Session with { Reference = Session.Reference with { Billing = billing } };
+            foreach (var row in _mappings) row.RefreshChoices(Session);
+        }
+        catch (Exception error) { if (!_closed) new TextDialog(this, "Billing lookup", error.Message).ShowDialog(); }
+        finally { _finding = false; if (!_closed) { _activities.IsEnabled = true; Update(); } }
     }
     private void ShowDetails()
     {
@@ -312,7 +350,7 @@ internal sealed class EmailImportWindow : Window
             if (map.Existing is int existing) { recorded.Add(new() { ActivityId = map.Activity.ActivityId, ExistingRecordId = existing }); continue; }
             var assignment = map.Assignment.HasValue ? Session.Reference.Assignments.Single(a => a.Id == map.Assignment) : null;
             var task = Session.Reference.Tasks.Single(t => t.Id == map.Task);
-            rows.Add(new() { Date = map.Activity.Date, SourceActivityIds = [map.Activity.ActivityId], Project = assignment?.ProjectId ?? Session.Reference.InternalProject!.Id, Assignment = assignment?.Id, Task = task.Id, Category = task.CategoryId, Description = map.Activity.Description, BillableOverride = map.BillableOverride });
+            rows.Add(new() { Date = map.Activity.Date, SourceActivityIds = [map.Activity.ActivityId], Project = map.ProjectId, Assignment = assignment?.Id, Task = task.Id, Category = task.CategoryId, Description = map.Activity.Description, BillableOverride = map.BillableOverride });
         }
         return new() { SessionId = Session.SessionId, EmployeeId = Session.Settings.EmployeeId, Rows = rows, EmailAlreadyRecorded = recorded };
     }
@@ -366,21 +404,21 @@ internal sealed class EmailImportWindow : Window
     {
         _activities.UpdateLayout();
         var combos = VisualDescendants(_activities).OfType<ComboBox>().Where(c => c.DataContext == _mappings[0]).ToList();
-        if (combos.Count != 4 || _approve.IsChecked == true) throw new InvalidOperationException("The rendered email row does not expose its mapping/billing dropdowns or was approved automatically.");
-        var task = combos.Single(c => AutomationProperties.GetName(c) == "Task");
+        if (combos.Count != 3 || _approve.IsChecked == true) throw new InvalidOperationException("The rendered email row does not expose its mapping/billing dropdowns or was approved automatically.");
+        var task = VisualDescendants(_activities).OfType<SearchableTaskComboBox>().Single(c => c.DataContext == _mappings[0]);
         var original = _mappings[0].Capture();
         try
         {
-            task.SelectedIndex = 0; task.GetBindingExpression(System.Windows.Controls.Primitives.Selector.SelectedItemProperty)!.UpdateSource();
+            task.SetCurrentValue(SearchableTaskComboBox.SelectedItemProperty, _mappings[0].TaskChoices[0]); task.GetBindingExpression(SearchableTaskComboBox.SelectedItemProperty)!.UpdateSource();
             if (_mappings[0].Task.HasValue || _continue.IsEnabled) throw new InvalidOperationException("Rendered task dropdown did not update the row gate.");
-            task.SelectedItem = _mappings[0].TaskChoices.First(c => c.Id.HasValue && c.Id != original.Task);
-            task.GetBindingExpression(System.Windows.Controls.Primitives.Selector.SelectedItemProperty)!.UpdateSource();
+            task.SetCurrentValue(SearchableTaskComboBox.SelectedItemProperty, _mappings[0].TaskChoices.First(c => c.Id.HasValue && c.Id != original.Task));
+            task.GetBindingExpression(SearchableTaskComboBox.SelectedItemProperty)!.UpdateSource();
             var proposal = BuildProposal();
-            if (!_continue.IsEnabled || proposal.Rows.Single(r => r.SourceActivityIds.Contains(_mappings[0].Activity.ActivityId)).Task != ((EmailMappingChoice)task.SelectedItem).Id)
+            if (!_continue.IsEnabled || proposal.Rows.Single(r => r.SourceActivityIds.Contains(_mappings[0].Activity.ActivityId)).Task != task.SelectedItem?.Id)
                 throw new InvalidOperationException("Rendered task dropdown did not update the proposal.");
         }
         finally { _mappings[0].Restore(original); Proposal = BuildProposal(); }
-        return "PASS: rendered email dropdown changes update the proposal and unmatched-row gate\n";
+        return "PASS: rendered email dropdown changes update the proposal and unmatched-row gate\nPASS: " + task.SmokeSummary() + "\n";
     }
     internal string SmokeEditingSummary()
     {
@@ -442,6 +480,38 @@ internal sealed class EmailImportWindow : Window
     {
         _mappings[0].SetHours(.25m); _fill.IsChecked = true; _timecards.IsChecked = true; _target.Text = "8"; ShowPreview(true);
     }
+    internal string SmokeProjectMapping()
+    {
+        var originalSession = Session; var originals = _mappings.Select(m => m.Capture()).ToArray();
+        var first = _mappings[0];
+        try
+        {
+            var manualTask = first.TaskChoices.First(c => c.Id.HasValue && c.Id != first.Task);
+            first.TaskSelection = manualTask; first.SetHours(.25m); first.BillingIndex = 2;
+            var project = new ProjectRecord(987650, "Sample case without an assignment");
+            _approve.IsChecked = true; ApplyProject(first, project);
+            var proposal = BuildProposal(); var row = proposal.Rows.Single(r => r.SourceActivityIds.Contains(first.Activity.ActivityId));
+            if (row.Assignment.HasValue || row.Project != project.Id || row.Task != manualTask.Id || row.BillableOverride != false || first.EditedHours != .25m || _approve.IsChecked == true)
+                throw new InvalidOperationException("Direct project mapping lost hours, task, billing or final confirmation gate.");
+            var result = EmailRules.Validate(Session, proposal, emailEdits: ReviewEdits);
+            if (!result.IsValid || result.Rows.Single(r => r.SourceActivityIds.Contains(first.Activity.ActivityId)).ProjectName != project.Name)
+                throw new InvalidOperationException("Direct project mapping did not reach validated review.");
+            foreach (var map in _mappings) map.RefreshChoices(Session);
+            if (first.DirectProjectId != project.Id || first.AssignmentSelection?.ProjectId != project.Id || first.Task != manualTask.Id)
+                throw new InvalidOperationException("Reference refresh lost the direct project selection.");
+            ApplyAssignment(first, originalSession.Reference.Assignments[0]);
+            if (first.DirectProjectId.HasValue || first.Task != manualTask.Id || first.EditedHours != .25m)
+                throw new InvalidOperationException("Returning to an assignment retained a conflicting project or lost local edits.");
+        }
+        finally
+        {
+            Session = originalSession;
+            for (var i = 0; i < _mappings.Count; i++) { _mappings[i].RefreshChoices(Session); _mappings[i].Restore(originals[i]); }
+            Update(); Proposal = BuildProposal();
+        }
+        return "PASS: direct-project mapping validates without an assignment and preserves task, hours and billing through refresh and mode changes\n";
+    }
+    internal FrameworkElement TaskSearchPreviewForSmoke(string query) => VisualDescendants(_activities).OfType<SearchableTaskComboBox>().First().SearchPreviewForSmoke(query);
     private static IEnumerable<DependencyObject> VisualDescendants(DependencyObject parent)
     {
         yield return parent;

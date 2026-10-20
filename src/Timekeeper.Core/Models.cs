@@ -66,6 +66,8 @@ public sealed record ReferenceData
     public List<TaskRecord> Tasks { get; init; } = [];
     public List<CategoryRecord> Categories { get; init; } = [];
     public List<AssignmentRecord> Assignments { get; init; } = [];
+    // Trusted project choices added by a Quickbase read/search. Older saved sessions default to none.
+    public List<ProjectRecord> Projects { get; init; } = [];
     public ProjectRecord? InternalProject { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public BillingCapabilities? Billing { get; init; }

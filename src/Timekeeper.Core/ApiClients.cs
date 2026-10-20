@@ -264,22 +264,49 @@ public sealed partial class TimecardApi : IDisposable
             .Select(r => new ProjectRecord(RecordId(r, settings.ProjectsTable, 3, "Record ID"), CellString(r, 6))).ToList();
         // Multiple annual project matches must be selected explicitly in settings, never guessed.
         var internalProject = projects.Count == 1 ? projects[0] : null;
+        var directProjects = assignments.Where(a => !string.IsNullOrWhiteSpace(a.ProjectName))
+            .GroupBy(a => a.ProjectId).Where(g => g.Select(a => a.ProjectName).Distinct(StringComparer.Ordinal).Count() == 1)
+            .Select(g => new ProjectRecord(g.Key, g.First().ProjectName)).Where(p => p.Id != internalProject?.Id).ToList();
+        if (internalProject is not null) directProjects.Add(internalProject);
         var billing = await ReadBillingCapabilitiesAsync(refresh: true, ct: ct);
         await ReadBillingDefaultsAsync(billing, assignments.Select(a => a.ProjectId).Concat(projects.Select(p => p.Id)), ct);
-        return new ReferenceData { Tasks = tasks.OrderBy(t => t.Id).ToList(), Categories = categories.OrderBy(c => c.Id).ToList(), Assignments = assignments.OrderBy(a => a.Id).ToList(), InternalProject = internalProject, Billing = billing };
+        return new ReferenceData { Tasks = tasks.OrderBy(t => t.Id).ToList(), Categories = categories.OrderBy(c => c.Id).ToList(), Assignments = assignments.OrderBy(a => a.Id).ToList(), Projects = directProjects.OrderBy(p => p.Id).ToList(), InternalProject = internalProject, Billing = billing };
     }
 
     public async Task<List<AssignmentRecord>> FindAssignmentsAsync(string query, CancellationToken ct = default)
     {
-        if (query.Length > 150) throw new ArgumentException("Use a search of 150 characters or fewer.");
-        var words = query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-        if (words.Length == 0 || words.Length > 12) throw new ArgumentException("Enter one to twelve search words.");
-        var where = string.Join("AND", words.Select(word => $"({{13.CT.'{EscapeQuery(word)}'}}OR{{16.CT.'{EscapeQuery(word)}'}}OR{{23.CT.'{EscapeQuery(word)}'}})"));
-        var assignments = (await QueryAllAsync(settings.AssignmentsTable, AssignmentFields, where, ct)).Select(ParseAssignment).ToList();
+        var words = SearchWords(query);
+        // Search all staff and statuses, including Active, Case Intake, Proposal/Propsal and Review.
+        // An intake/proposal case may have no assignment yet; FindProjectsAsync covers that case.
+        var where = string.Join("AND", words.Select(word => $"({{13.CT.'{EscapeQuery(word)}'}}OR{{16.CT.'{EscapeQuery(word)}'}}OR{{23.CT.'{EscapeQuery(word)}'}}{IdSearch(word)})"));
+        var assignments = (await QueryAllAsync(settings.AssignmentsTable, AssignmentFields, where, ct, maximumRecords: 200)).Select(ParseAssignment).ToList();
         var billing = await ReadBillingCapabilitiesAsync(ct: ct);
         await ReadBillingDefaultsAsync(billing, assignments.Select(a => a.ProjectId), ct);
         return assignments;
     }
+
+    public async Task<List<ProjectRecord>> FindProjectsAsync(string query, CancellationToken ct = default)
+    {
+        var words = SearchWords(query);
+        // Project names and IDs are known fields. Do not invent a status field or impose a
+        // status restriction which hides cases that are still in intake, proposal or review.
+        var where = string.Join("AND", words.Select(word => $"({{6.CT.'{EscapeQuery(word)}'}}{IdSearch(word)})"));
+        var projects = (await QueryAllAsync(settings.ProjectsTable, [3, 6], where, ct, maximumRecords: 200))
+            .Select(r => new ProjectRecord(RecordId(r, settings.ProjectsTable, 3, "Record ID"), CellString(r, 6))).ToList();
+        if (projects.Any(p => string.IsNullOrWhiteSpace(p.Name))) throw new InvalidDataException("Quickbase returned a project without a name. Correct the project before selecting it.");
+        var billing = await ReadBillingCapabilitiesAsync(ct: ct);
+        await ReadBillingDefaultsAsync(billing, projects.Select(p => p.Id), ct);
+        return projects;
+    }
+
+    private static string[] SearchWords(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query) || query.Length > 150) throw new ArgumentException("Enter a search of 1 to 150 characters.");
+        var words = query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length > 12) throw new ArgumentException("Enter one to twelve search words.");
+        return words;
+    }
+    private static string IdSearch(string word) => int.TryParse(word.TrimStart('#'), NumberStyles.None, CultureInfo.InvariantCulture, out var id) && id > 0 ? $"OR{{3.EX.'{id}'}}" : "";
 
     internal async Task<AssignmentRecord?> ReadAssignmentAsync(int id, CancellationToken ct)
     {
@@ -301,14 +328,15 @@ public sealed partial class TimecardApi : IDisposable
     private static List<string> AssignmentEmployees(JsonElement row) => Cell(row, 73).ValueKind == JsonValueKind.Array
         ? Cell(row, 73).EnumerateArray().Select(u => String(u, "email")).Where(e => e.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(e => e, StringComparer.OrdinalIgnoreCase).ToList() : [];
 
-    internal async Task<List<JsonElement>> QueryAllAsync(string table, int[] fields, string? where, CancellationToken ct)
+    internal async Task<List<JsonElement>> QueryAllAsync(string table, int[] fields, string? where, CancellationToken ct, int maximumRecords = RecordCap)
     {
         var output = new List<JsonElement>();
         var seenIds = new HashSet<int>();
+        var pageSize = Math.Min(PageSize, maximumRecords + 1);
         int? declaredTotal = null;
         while (true)
         {
-            var body = new Dictionary<string, object> { ["from"] = table, ["select"] = fields, ["options"] = new { top = PageSize, skip = output.Count }, ["sortBy"] = new[] { new { fieldId = 3, order = "ASC" } } };
+            var body = new Dictionary<string, object> { ["from"] = table, ["select"] = fields, ["options"] = new { top = pageSize, skip = output.Count }, ["sortBy"] = new[] { new { fieldId = 3, order = "ASC" } } };
             if (where is not null) body["where"] = where;
             using var request = QuickbaseRequest("records/query", body);
             using var response = await SendAsync(request, ct);
@@ -320,7 +348,7 @@ public sealed partial class TimecardApi : IDisposable
             if (root.TryGetProperty("metadata", out var meta) && meta.TryGetProperty("totalRecords", out var total) && total.TryGetInt32(out var totalRecords))
             {
                 if (declaredTotal.HasValue && totalRecords != declaredTotal.Value) throw new InvalidDataException("Quickbase records changed during pagination. Read the day again.");
-                if (totalRecords < 0 || totalRecords > RecordCap) throw new InvalidDataException("Quickbase exceeds the 20,000-record read limit. Narrow the scope before proceeding.");
+                if (totalRecords < 0 || totalRecords > maximumRecords) throw new InvalidDataException(maximumRecords == RecordCap ? "Quickbase exceeds the 20,000-record read limit. Narrow the scope before proceeding." : $"More than {maximumRecords} matches. Add a more specific name or record ID to your search.");
                 declaredTotal = totalRecords;
             }
             foreach (var row in data.EnumerateArray())
@@ -329,14 +357,14 @@ public sealed partial class TimecardApi : IDisposable
                 if (!seenIds.Add(id)) throw FieldError(row, table, 3, "Record ID", "a unique record ID across all pages", output.Count + 1);
                 output.Add(row.Clone());
             }
-            if (output.Count > RecordCap) throw new InvalidDataException("Quickbase exceeded the read safety limit; partial results were discarded.");
+            if (output.Count > maximumRecords) throw new InvalidDataException(maximumRecords == RecordCap ? "Quickbase exceeded the read safety limit; partial results were discarded." : $"More than {maximumRecords} matches. Add a more specific name or record ID to your search.");
             if (declaredTotal.HasValue)
             {
                 if (output.Count == declaredTotal.Value) return output;
                 if (count == 0 || output.Count > declaredTotal.Value) throw new InvalidDataException("Quickbase pagination was inconsistent; partial results were discarded.");
             }
-            else if (count < PageSize) return output;
-            if (output.Count >= RecordCap) throw new InvalidDataException("Quickbase reached the read safety limit without proving completeness.");
+            else if (count < pageSize) return output;
+            if (output.Count >= maximumRecords) throw new InvalidDataException("Quickbase reached the read safety limit without proving completeness. Narrow your search.");
         }
     }
 
@@ -444,9 +472,11 @@ public sealed partial class TimecardApi : IDisposable
     }
     private static string EscapeQuery(string value)
     {
-        if (string.IsNullOrWhiteSpace(value) || value.Any(c => c is '\'' or '{' or '}' or '\\' || char.IsControl(c)))
-            throw new ArgumentException("Search text cannot contain quotes, braces, backslashes, or control characters.");
-        return value;
+        if (string.IsNullOrWhiteSpace(value) || value.Any(c => c is '{' or '}' or '\\' || char.IsControl(c)))
+            throw new ArgumentException("Search text cannot contain braces, backslashes, or control characters.");
+        // Quickbase query literals escape apostrophes with a backslash. Case/client
+        // names such as O'Connor are normal search data, not query syntax.
+        return value.Replace("'", "\\'", StringComparison.Ordinal);
     }
     private static JsonElement Cell(JsonElement row, int id) => row.ValueKind == JsonValueKind.Object && row.TryGetProperty(id.ToString(CultureInfo.InvariantCulture), out var cell) && cell.ValueKind == JsonValueKind.Object && cell.TryGetProperty("value", out var value) ? value : default;
     private static string CellString(JsonElement row, int id) => ValueString(Cell(row, id));

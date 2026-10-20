@@ -103,6 +103,7 @@ public partial class MainWindow : Window
         ReviewGrid.IsEnabled=!_busy;
         SaveExportButton.IsEnabled=!_busy&&_exportPath!=null;
         RowDetailsButton.IsEnabled=!_busy&&_validation is { IsValid:true }&&_validation.Rows.Count>0;
+        RefreshBillingButton.IsEnabled=!_busy&&_session is { Demo:false }&&_validation is { IsValid:true }&&_validation.Rows.Count>0;
         ChangeProposalDatesButton.IsEnabled=!_busy&&_proposal is not null;
         ExportCard.Cursor=!_busy&&_exportPath!=null?Cursors.Hand:Cursors.Arrow;
         ReconcileButton.IsEnabled=ExportReceiptButton.IsEnabled=!_busy&&HistoryGrid.SelectedItem is SubmissionReceipt;
@@ -384,7 +385,7 @@ public partial class MainWindow : Window
             }
             _reviewRows=_validation.Rows.Select(r=>new ReviewRow(r,_session.Reference.Billing?.CanOverride==true,BillingChanged,_session.Reference.Billing)).ToList();
             ReviewGrid.ItemsSource=_reviewRows; ReviewGrid.SelectedIndex=_validation.Rows.Count>0?0:-1; ReviewGrid.Visibility=Visibility.Visible;
-            BillingNotice.Text=_session.Reference.Billing?.CanOverride==true ? "Billing changes keep the same project, assignment and task. Green = billable; dim red = non-billable; gray = default unavailable because Quickbase did not expose the required billing fields." : (_session.Reference.Billing?.Message??"Billing override access has not been confirmed. Read or import again to check permissions.")+" Billing is read-only. Unavailable defaults mean Quickbase did not expose the required billing fields. Clear any requested override before writing.";
+            BillingNotice.Text=_session.Reference.Billing?.CanOverride==true ? "Billing changes keep the same project, assignment and task. Green = billable; dim red = nonbillable; gray = default unavailable. Hover over the billing choice for its reason, or use Refresh billing." : (_session.Reference.Billing?.Message??"Billing override access has not been confirmed. Use Refresh billing to check permissions.")+" Billing is read-only. Hover over an unavailable default for its reason. Clear requested overrides before writing.";
             BillingNotice.Visibility=Visibility.Visible;
             ReviewTitle.Text=_validation.Rows.Count==0?"Everything is already accounted for":$"{_validation.Rows.Count} timecards ready for your review";
             VerifiedBadge.Visibility=Visibility.Visible;
@@ -484,14 +485,18 @@ public partial class MainWindow : Window
         {
             using var api=_session.Demo?null:MakeApi();
             var picker=new AssignmentSearchWindow(this,_session.Reference.Assignments,
-                (query,token)=>api is null?Task.FromResult(AssignmentSearchWindow.Filter(_session.Reference.Assignments,query)):api.FindAssignmentsAsync(query,token),forExport:true);
-            if(picker.ShowDialog()!=true||picker.SelectedAssignment is not AssignmentRecord selected) return;
-            var merged=_session.Reference.Assignments.Where(a=>a.Id!=selected.Id).Append(selected).ToList();
-            var billing=api is null?_session.Reference.Billing:await api.ReadBillingDefaultsAsync(merged.Select(a=>a.ProjectId).Append(_session.Reference.InternalProject!.Id),ct);
-            _session=_session with { SessionId=Guid.NewGuid().ToString("N"),Reference=_session.Reference with { Assignments=merged,Billing=billing } };
+                (query,token)=>api is null?Task.FromResult(AssignmentSearchWindow.Filter(_session.Reference.Assignments,query)):api.FindAssignmentsAsync(query,token),forExport:true,
+                availableProjects:_session.Reference.Projects,searchProjects:(query,token)=>api is null?Task.FromResult(AssignmentSearchWindow.FilterProjects(_session.Reference.Projects,query)):api.FindProjectsAsync(query,token));
+            if(picker.ShowDialog()!=true||(picker.SelectedAssignment is null&&picker.SelectedProject is null)) return;
+            var merged=_session.Reference.Assignments;
+            var projects=_session.Reference.Projects;
+            if(picker.SelectedAssignment is AssignmentRecord selected) merged=merged.Where(a=>a.Id!=selected.Id).Append(selected).ToList();
+            if(picker.SelectedProject is ProjectRecord project) projects=projects.Where(p=>p.Id!=project.Id).Append(project).ToList();
+            var billing=api is null?_session.Reference.Billing:await api.ReadBillingDefaultsAsync(merged.Select(a=>a.ProjectId).Concat(projects.Select(p=>p.Id)).Append(_session.Reference.InternalProject!.Id),ct);
+            _session=_session with { SessionId=Guid.NewGuid().ToString("N"),Reference=_session.Reference with { Assignments=merged,Projects=projects,Billing=billing } };
             _store.SaveSession(_session); PresentSession(_session);
             ShowAssignmentExportReminder();
-            StatusText.Text=$"Assignment #{selected.Id} added. Drag the updated file into Copilot AGAIN and request a NEW proposal.";
+            StatusText.Text=$"{(picker.SelectedProject is not null?$"Project #{picker.SelectedProject.Id}":$"Assignment #{picker.SelectedAssignment!.Id}")} added. Drag the updated file into Copilot AGAIN and request a NEW proposal.";
             return;
         });
     }
@@ -501,10 +506,32 @@ public partial class MainWindow : Window
         ResetReview();
         CopilotRefreshNotice.Visibility=Visibility.Visible;
         ExportTitle.Text="Drag the updated file again";
-        ExportDetail.Text="Drop this file into Copilot again.\nAsk for a new proposal using the added assignment.";
+        ExportDetail.Text="Drop this file into Copilot again.\nAsk for a new proposal using the added assignment or project.";
         ReviewTitle.Text="Waiting for a new Copilot proposal";
         ValidationMessage.Text="Drag the updated file into Copilot again, then bring back its new proposal. The previous proposal cannot be used.";
         WorkScroll.UpdateLayout(); CopilotRefreshNotice.BringIntoView();
+    }
+    private async void RefreshBilling_Click(object sender,RoutedEventArgs e)
+    {
+        if(!RefreshBillingButton.IsEnabled||_session is null) return;
+        AcknowledgeWarnings.IsChecked=false;
+        await RunAsync(async ct=>
+        {
+            using var api=MakeApi();
+            var billing=await api.ReadBillingDefaultsAsync(_session.Reference.Assignments.Select(a=>a.ProjectId).Concat(_session.Reference.Projects.Select(p=>p.Id)).Concat(_reviewRows.Select(r=>r.Row.Project)).Append(_session.Reference.InternalProject!.Id),ct,refresh:true);
+            ApplyBillingSnapshot(billing); _store.SaveSession(_session);
+            StatusText.Text="Billing refreshed. Check the labels and confirm your review again. Hover over an unavailable default for its reason.";
+        });
+    }
+    private void ApplyBillingSnapshot(BillingCapabilities billing)
+    {
+        if(_session is null) return;
+        _session=_session with { Reference=_session.Reference with { Billing=billing } };
+        var selected=ReviewGrid.SelectedIndex;
+        _reviewRows=_reviewRows.Select(r=>new ReviewRow(r.Row,billing.CanOverride,BillingChanged,billing)).ToList();
+        ReviewGrid.ItemsSource=_reviewRows; ReviewGrid.SelectedIndex=selected;
+        BillingNotice.Text=billing.CanOverride?"Billing refreshed. Green = billable; dim red = nonbillable; gray = default unavailable. Hover over a billing choice for details.":billing.Message+" Billing is read-only. Clear requested overrides before writing; hover over an unavailable default for its reason.";
+        AcknowledgeWarnings.IsChecked=false; UpdateEnabled();
     }
     private void Settings_Click(object sender,RoutedEventArgs e)
     {
@@ -783,8 +810,14 @@ public partial class MainWindow : Window
         ApplyDuration(grouped,.5m);
         if(_reviewRows.Single(r=>r.Row.Kind=="work").Hours!=.5m||_durationEdits.Single().OriginalHours!=.33m||_emailEdits!=tableEdits||AcknowledgeWarnings.IsChecked==true)
             throw new InvalidOperationException("A dashboard duration edit did not layer on the table hours or reset approval.");
+        var beforeRefresh=JsonSerializer.Serialize(_reviewRows.Select(r=>r.Row),JsonDefaults.Options);
+        AcknowledgeWarnings.IsChecked=true;
+        ApplyBillingSnapshot(new BillingCapabilities { CanOverride=false,TaskBilling=new() { [60]=false },ProjectTypes=new() { [100]="Client" } });
+        if(AcknowledgeWarnings.IsChecked==true||_reviewRows.Any(r=>r.CanOverride)||!_reviewRows.Any(r=>r.HasUnavailableOverride)||_emailEdits!=tableEdits||_durationEdits.Single().Hours!=.5m
+            ||JsonSerializer.Serialize(_reviewRows.Select(r=>r.Row),JsonDefaults.Options)!=beforeRefresh)
+            throw new InvalidOperationException("Refreshing billing changed reviewed rows, lost edits/overrides or retained approval.");
         // Leave both indicator states visible in the screenshot.
         PresentSession(session); AcceptProposal("",emailProposal:EmailSmoke.Proposal(session));
-        return "PASS: email mappings reach review without Toggl; no automatic fill by default\nPASS: a single final email confirmation is required and resets after changes\nPASS: billing edits keep assignment/task and regroup confirmed minutes; demo writes stay disabled\nPASS: dashboard preserves table duration edits and fill policy through billing regrouping and later hour edits\n";
+        return "PASS: email mappings reach review without Toggl; no automatic fill by default\nPASS: a single final email confirmation is required and resets after changes\nPASS: billing edits keep assignment/task and regroup confirmed minutes; demo writes stay disabled\nPASS: dashboard preserves table duration edits and fill policy through billing regrouping and later hour edits\nPASS: billing refresh preserves local edits and requested overrides, updates permissions and resets approval\n";
     }
 }

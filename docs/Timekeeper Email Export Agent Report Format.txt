@@ -1,6 +1,6 @@
 TIMEKEEPER EMAIL EXPORT AGENT REPORT FORMAT
 CONTEXT FILE 3 - UPLOAD AS AGENT KNOWLEDGE
-Revision: 2026-10-14 | Word is the review file | Timekeeper 0.8.0+
+Revision: 2026-10-20 | Word is the review file | Timekeeper 0.9.0+
 
 OUTPUT SEQUENCE
 First create one detailed Word .docx report for employee review. Ask for one explicit approval after delivery. Only after approval, create the minimal Excel file defined in Import Format. Excel exists solely to drive Timekeeper and contains no review pages, communication ledger, totals or explanatory notes. Do not create a REVIEW.xlsx.
@@ -33,7 +33,7 @@ Number every supported worked matter in the main report. Use prominent names and
 Within each matter show the actual proposed export allocation:
 - Local work date.
 - Underlying positive whole minutes.
-- Matter/project name, assignment hint and task hint; unknown assignment/task may be blank.
+- Matter/project name, assignment hint and task hint; unknown assignment/task may be blank. If direct case/project time is intended, identify that in Word and leave the Excel assignment_hint blank. No management assignment or extra spreadsheet field is required.
 - BILLABLE, NON-BILLABLE or QUICKBASE DEFAULT.
 - Concise action-oriented timecard description.
 - Measured or estimated basis and any material assumptions.
@@ -97,4 +97,4 @@ After delivery, ask one approval question covering work, underlying minutes, bil
 
 On approval, use the existing reconciled allocation to create only the exact Metadata/Timecards workbook. Reopen it when tools permit and check the saved values against Word. Do not reproduce ledgers, review formatting, hours, totals or caveats in Excel. Do not redo whole-mailbox retrieval or regenerate unchanged Word.
 
-Keep delivery chat concise: file, approval/import status, important limitations and next step. Direct the employee to Timekeeper 0.8.0+. Check suggested assignment/task choices, decimal hours and permission-aware billing in Review email activities; guesses remain editable and existing records require manual linking. Hours can be double-clicked for local edits and optional weekday fill recalculates. Choose Review in Timekeeper dashboard, or inspect the submission preview and Submit directly to Quickbase. One final checkbox on the chosen review route confirms hours, mappings, estimates, coverage and duplicate limits. Word approval precedes Excel generation; Excel still uses whole minutes. Neither generation nor import submits automatically.
+Keep delivery chat concise: file, approval/import status, important limitations and next step. Direct the employee to Timekeeper 0.9.0+. Check suggested assignment/task choices, decimal hours and permission-aware billing in Review email activities; guesses remain editable and existing records require manual linking. Use Direct to project in lookup for case time without an assignment, search task dropdowns by name or ID, and try Refresh billing for unavailable defaults. Their tooltips explain remaining limits. Hours can be double-clicked for local edits and optional weekday fill recalculates. Choose Review in Timekeeper dashboard, or inspect the submission preview and Submit directly to Quickbase. One final checkbox on the chosen review route confirms hours, mappings, estimates, coverage and duplicate limits. Word approval precedes Excel generation; Excel still uses whole minutes. Neither generation nor import submits automatically.

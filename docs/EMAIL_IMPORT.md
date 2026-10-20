@@ -1,6 +1,6 @@
-﻿# Email-based timecards
+# Email-based timecards
 
-Timekeeper uses **Word for review, then a small Excel file for import**. The agent prepares the Word report first. Once you approve it, the agent exports only the data Timekeeper needs. Version 0.8.0 adds decimal hours, protected edits, billing and per-import weekday fill to the matching table, with a final preview for direct submission. Excel has no review pages, totals, communication ledger or formulas.
+Timekeeper uses **Word for review, then a small Excel file for import**. The agent prepares the Word report first. Once you approve it, the agent exports only the data Timekeeper needs. Version 0.9.0 adds direct project timecards, task search and billing refresh to the matching table, alongside decimal hours, protected edits, weekday fill and direct submission. Excel has no review pages, totals, communication ledger or formulas.
 
 ## Set up the shared agent
 
@@ -10,7 +10,7 @@ Replace the old REVIEW workbook in the agent's knowledge with [Timekeeper Email 
 
 The agent needs authorized access to the employee's email and any additional sources used, plus document and workbook generation. Test using a team member's own account. Shared access does not grant access to the owner's mailbox, and these files do not install a Quickbase connector. Never put API tokens or employee mailbox exports into shared knowledge.
 
-Update the app to **0.8.0 or later** for the workflow below. The minimal workbook format is unchanged from 0.7.0. Quickbase setup is required for matching and submission. Toggl is optional; email-only employees leave its token blank in Settings.
+Update the app to **0.9.0 or later** for the workflow below. The minimal workbook format is unchanged from 0.7.0. Quickbase setup is required for matching and submission. Toggl is optional; email-only employees leave its token blank in Settings.
 
 ## Prepare and import a day
 
@@ -18,7 +18,7 @@ Update the app to **0.8.0 or later** for the workflow below. The minimal workboo
 2. Review its Word report. It includes worked matters, underlying minutes, billing, evidence context, estimates, coverage gaps, communication accounting and projected totals. Email timestamps alone do not establish duration.
 3. Request corrections if needed, then approve the work, minutes, billing, account, dates and disclosed limitations once. The agent creates the minimal Excel from that approved allocation. It reuses the analysis instead of repeating the entire mailbox search.
 4. Choose **Import email Excel** or drag the downloaded workbook into its drop area. For multiple dates, choose the dates to include.
-5. In **Review email activities**, check the assignment and task dropdowns. They start with the best plausible guesses from available Quickbase choices. Guesses are editable, not verified matches; unmatched fields remain **Choose**. Use **Find assignment** when needed. Hints in Excel are names, not authoritative record IDs. Hours display as decimals: **0.25 h = 15 minutes**. Double-click an hours box or press F2 to edit. Billing is editable only with the required Quickbase permission.
+5. In **Review email activities**, check the assignment and task dropdowns. They start with the best plausible guesses from available Quickbase choices. Guesses are editable, not verified matches; unmatched fields remain **Choose**. Use **Find assignment** when needed. Search includes accessible assignments across employees and statuses such as Active, Case Intake, Proposal and Review. Use **Direct to project** in that window for case work without an assignment. Type a name or ID in the task dropdown to filter its options. Hints in Excel are names, not authoritative record IDs. Hours display as decimals: **0.25 h = 15 minutes**. Double-click an hours box or press F2 to edit. Billing is editable only with the required Quickbase permission.
 6. For work already entered, manually select its actual record under **Quickbase record**. Existing records are never linked automatically. Choose **Fill weekdays to** and a target if wanted; **Add Timecards** is a separate option. These settings apply only to this import. Open **Show submission preview** to inspect exact grouped rows, additions, totals and warnings; **Back to activity table** returns to editing.
 7. Choose **Review in Timekeeper dashboard** to use its final review and **Write to Quickbase**, or confirm the single checkbox in the table's submission preview and choose **Submit directly to Quickbase**. All changes clear that confirmation. Both routes use live permission/duplicate checks and save a receipt in **Submission history**. **Cancel** closes without submitting.
 
@@ -30,7 +30,7 @@ Excel contains approved positive whole minutes before app rounding. In **Setting
 
 Automatic Timecards and weekday fill are off for email imports by default. Set persistent preferences with **Apply my Timecards and weekday fill settings to email imports**, or adjust the options in the activity table for this import only. Weekday fill counts existing Quickbase time and recalculates after table edits. Work above the target and the full configured Timecards addition are retained; weekends receive no automatic additions. Word shows policy additions separately, and Excel excludes filler. Actual supported internal work is imported normally.
 
-The Billing dropdown appears only when Quickbase confirms Modify access to Billable Override. Other accounts see read-only billing. Defaults show **Billable - Default** or **Nonbillable - Default** when the rule and required source values can be read. Otherwise **Default unavailable** avoids guessing. Green means billable, dim red means nonbillable, and gray means unknown. Explicit non-billable case work keeps its case, assignment and task. An override without permission must be cleared deliberately or its permission issue resolved before submission.
+The Billing dropdown appears only when Quickbase confirms Modify access to Billable Override. Other accounts see read-only billing. Defaults show **Billable - Default** or **Nonbillable - Default** when the rule and required source values can be read. If **Default unavailable** appears, hover over the status for its reason and choose **Refresh billing**. This retries the live metadata and input reads; a recognized rule may resolve from one conclusive input. Required hidden inputs or unsupported formulas stay unknown, without inference from historical timecards. Green means billable, dim red means nonbillable, and gray means unknown. Explicit non-billable case work keeps its case, assignment and task. An override without permission must be cleared deliberately or its permission issue resolved before submission.
 
 Double-click Hours, or focus the box and press F2, for a duration change. In the activity table, edited decimal hours are used exactly while unedited activities are grouped and rounded as configured. **Use imported** restores the original duration. Table edits survive mapping/billing changes and recalculate weekday fill. Later edits to final dashboard rows change only that row and leave Misc internal unchanged. Check the total and confirm again. Receipts retain local corrections and original/submitted hours; Excel remains unchanged.
 
@@ -56,7 +56,7 @@ date,minutes,matter_hint,assignment_hint,task_hint,description,billable
 - **date:** Local work date, preferably YYYY-MM-DD text.
 - **minutes:** Approved positive whole minutes, before app rounding.
 - **matter_hint:** Required matter/project/internal name.
-- **assignment_hint** and **task_hint:** Descriptive matching hints; may be blank.
+- **assignment_hint** and **task_hint:** Descriptive matching hints; may be blank. For direct case/project work, leave assignment_hint blank and select the case with **Direct to project** in Timekeeper. Do not add columns or fabricate a management assignment.
 - **description:** Required concise account of the employee's work.
 - **billable:** true, false, or blank for deliberate Quickbase default. Blank does not mean nonbillable.
 
@@ -84,7 +84,8 @@ The app still accepts legacy **timekeeper_email_review** workbooks and rich **ti
 
 - **Unapproved workbook:** Review and approve Word, then have the agent regenerate Excel with the actual approval recorded. Do not change the template's false flag just to import sample data.
 - **Invalid format or date:** Correct the named field or cell using the exact two-sheet contract. Use ISO dates when text is ambiguous.
-- **Uncertain work or assignment:** Correct the work or duration with the agent; use live lookup for Quickbase relationships.
+- **Uncertain work or assignment:** Correct the work or duration with the agent; use live lookup for Quickbase relationships. Choose **Direct to project** if the work belongs on the case without an assignment.
+- **Default unavailable:** Hover over the billing label and try **Refresh billing**. If the reason identifies required hidden fields or an unsupported formula, have your Quickbase administrator check them. The app cannot invent a billing result or grant override permission.
 - **Incomplete coverage:** Obtain missing evidence or explicitly approve the documented subset. A relevance-ranked search does not prove complete mailbox coverage.
 - **Partial or unknown submission:** Keep the receipt and use **Check selected result** before trying again. Some rows may already exist.
 - **Deleted timecards:** Use **Recover deleted entries**, then import/read fresh data and review again. Renaming the workbook does not replace recovery.

@@ -72,7 +72,7 @@ public static class Rules
         if (session.Days.Count == 0) errors.Add("The source session contains no dates. Read the data again.");
         if (session.Days.Count > 31 || proposal.Rows.Count > MaxItems || proposal.AlreadyRecorded.Count > MaxItems)
             errors.Add("The session or proposal exceeds the supported size.");
-        if (session.Reference.Tasks is null || session.Reference.Categories is null || session.Reference.Assignments is null)
+        if (session.Reference.Tasks is null || session.Reference.Categories is null || session.Reference.Assignments is null || session.Reference.Projects is null)
             errors.Add("The reference data is incomplete.");
         if (errors.Count > 0) return result;
 
@@ -84,6 +84,9 @@ public static class Rules
         var tasks = new Dictionary<int, TaskRecord>();
         var categories = new Dictionary<int, CategoryRecord>();
         var assignments = new Dictionary<int, AssignmentRecord>();
+        var projects = new Dictionary<int, ProjectRecord>();
+        foreach (var item in reference.Projects!)
+            if (item is null || item.Id <= 0 || string.IsNullOrWhiteSpace(item.Name) || !projects.TryAdd(item.Id, item)) errors.Add("Project reference data contains a missing, invalid or duplicate project.");
         foreach (var item in reference.Tasks!)
             if (item is null || item.Id <= 0 || item.CategoryId <= 0 || string.IsNullOrWhiteSpace(item.Name) || !tasks.TryAdd(item.Id, item)) errors.Add("Task reference data contains a missing, invalid or duplicate task.");
         foreach (var item in reference.Categories!)
@@ -157,8 +160,8 @@ public static class Rules
                         warnings.Add($"Assignment {assignment.Id} “{assignment.Name}” does not list {session.Settings.Email}. Confirm this assignment is appropriate for you.");
                 }
             }
-            else if (row.Project != reference.InternalProject!.Id)
-                errors.Add($"Project {row.Project} requires an assignment. Only the configured internal project may omit it.");
+            else if (row.Project != reference.InternalProject!.Id && !projects.ContainsKey(row.Project))
+                errors.Add($"Project {row.Project} is not in the trusted project choices. Find and select the project in Timekeeper before applying time directly to it.");
             long seconds = 0;
             foreach (var id in row.SourceEntryIds)
             {
@@ -190,8 +193,8 @@ public static class Rules
             var verified = new VerifiedRow
             {
                 Date = row.Date, Hours = Hours(group.Seconds), Project = row.Project,
-                ProjectName = assignment?.ProjectName ?? reference.InternalProject!.Name,
-                Assignment = row.Assignment, AssignmentName = assignment?.Name ?? "Internal",
+                ProjectName = assignment?.ProjectName ?? (row.Project == reference.InternalProject!.Id ? reference.InternalProject.Name : projects[row.Project].Name),
+                Assignment = row.Assignment, AssignmentName = assignment?.Name ?? (row.Project == reference.InternalProject!.Id ? "Internal" : "Direct to project"),
                 Task = row.Task, TaskName = task.Name, Category = task.CategoryId,
                 CategoryName = categories[task.CategoryId].Name, Description = description,
                 SourceEntryIds = group.Ids.Order().ToList(), Kind = "work", BillableOverride = row.BillableOverride

@@ -208,6 +208,28 @@ Test("Unknown project assignment task and category relationships are rejected", 
     foreach (var changed in new[] { row with { Project = 101 }, row with { Assignment = null }, row with { Assignment = 9999 }, row with { Task = 9999 }, row with { Category = 11 } })
         True(!EmailRules.Validate(session, proposal with { Rows = [changed] }).IsValid);
 });
+Test("Direct email project time groups separately from assignment work and retains local corrections", () =>
+{
+    var session = Session(5, 5); session = session with { Reference = session.Reference with { Projects = [new(100, "Example case")] } };
+    var proposal = Proposal(session); proposal = proposal with { Rows = [proposal.Rows[0] with { Assignment = null }, proposal.Rows[1]] };
+    var result = EmailRules.Validate(session, proposal, emailEdits: new() { ActivityHours = [new("a0", 5, .25m)] }); Valid(result);
+    Equal(result.Rows.Count, 2); var direct = result.Rows.Single(r => r.Assignment is null);
+    Equal(direct.ProjectName, "Example case"); Equal(direct.AssignmentName, "Direct to project"); Equal(direct.Hours, .25m);
+    Equal(direct.SourceActivityIds.Single(), "a0"); True(direct.EmailEvidenceKeys.Count == 1);
+    Reject(EmailRules.Validate(session with { Reference = session.Reference with { Projects = [] } }, proposal), "trusted project choices");
+    Reject(EmailRules.Validate(session, proposal with { Rows = [proposal.Rows[0], proposal.Rows[0]] }), "more than once");
+});
+Test("Email direct project suggestions require a unique trusted exact match", () =>
+{
+    var session = Session(); var activity = session.EmailWorkbook!.Activities[0] with { MatterHint = "Case intake example", TaskHint = "Internal work" };
+    session = session with { Reference = session.Reference with { Assignments = [], Projects = [new(777, "Case intake example")] } };
+    var suggestion = EmailSuggestions.Suggest(activity, session); Equal(suggestion.ProjectId, 777); Equal(suggestion.AssignmentId, null); True(!suggestion.Internal);
+    Equal(EmailSuggestions.Suggest(activity with { MatterHint = "Different" }, session).ProjectId, null);
+    Equal(EmailSuggestions.Suggest(activity, session with { Reference = session.Reference with { Projects = [new(777, "Case intake example"), new(778, "Case intake example")] } }).ProjectId, null);
+    var invalid = session with { Reference = session.Reference with { Projects = [new(777, "Case intake example"), new(777, "Case intake example")] } };
+    Equal(EmailSuggestions.Suggest(activity, invalid).ProjectId, null);
+    True(!EmailRules.Validate(invalid, Proposal(invalid)).IsValid);
+});
 Test("Selected dates narrow coverage without discarding original workbook", () =>
 {
     var session = Session(5, 5); var day = session.Days[0].Date;

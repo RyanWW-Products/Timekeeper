@@ -146,9 +146,30 @@ Test("Assignment must belong to supplied project", () =>
 {
     var session = Session(); var proposal = Proposal(session); Reject(Rules.Validate(session, proposal with { Rows = [proposal.Rows[0] with { Project = 101 }] }), "does not belong");
 });
-Test("Only internal project can omit assignment", () =>
+Test("Untrusted project cannot omit assignment", () =>
 {
-    var session = Session(); var proposal = Proposal(session); Reject(Rules.Validate(session, proposal with { Rows = [proposal.Rows[0] with { Assignment = null }] }), "requires an assignment");
+    var session = Session(); var proposal = Proposal(session); Reject(Rules.Validate(session, proposal with { Rows = [proposal.Rows[0] with { Assignment = null }] }), "trusted project choices");
+});
+Test("Trusted direct project preserves source coverage hours task and internal additions", () =>
+{
+    var session = Session(); session = session with { Reference = session.Reference with { Projects = [new(100, "Case without assignment")] } };
+    var proposal = Proposal(session); proposal = proposal with { Rows = [proposal.Rows[0] with { Assignment = null }] };
+    var result = Rules.Validate(session, proposal); Valid(result);
+    var work = result.Rows.Single(r => r.Kind == "work");
+    Equal(work.ProjectName, "Case without assignment"); Equal(work.AssignmentName, "Direct to project"); Equal(work.Assignment, null);
+    Equal(work.Hours, 7m); Equal(work.SourceEntryIds.Single(), 1001L); Equal(result.Rows.Sum(r => r.Hours), 8m);
+    True(result.Rows.Where(r => r.Kind != "work").All(r => r.Project == 900), "Automatic additions must stay internal.");
+    var roundTrip = JsonSerializer.Deserialize<ReadSession>(JsonSerializer.Serialize(session, JsonDefaults.Options), JsonDefaults.Options)!;
+    Valid(Rules.Validate(roundTrip, ProposalExchange.Parse(Json(proposal))));
+    True(ProposalExchange.Export(session).Contains("reference.projects"), "Export must describe direct project choices.");
+    Reject(Rules.Validate(session, proposal with { Rows = [proposal.Rows[0] with { Category = 11 }] }), "does not belong");
+    Reject(Rules.Validate(session, proposal with { Rows = [] }), "missing");
+});
+Test("Invalid duplicate and null trusted project lists are rejected", () =>
+{
+    var session = Session();
+    foreach (var projects in new List<ProjectRecord>[] { null!, [new(0, "Bad")], [new(100, " ")], [new(100, "Case"), new(100, "Case")], [null!] })
+        True(!Check(session with { Reference = session.Reference with { Projects = projects } }).IsValid, "Malformed project references must fail.");
 });
 Test("Imported hours are never trusted", () =>
 {

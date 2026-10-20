@@ -1,9 +1,9 @@
 TIMEKEEPER EMAIL EXPORT AGENT - SETUP GUIDE
 OWNER REFERENCE ONLY - DO NOT PASTE OR UPLOAD THIS FILE AS AGENT INSTRUCTIONS/KNOWLEDGE
-Revision: 2026-10-14 | Word-first workflow | Requires Timekeeper 0.8.0+
+Revision: 2026-10-20 | Word-first workflow | Requires Timekeeper 0.9.0+
 
 REPLACE THE AGENT PACKAGE
-1. Update Timekeeper to version 0.8.0 or later for decimal hours, protected edits, billing, per-import fill and direct submission from the matching table. The minimal timekeeper_email_import workbook schema is unchanged from 0.7.0; earlier releases cannot read it.
+1. Update Timekeeper to version 0.9.0 or later for project-only timecards, searchable task dropdowns, expanded lookup and retryable billing defaults, alongside decimal hours, per-import fill and direct submission. The minimal timekeeper_email_import workbook schema is unchanged from 0.7.0; earlier releases cannot read it.
 
 2. Replace the shared agent's Instructions field with "Timekeeper Email Export Agent Instructions.txt." That is the actual instruction file, kept below 8,000 characters. Do not paste this Setup guide there.
 
@@ -24,6 +24,7 @@ NEW DAILY WORKFLOW
 - The agent creates a small Excel file from the approved allocation. It does not repeat mailbox retrieval or regenerate unchanged Word.
 - Excel contains only Metadata and Timecards: four metadata values and seven columns of work data. No review sheets, totals, hours formulas, ledgers, evidence IDs or generated timestamps.
 - The employee imports into Timekeeper and checks a matching table with assignment/task dropdowns prefilled with best plausible guesses. Guesses are editable, not verified matches; unmatched fields remain Choose. Existing timecards are never linked automatically.
+- Find assignment searches across employees and statuses, including Active, Case Intake, Proposal and Review. Direct to project selects the case itself when no assignment is needed. Task dropdowns search by name or ID. Existing Quickbase account permissions still apply.
 - The employee can double-click decimal hours to edit, adjust permitted billing, and set optional weekday fill and Timecards additions. The table shows 0.25 h for 15 minutes; Excel still contains whole minutes.
 - Choose Review in Timekeeper dashboard, or open the submission preview and Submit directly to Quickbase. The chosen route requires one final checkbox covering hours, mappings, estimates, coverage and duplicate limits. Both routes retain live checks and receipts. Word approval before Excel generation remains required.
 
@@ -33,7 +34,7 @@ The new template contains fictional examples, not anyone's work. It intentionall
 Real message IDs are no longer a prerequisite for this minimal format. Missing evidence must still be disclosed, and IDs must never be invented. Local row fingerprints provide limited duplicate protection; changed descriptions/hints, regrouped exports and other import formats may not match. Employees must check existing Quickbase time and receipts.
 
 BILLING AND TIME POLICY
-Explicit non-billable case work keeps its case/assignment/task. Billing overrides require the employee's actual Quickbase permission; a new export schema does not grant it. If the default rule's inputs are hidden, Timekeeper may display Default unavailable.
+Explicit non-billable case work keeps its case/assignment/task. Billing overrides require the employee's actual Quickbase permission; a new export schema does not grant it. If a default is unavailable, hover over its label for the reason and choose Refresh billing. The app retries metadata and source reads without inferring from historical timecards. Truly required hidden inputs or unsupported formulas remain unknown.
 
 Whole minutes in Excel represent approved work before app rounding. Default email rounding is 5 minutes; select 15 minutes for quarter-hour output or no additional rounding for exact confirmed minutes. Automatic Timecards and weekday fill are off for email imports by default. Set persistent defaults with "Apply my Timecards and weekday fill settings to email imports", or use the activity-table controls for one import. Local activity-hour edits are exact and recalculate fill; unedited activities keep grouped rounding. Use imported restores the original duration. Later final-row edits in the dashboard leave other rows and filler unchanged. Word previews those additions separately; Excel excludes filler so the app does not add it twice.
 
@@ -44,7 +45,7 @@ Use a known day and verify:
 1. Word is delivered first; no Excel is generated before approval.
 2. Every supported worked matter and every retrieved non-spam communication has a place in Word. Estimates, coverage gaps and untimed items are clear.
 3. Word exposes the exact underlying minutes, billing, hints and descriptions that will be exported. Time over eight hours is preserved.
-4. One explicit approval leads to a real Excel download with exactly Metadata/Timecards, four keys and seven columns. No redundant review content or made-up IDs.
+4. One explicit approval leads to a real Excel download with exactly Metadata/Timecards, four keys and seven columns. No redundant review content or made-up IDs. Direct-project work uses its normal matter_hint and a blank assignment_hint, with no extra columns.
 5. The app imports the approved file, checks identity and dates, and opens the matching table. Assignment/task guesses are editable; unmatched fields remain Choose, and existing records require manual selection. There is no opening acknowledgement or personal-confirmation checkbox during mapping. Check decimal hours, double-click edits, permission-aware billing and optional weekday fill. Confirm exact rows and warnings in the submission preview for direct submission, or choose dashboard review. A single final checkbox on the chosen route confirms hours, mappings, estimates, coverage and duplicate limits. Import alone writes nothing.
 6. Corrections affect the revised approved allocation, while unchanged data stays stable. A partial receipt is reconciled before another write.
 

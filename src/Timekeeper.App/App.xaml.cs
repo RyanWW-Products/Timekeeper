@@ -65,12 +65,20 @@ public partial class App : Application
                     "fail"=>Task.FromException<List<AssignmentRecord>>(new InvalidOperationException("Sample search error. Please retry.")),
                     "broad"=>Task.FromResult(Enumerable.Range(1,201).Select(id=>lookupSamples[0] with { Id=id }).ToList()),
                     _=>Task.FromResult(lookupSamples)
-                },forExport:true,smoke:true);
+                },forExport:true,smoke:true,availableProjects:[new(100,"Example Client / Spring launch"),new(104,"Sample case without an assignment")],searchProjects:(query,_)=>query switch
+                {
+                    "missing"=>Task.FromResult(new List<ProjectRecord>()),
+                    "fail"=>Task.FromException<List<ProjectRecord>>(new InvalidOperationException("Sample project search error. Please retry.")),
+                    "broad"=>Task.FromResult(Enumerable.Range(1,201).Select(id=>new ProjectRecord(id,"Sample project")).ToList()),
+                    _=>Task.FromResult(new List<ProjectRecord> { new(100,"Example Client / Spring launch"),new(104,"Sample case without an assignment") })
+                });
                 // The synthetic search completes synchronously and never contacts Quickbase.
                 File.AppendAllText(report,lookup.SmokeSearchAsync().GetAwaiter().GetResult());
                 RenderWindow(lookup,Path.Combine(output,"timekeeper-assignment-search.png"),1060,690);
                 Appearance.Apply(new("Dark","Theme color",120,"Compact"));
-                RenderWindow(lookup,Path.Combine(output,"theme-dark-assignment-search-120.png"),760,580);
+                RenderWindow(lookup,Path.Combine(output,"theme-dark-assignment-search-120.png"),760,640);
+                File.AppendAllText(report,lookup.SmokeProjectSearchAsync().GetAwaiter().GetResult());
+                RenderWindow(lookup,Path.Combine(output,"theme-dark-project-search-120.png"),760,640);
                 Appearance.Apply(new()); lookup.Close();
                 var refreshedExport=new MainWindow(new SessionStore(Path.Combine(output,"assignment-reminder-data")),true);
                 refreshedExport.ShowAssignmentExportReminder();
@@ -126,6 +134,12 @@ public partial class App : Application
                 RenderWindow(emailWindow,Path.Combine(output,"timekeeper-email-mapping.png"),(int)emailWindow.Width,(int)emailWindow.Height);
                 File.AppendAllText(report,emailWindow.SmokeRenderedSummary());
                 File.AppendAllText(report,emailWindow.SmokeEditingSummary());
+                File.AppendAllText(report,emailWindow.SmokeProjectMapping());
+                var taskPreview=new Window { Content=emailWindow.TaskSearchPreviewForSmoke("Design"),Background=(System.Windows.Media.Brush)FindResource("Surface") };
+                RenderWindow(taskPreview,Path.Combine(output,"timekeeper-task-search.png"),380,360); taskPreview.Close();
+                Appearance.Apply(new("Dark","Theme color",120,"Compact"));
+                taskPreview=new Window { Content=emailWindow.TaskSearchPreviewForSmoke("missing"),Background=(System.Windows.Media.Brush)FindResource("Surface") };
+                RenderWindow(taskPreview,Path.Combine(output,"theme-dark-task-search-empty-120.png"),440,240); taskPreview.Close(); Appearance.Apply(new());
                 var emailReview=new MainWindow(new SessionStore(Path.Combine(output,"email-review-data")),true);
                 File.AppendAllText(report,emailReview.SmokeEmailReview(emailSession,emailWindow.Proposal));
                 ((ScrollViewer)emailReview.FindName("WorkScroll")).ScrollToEnd();

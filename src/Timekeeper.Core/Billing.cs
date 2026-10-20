@@ -15,15 +15,39 @@ public sealed record BillingCapabilities
     public int? TaskBillableFieldId { get; init; }
     public Dictionary<int, string> ProjectTypes { get; init; } = [];
     public Dictionary<int, bool> TaskBilling { get; init; } = [];
-    public bool? DefaultFor(int project, int task) => ProjectTypes.TryGetValue(project, out var type)
-        ? type.Equals("Internal", StringComparison.OrdinalIgnoreCase) ? false : TaskBilling.TryGetValue(task, out var billable) ? billable : null
-        : null;
+    public string DefaultRuleMessage { get; init; } = "";
+    public string ProjectDefaultsMessage { get; set; } = "";
+    public string TaskDefaultsMessage { get; set; } = "";
+    public bool? DefaultFor(int project, int task)
+    {
+        // Either false branch is conclusive even when the other input is unavailable.
+        // A billable task still needs a readable, non-internal project type.
+        if (TaskBilling.TryGetValue(task, out var billable) && !billable) return false;
+        return ProjectTypes.TryGetValue(project, out var type)
+            ? type.Equals("Internal", StringComparison.OrdinalIgnoreCase) ? false : TaskBilling.TryGetValue(task, out billable) ? billable : null
+            : null;
+    }
+    public string DefaultUnavailableReason(int project, int task)
+    {
+        if (DefaultFor(project, task).HasValue) return "";
+        if (project <= 0 || task <= 0) return "Select a case or project and a task to check its Quickbase billing default.";
+        if (DefaultRuleMessage.Length > 0) return DefaultRuleMessage;
+        var reasons = new List<string>();
+        if (!ProjectTypes.ContainsKey(project)) reasons.Add(ProjectTypeFieldId is null
+            ? "Quickbase did not expose the Project Type relationship needed for this default."
+            : ProjectDefaultsMessage.Length > 0 ? ProjectDefaultsMessage : "Quickbase did not return a readable Project Type for this case or project.");
+        if (!TaskBilling.ContainsKey(task)) reasons.Add(TaskBillableFieldId is null
+            ? "Quickbase did not expose the Bill Task relationship needed for this default."
+            : TaskDefaultsMessage.Length > 0 ? TaskDefaultsMessage : "Quickbase did not return a readable billing value for this task.");
+        return string.Join(" ", reasons) + " Refresh billing to retry. Quickbase will still apply its own default when submitted.";
+    }
     public string Message { get; init; } = "Quickbase billing permissions have not been checked.";
 }
 
 public sealed partial class TimecardApi
 {
     private BillingCapabilities? billingCapabilities;
+    private BillingCapabilities? loadedTaskDefaults;
 
     public async Task<BillingCapabilities> ReadBillingCapabilitiesAsync(bool refresh = false, CancellationToken ct = default)
     {
@@ -41,7 +65,12 @@ public sealed partial class TimecardApi
         catch (Exception ex) when (ex is HttpRequestException or InvalidDataException or JsonException)
         {
             // Billing is optional. Ordinary timecards retain Quickbase's default when metadata is unavailable.
-            return billingCapabilities = new() { Message = "Quickbase billing permissions could not be confirmed. Keep Quickbase default, or check your connection and field permissions before choosing an override." };
+            // A transient failure must not become the cached answer for this API instance.
+            billingCapabilities = null;
+            return new() {
+                Message = "Quickbase billing permissions could not be confirmed. Keep Quickbase default, or check your connection and field permissions before choosing an override.",
+                DefaultRuleMessage = "Quickbase billing metadata could not be read. Refresh billing to retry, then check your connection and field permissions if it remains unavailable."
+            };
         }
     }
 
@@ -117,49 +146,103 @@ public sealed partial class TimecardApi
 
     private static BillingCapabilities DefaultBillingMetadata(JsonElement root, JsonElement[] results)
     {
-        // Resolve this known rule only when the live formula and both relationship lookups match.
+        // Resolve this known rule only when the live formula matches. Read each
+        // input only through its verified relationship lookup.
         // Unknown/custom formulas must not produce a guessed Billable label.
         const string expected = "If([Billable Override]=\"\",If([Project Type]=\"Internal\",false,[Bill Task]=true,true,false), [Billable Override]=\"NonBillable\",false,[Billable Override]=\"Billable\",true)";
         if (results.Length != 1 || String(results[0], "fieldType") != "checkbox" || String(results[0], "mode") != "formula" || !results[0].TryGetProperty("properties", out var props) || props.ValueKind != JsonValueKind.Object
-            || !string.Equals(System.Text.RegularExpressions.Regex.Replace(String(props, "formula"), @"\s+", ""),
-                System.Text.RegularExpressions.Regex.Replace(expected, @"\s+", ""), StringComparison.OrdinalIgnoreCase)) return new();
+            || !string.Equals(NormalizeBillingFormula(String(props, "formula")), NormalizeBillingFormula(expected), StringComparison.Ordinal))
+            return new() { DefaultRuleMessage = "Quickbase did not expose a supported Bill This Task formula. Refresh billing to retry. If it remains unavailable, an administrator must check the formula and field visibility; Timekeeper will not guess its result." };
         int? Lookup(string label, int reference, string type)
         {
-            var matches = root.EnumerateArray().Where(f => String(f, "label") == label && String(f, "mode") == "lookup" && String(f, "fieldType") == type).ToArray();
-            if (matches.Length != 1 || !matches[0].TryGetProperty("properties", out var p)
-                || !p.TryGetProperty("lookupReferenceFieldId", out var r) || !r.TryGetInt32(out var id) || id != reference
-                || !p.TryGetProperty("lookupTargetFieldId", out var target) || !target.TryGetInt32(out var targetId) || targetId <= 3) return null;
+            var matches = root.EnumerateArray().Where(f => String(f, "label").Equals(label, StringComparison.OrdinalIgnoreCase) && String(f, "mode") == "lookup" && String(f, "fieldType") == type).ToArray();
+            if (matches.Length != 1 || !matches[0].TryGetProperty("properties", out var p) || p.ValueKind != JsonValueKind.Object
+                || !p.TryGetProperty("lookupReferenceFieldId", out var r) || !TryRecordId(r, out var id) || id != reference
+                || !p.TryGetProperty("lookupTargetFieldId", out var target) || !TryRecordId(target, out var targetId) || targetId <= 3) return null;
             return targetId;
         }
         return new() { ProjectTypeFieldId = Lookup("Project Type", 11, "text"), TaskBillableFieldId = Lookup("Bill Task", 16, "checkbox") };
     }
 
-    public async Task<BillingCapabilities> ReadBillingDefaultsAsync(IEnumerable<int> projects, CancellationToken ct = default)
+    private static string NormalizeBillingFormula(string formula)
     {
-        var billing = await ReadBillingCapabilitiesAsync(ct: ct);
+        // Ignore formatting outside literal values/field names only. Removing spaces
+        // inside "Internal" or [Project Type] could incorrectly recognize a different rule.
+        var result = new System.Text.StringBuilder(formula.Length);
+        bool quoted = false, field = false, escaped = false;
+        foreach (var character in formula)
+        {
+            if (quoted)
+            {
+                result.Append(character);
+                if (!escaped && character == '"') quoted = false;
+                escaped = !escaped && character == '\\';
+            }
+            else if (character == '"') { quoted = true; result.Append(character); }
+            else if (character == '[') { field = true; result.Append(character); }
+            else if (character == ']') { field = false; result.Append(character); }
+            else if (field || !char.IsWhiteSpace(character)) result.Append(char.ToLowerInvariant(character));
+        }
+        return result.ToString();
+    }
+
+    public async Task<BillingCapabilities> ReadBillingDefaultsAsync(IEnumerable<int> projects, CancellationToken ct = default, bool refresh = false)
+    {
+        var billing = await ReadBillingCapabilitiesAsync(refresh: refresh, ct: ct);
         await ReadBillingDefaultsAsync(billing, projects, ct);
         return billing;
     }
 
     private async Task ReadBillingDefaultsAsync(BillingCapabilities billing, IEnumerable<int> projects, CancellationToken ct)
     {
-        if (billing.ProjectTypeFieldId is not int projectField || billing.TaskBillableFieldId is not int taskField) return;
-        try
+        if (billing.TaskBillableFieldId is int taskField && !ReferenceEquals(loadedTaskDefaults, billing))
         {
-            if (billing.TaskBilling.Count == 0)
-                foreach (var row in await QueryAllAsync(settings.TasksTable, [3, taskField], null, ct))
-                    if (TryRecordId(Cell(row, 3), out var id) && BillingValue(Cell(row, taskField)) is bool value) billing.TaskBilling[id] = value;
-            foreach (var batch in projects.Distinct().Where(id => !billing.ProjectTypes.ContainsKey(id)).Chunk(100))
+            try
             {
-                var where = string.Join("OR", batch.Select(id => $"{{3.EX.'{id.ToString(CultureInfo.InvariantCulture)}'}}"));
-                foreach (var row in await QueryAllAsync(settings.ProjectsTable, [3, projectField], where, ct))
-                    if (TryRecordId(Cell(row, 3), out var id) && Cell(row, projectField).ValueKind == JsonValueKind.String)
-                        billing.ProjectTypes[id] = CellString(row, projectField);
+                var taskRows = await QueryAllAsync(settings.TasksTable, [3, taskField], null, ct);
+                var values = new Dictionary<int, bool>();
+                var seen = new HashSet<int>();
+                foreach (var row in taskRows)
+                {
+                    if (!TryRecordId(Cell(row, 3), out var id) || id <= 0 || !seen.Add(id))
+                        throw new InvalidDataException("Quickbase returned invalid task billing records.");
+                    if (BillingValue(Cell(row, taskField)) is bool value) values.Add(id, value);
+                }
+                billing.TaskBilling.Clear();
+                foreach (var value in values) billing.TaskBilling.Add(value.Key, value.Value);
+                billing.TaskDefaultsMessage = "";
+                // Partial readable results are useful, but must be retried rather than
+                // treating the first successful task as a complete cache forever.
+                if (values.Count == taskRows.Count) loadedTaskDefaults = billing;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or InvalidDataException or JsonException)
+            {
+                billing.TaskDefaultsMessage = "Quickbase task billing values could not be read. Check the connection and access to the Tasks billing field.";
             }
         }
-        catch (Exception ex) when (ex is HttpRequestException or InvalidDataException or JsonException)
+        if (billing.ProjectTypeFieldId is int projectField)
         {
-            // Unreadable defaults remain explicitly unknown; ordinary timecards can still be reviewed.
+            foreach (var batch in projects.Distinct().Where(id => !billing.ProjectTypes.ContainsKey(id)).Chunk(100))
+            {
+                try
+                {
+                    var where = string.Join("OR", batch.Select(id => $"{{3.EX.'{id.ToString(CultureInfo.InvariantCulture)}'}}"));
+                    var values = new Dictionary<int, string>();
+                    var seen = new HashSet<int>();
+                    foreach (var row in await QueryAllAsync(settings.ProjectsTable, [3, projectField], where, ct))
+                    {
+                        if (!TryRecordId(Cell(row, 3), out var id) || !batch.Contains(id) || !seen.Add(id))
+                            throw new InvalidDataException("Quickbase returned invalid project billing records.");
+                        if (Cell(row, projectField).ValueKind == JsonValueKind.String) values.Add(id, CellString(row, projectField));
+                    }
+                    foreach (var value in values) billing.ProjectTypes[value.Key] = value.Value;
+                    billing.ProjectDefaultsMessage = "";
+                }
+                catch (Exception ex) when (ex is HttpRequestException or InvalidDataException or JsonException)
+                {
+                    billing.ProjectDefaultsMessage = "Quickbase project types could not be read. Check the connection and access to the Projects type field.";
+                }
+            }
         }
     }
     private async Task<HashSet<int>> ReadCallerRoleIdsAsync(CancellationToken ct)
@@ -191,8 +274,9 @@ public sealed partial class TimecardApi
     {
         JsonValueKind.True => true,
         JsonValueKind.False => false,
-        JsonValueKind.String when value.GetString() is "true" or "1" => true,
-        JsonValueKind.String when value.GetString() is "false" or "0" => false,
+        JsonValueKind.String when bool.TryParse(value.GetString(), out var boolean) => boolean,
+        JsonValueKind.String when value.GetString() is "1" => true,
+        JsonValueKind.String when value.GetString() is "0" => false,
         JsonValueKind.Number when value.TryGetInt32(out var number) && number is 0 or 1 => number == 1,
         _ => null
     };

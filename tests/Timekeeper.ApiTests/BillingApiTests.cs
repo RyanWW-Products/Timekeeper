@@ -23,6 +23,102 @@ static class BillingApiTests
                 Equal<bool?>(null, reference.Billing.DefaultFor(999, 44)); Equal(0, f.Server.WriteCount);
             }
         });
+        await check("task billing failures do not hide a readable internal project default and can retry", async () =>
+        {
+            using var f = new BillingFixture(); f.Server.Metadata = BillingFake.DefaultFields();
+            f.Server.TaskDefaultsStatus = HttpStatusCode.Forbidden;
+            var billing = await f.Api.ReadBillingDefaultsAsync([100]);
+            Equal<bool?>(false, billing.DefaultFor(100, 44)); Equal(1, f.Server.ProjectDefaultQueries);
+            f.Server.ProjectType = "Client";
+            billing = await f.Api.ReadBillingDefaultsAsync([100], refresh: true);
+            Equal<bool?>(null, billing.DefaultFor(100, 44)); True(billing.DefaultUnavailableReason(100, 44).Contains("task billing values could not be read"));
+            True(!billing.DefaultUnavailableReason(100, 44).Contains("QB-secret"));
+            f.Server.TaskDefaultsStatus = HttpStatusCode.OK;
+            var retry = await f.Api.ReadBillingDefaultsAsync([100]);
+            True(ReferenceEquals(billing, retry)); Equal<bool?>(true, retry.DefaultFor(100, 44)); Equal("", retry.DefaultUnavailableReason(100, 44)); Equal(0, f.Server.WriteCount);
+        });
+        await check("a nonbillable task resolves without readable project types but a billable task stays unknown", async () =>
+        {
+            using var f = new BillingFixture(); f.Server.Metadata = BillingFake.DefaultFields();
+            f.Server.ProjectDefaultsStatus = HttpStatusCode.Forbidden;
+            f.Server.TaskDefaultRows = [FakeApi.Row((3, 44), (8, false)), FakeApi.Row((3, 45), (8, true))];
+            var billing = await f.Api.ReadBillingDefaultsAsync([100]);
+            Equal<bool?>(false, billing.DefaultFor(100, 44)); Equal<bool?>(null, billing.DefaultFor(100, 45));
+            True(billing.DefaultUnavailableReason(100, 45).Contains("project types could not be read"));
+            f.Server.ProjectDefaultsStatus = HttpStatusCode.OK; f.Server.ProjectType = "Client";
+            Equal<bool?>(true, (await f.Api.ReadBillingDefaultsAsync([100])).DefaultFor(100, 45)); Equal(0, f.Server.WriteCount);
+        });
+        await check("visible formula branches resolve independently when the other lookup metadata is hidden", async () =>
+        {
+            using var internalOnly = new BillingFixture(); internalOnly.Server.Metadata = BillingFake.DefaultFields(includeTask: false);
+            var billing = await internalOnly.Api.ReadBillingDefaultsAsync([100]);
+            Equal<bool?>(false, billing.DefaultFor(100, 44)); Equal(0, internalOnly.Server.TaskDefaultQueries);
+            using var taskOnly = new BillingFixture(); taskOnly.Server.Metadata = BillingFake.DefaultFields(includeProject: false);
+            taskOnly.Server.TaskDefaultRows = [FakeApi.Row((3, 44), (8, false)), FakeApi.Row((3, 45), (8, true))];
+            billing = await taskOnly.Api.ReadBillingDefaultsAsync([100]);
+            Equal<bool?>(false, billing.DefaultFor(100, 44)); Equal<bool?>(null, billing.DefaultFor(100, 45)); Equal(0, taskOnly.Server.ProjectDefaultQueries);
+            True(billing.DefaultUnavailableReason(100, 45).Contains("Project Type relationship"));
+        });
+        await check("partial task defaults are retried instead of caching missing values indefinitely", async () =>
+        {
+            using var f = new BillingFixture(); f.Server.Metadata = BillingFake.DefaultFields(); f.Server.ProjectType = "Client";
+            f.Server.TaskDefaultRows = [FakeApi.Row((3, 44), (8, true)), FakeApi.Row((3, 45))];
+            var billing = await f.Api.ReadBillingDefaultsAsync([100]);
+            Equal<bool?>(true, billing.DefaultFor(100, 44)); Equal<bool?>(null, billing.DefaultFor(100, 45));
+            f.Server.TaskDefaultRows = [FakeApi.Row((3, 44), (8, true)), FakeApi.Row((3, 45), (8, false))];
+            billing = await f.Api.ReadBillingDefaultsAsync([100]);
+            Equal<bool?>(false, billing.DefaultFor(100, 45)); Equal(2, f.Server.TaskDefaultQueries);
+            await f.Api.ReadBillingDefaultsAsync([100]); Equal(2, f.Server.TaskDefaultQueries);
+        });
+        await check("failed billing metadata can recover without rebuilding the API client", async () =>
+        {
+            using var f = new BillingFixture(); f.Server.Metadata = BillingFake.DefaultFields(); f.Server.MetadataStatus = HttpStatusCode.Forbidden;
+            var billing = await f.Api.ReadBillingDefaultsAsync([100]);
+            Equal<bool?>(null, billing.DefaultFor(100, 44)); True(billing.DefaultUnavailableReason(100, 44).Contains("metadata could not be read"));
+            f.Server.MetadataStatus = HttpStatusCode.OK;
+            Equal<bool?>(false, (await f.Api.ReadBillingDefaultsAsync([100])).DefaultFor(100, 44)); Equal(2, f.Server.MetadataQueries); Equal(0, f.Server.WriteCount);
+        });
+        await check("billing refresh reads changed inputs and does not retain previously readable permissions after failure", async () =>
+        {
+            using var f = new BillingFixture(); f.Server.Metadata = BillingFake.DefaultFields();
+            var first = await f.Api.ReadBillingDefaultsAsync([100]); Equal<bool?>(false, first.DefaultFor(100, 44));
+            f.Server.ProjectType = "Client";
+            var updated = await f.Api.ReadBillingDefaultsAsync([100], refresh: true);
+            Equal<bool?>(true, updated.DefaultFor(100, 44)); True(!ReferenceEquals(first, updated)); Equal(2, f.Server.TaskDefaultQueries); Equal(2, f.Server.ProjectDefaultQueries);
+            f.Server.MetadataStatus = HttpStatusCode.Forbidden;
+            var failed = await f.Api.ReadBillingDefaultsAsync([100], refresh: true);
+            True(!failed.CanOverride); Equal<bool?>(null, failed.DefaultFor(100, 44));
+            True(!(await f.Api.ReadBillingCapabilitiesAsync()).CanOverride); Equal(4, f.Server.MetadataQueries); Equal(0, f.Server.WriteCount);
+        });
+        await check("billing formula formatting is tolerated without changing literals or field names", async () =>
+        {
+            using var formatted = new BillingFixture(); formatted.Server.Metadata = BillingFake.DefaultFields(formula: BillingFake.DefaultFormula.Replace("If(", "IF (\n ").Replace(",", ", \n"));
+            Equal<bool?>(false, (await formatted.Api.ReadBillingDefaultsAsync([100])).DefaultFor(100, 44));
+            foreach (var changed in new[] { BillingFake.DefaultFormula.Replace("Internal", "Inter nal"), BillingFake.DefaultFormula.Replace("[Project Type]", "[ProjectType]"), BillingFake.DefaultFormula.Replace("[Bill Task]", "[Bill  Task]") })
+            {
+                using var f = new BillingFixture(); f.Server.Metadata = BillingFake.DefaultFields(formula: changed);
+                var billing = await f.Api.ReadBillingDefaultsAsync([100]); Equal<bool?>(null, billing.DefaultFor(100, 44)); Equal(0, f.Server.ProjectDefaultQueries);
+                True(billing.DefaultUnavailableReason(100, 44).Contains("supported Bill This Task formula"));
+            }
+        });
+        await check("billing metadata handles case labels numeric string references and serialized booleans", async () =>
+        {
+            using var f = new BillingFixture(); f.Server.ProjectType = "Client";
+            f.Server.Metadata = BillingFake.DefaultFields(includeProject: false, includeTask: false).Concat(new object[] {
+                new { id = 90, label = "project type", fieldType = "text", mode = "lookup", properties = new { lookupReferenceFieldId = "11", lookupTargetFieldId = "9" } },
+                new { id = 91, label = "BILL TASK", fieldType = "checkbox", mode = "lookup", properties = new { lookupReferenceFieldId = "16", lookupTargetFieldId = "8" } }
+            }).ToArray();
+            f.Server.TaskDefaultRows = [FakeApi.Row((3, 44), (8, "TRUE")), FakeApi.Row((3, 45), (8, "False")), FakeApi.Row((3, 46), (8, "unknown"))];
+            var billing = await f.Api.ReadBillingDefaultsAsync([100]);
+            Equal<bool?>(true, billing.DefaultFor(100, 44)); Equal<bool?>(false, billing.DefaultFor(100, 45)); Equal<bool?>(null, billing.DefaultFor(100, 46)); Equal(0, f.Server.WriteCount);
+        });
+        await check("malformed lookup metadata does not crash optional billing discovery", async () =>
+        {
+            using var f = new BillingFixture();
+            f.Server.Metadata = BillingFake.DefaultFields(includeProject: false).Concat(new object[] { new { id = 90, label = "Project Type", fieldType = "text", mode = "lookup", properties = "invalid" } }).ToArray();
+            var billing = await f.Api.ReadBillingDefaultsAsync([100]);
+            Equal<bool?>(null, billing.DefaultFor(100, 44)); True(billing.DefaultUnavailableReason(100, 44).Contains("Project Type relationship")); Equal(0, f.Server.WriteCount);
+        });
         await check("unknown billing formulas never guess a default", async () =>
         {
             using var f = new BillingFixture(); var reference = await f.Api.ReadReferenceAsync();
@@ -217,7 +313,9 @@ sealed class BillingFake : HttpMessageHandler
 {
     public object Metadata = new[] { OverrideField(), ResultField() };
     public HttpStatusCode MetadataStatus = HttpStatusCode.OK, QueryStatus = HttpStatusCode.OK, RoleStatus = HttpStatusCode.OK;
-    public int MetadataQueries, WriteCount, TogglRequests, RecordQueries, Requests, RoleQueries;
+    public int MetadataQueries, WriteCount, TogglRequests, RecordQueries, Requests, RoleQueries, TaskDefaultQueries, ProjectDefaultQueries;
+    public HttpStatusCode TaskDefaultsStatus = HttpStatusCode.OK, ProjectDefaultsStatus = HttpStatusCode.OK;
+    public object[]? TaskDefaultRows;
     public string RoleIds = "12", RoleFormula = "";
     public string MetadataUrl = "", WriteJson = "";
     public HttpMethod? MetadataMethod;
@@ -228,6 +326,14 @@ sealed class BillingFake : HttpMessageHandler
     public static object OverrideField(int id = 99, string mode = "", string type = "text", object? permissions = null, object? properties = null) =>
         new { id, label = "Billable Override", fieldType = type, mode, permissions = permissions ?? Array.Empty<object>(), properties = properties ?? new { formula = "" } };
     public static object ResultField() => new { id = 172, label = "Bill This Task", fieldType = "checkbox", mode = "formula", properties = new { formula = "[Billable Override] = \"Billable\"" } };
+    public const string DefaultFormula = "If([Billable Override]=\"\",If([Project Type]=\"Internal\",false,[Bill Task]=true,true,false), [Billable Override]=\"NonBillable\",false,[Billable Override]=\"Billable\",true)";
+    public static object[] DefaultFields(bool includeProject = true, bool includeTask = true, string? formula = null)
+    {
+        var fields = new List<object> { OverrideField(), new { id = 172, label = "Bill This Task", fieldType = "checkbox", mode = "formula", properties = new { formula = formula ?? DefaultFormula } } };
+        if (includeProject) fields.Add(new { id = 90, label = "Project Type", fieldType = "text", mode = "lookup", properties = new { lookupReferenceFieldId = 11, lookupTargetFieldId = 9 } });
+        if (includeTask) fields.Add(new { id = 91, label = "Bill Task", fieldType = "checkbox", mode = "lookup", properties = new { lookupReferenceFieldId = 16, lookupTargetFieldId = 8 } });
+        return fields.ToArray();
+    }
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
         var url = request.RequestUri!;
@@ -262,6 +368,18 @@ sealed class BillingFake : HttpMessageHandler
             if (QueryStatus != HttpStatusCode.OK) return new(QueryStatus) { Content = new StringContent("QB-secret") };
             using var body = JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct));
             var table = body.RootElement.GetProperty("from").GetString();
+            var select = body.RootElement.GetProperty("select").EnumerateArray().Select(v => v.GetInt32()).ToArray();
+            if (table == "bd3bsxtbn" && select.Contains(8))
+            {
+                TaskDefaultQueries++;
+                if (TaskDefaultsStatus != HttpStatusCode.OK) return new(TaskDefaultsStatus) { Content = new StringContent("QB-secret private tasks") };
+                if (TaskDefaultRows is not null) return Json(new { data = TaskDefaultRows, metadata = new { totalRecords = TaskDefaultRows.Length } });
+            }
+            if (table == "bd3bsxtbj" && select.Contains(9))
+            {
+                ProjectDefaultQueries++;
+                if (ProjectDefaultsStatus != HttpStatusCode.OK) return new(ProjectDefaultsStatus) { Content = new StringContent("QB-secret private projects") };
+            }
             object[]? references = table switch
             {
                 "beb9dvs6p" => [FakeApi.Row((3, 11), (6, "Internal"))],

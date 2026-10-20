@@ -40,7 +40,7 @@ public static class EmailRules
         if (session.Settings.EmailRoundingMinutes is not (0 or 5 or 15)) errors.Add("Email rounding must be 0, 5 or 15 minutes.");
         if (proposal.AlreadyRecorded.Count > 0) errors.Add("Toggl already-recorded links cannot be used for an email workbook.");
         if (session.Days.Count is 0 or > 31 || proposal.Rows.Count > EmailWorkbookReader.MaximumActivities || proposal.EmailAlreadyRecorded.Count > EmailWorkbookReader.MaximumActivities) errors.Add("The email session or proposal exceeds the supported size.");
-        if (session.Reference.Tasks is null || session.Reference.Categories is null || session.Reference.Assignments is null) errors.Add("Quickbase reference data is incomplete.");
+        if (session.Reference.Tasks is null || session.Reference.Categories is null || session.Reference.Assignments is null || session.Reference.Projects is null) errors.Add("Quickbase reference data is incomplete.");
         if (errors.Count > 0) return result;
 
         var reference = session.Reference;
@@ -49,6 +49,9 @@ public static class EmailRules
         var tasks = new Dictionary<int, TaskRecord>();
         var categories = new Dictionary<int, CategoryRecord>();
         var assignments = new Dictionary<int, AssignmentRecord>();
+        var projects = new Dictionary<int, ProjectRecord>();
+        foreach (var item in reference.Projects!)
+            if (item is null || item.Id <= 0 || string.IsNullOrWhiteSpace(item.Name) || !projects.TryAdd(item.Id, item)) errors.Add("Project reference data contains an invalid or duplicate project.");
         foreach (var item in reference.Tasks!)
             if (item is null || item.Id <= 0 || item.CategoryId <= 0 || string.IsNullOrWhiteSpace(item.Name) || !tasks.TryAdd(item.Id, item)) errors.Add("Task reference data contains an invalid or duplicate task.");
         foreach (var item in reference.Categories!)
@@ -131,7 +134,7 @@ public static class EmailRules
                     if (assignment.Employees.Count > 0 && !assignment.Employees.Any(e => string.Equals(e?.Trim(), session.Settings.Email.Trim(), StringComparison.OrdinalIgnoreCase))) warnings.Add($"Assignment {assignment.Id} does not list {session.Settings.Email}. Confirm it is appropriate for you.");
                 }
             }
-            else if (row.Project != reference.InternalProject!.Id) errors.Add($"Project {row.Project} requires an assignment. Only the configured internal project may omit it.");
+            else if (row.Project != reference.InternalProject!.Id && !projects.ContainsKey(row.Project)) errors.Add($"Project {row.Project} is not in the trusted project choices. Find and select the project in Timekeeper before applying time directly to it.");
             long minutes = 0;
             var source = new List<EmailActivity>();
             foreach (var id in row.SourceActivityIds)
@@ -166,8 +169,8 @@ public static class EmailRules
                 + group.Activities.Where(a => hourEdits.ContainsKey(a.ActivityId)).Sum(a => hourEdits[a.ActivityId]);
             result.Rows.Add(new VerifiedRow
             {
-                Date = row.Date, Hours = hours, OriginalHours = hours != originalHours ? originalHours : null, Project = row.Project, ProjectName = assignment?.ProjectName ?? reference.InternalProject!.Name,
-                Assignment = row.Assignment, AssignmentName = assignment?.Name ?? "Internal", Task = row.Task, TaskName = tasks[row.Task].Name, Category = row.Category, CategoryName = categories[row.Category].Name,
+                Date = row.Date, Hours = hours, OriginalHours = hours != originalHours ? originalHours : null, Project = row.Project, ProjectName = assignment?.ProjectName ?? (row.Project == reference.InternalProject!.Id ? reference.InternalProject.Name : projects[row.Project].Name),
+                Assignment = row.Assignment, AssignmentName = assignment?.Name ?? (row.Project == reference.InternalProject!.Id ? "Internal" : "Direct to project"), Task = row.Task, TaskName = tasks[row.Task].Name, Category = row.Category, CategoryName = categories[row.Category].Name,
                 Description = description, Kind = "work", BillableOverride = row.BillableOverride,
                 SourceActivityIds = group.Activities.Select(a => a.ActivityId).Order(StringComparer.Ordinal).ToList(),
                 EmailEvidenceKeys = group.Activities.SelectMany(a => a.EvidenceIds).Select(id => EvidenceKey(session.EmailWorkbook.Metadata.EmployeeEmail, id)).Order(StringComparer.Ordinal).ToList()

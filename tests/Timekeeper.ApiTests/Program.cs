@@ -81,6 +81,72 @@ await Check("assignment lookup identifies bad optional relation without suppress
         True(error.Message.Contains($"field {field}")); True(error.Message.Contains("#201 — Other work")); True(error.Message.Contains("not a number"));
     }
 });
+await Check("assignment search includes intake proposal review and every other status for all employees", async () =>
+{
+    using var f = new Fixture();
+    var statuses = new[] { "Active", "Case Intake", "Proposal", "Propsal", "Review", "In Progress", "Closed" };
+    f.Server.RowsByTable[f.Settings.AssignmentsTable] = statuses.Select((status, i) => FakeApi.Row((3, 201 + i), (13, "Case administration"), (15, 321), (16, "Example Case"), (11, status), (73, new[] { new { email = "other@example.com" } }))).ToList();
+    var found = await f.Api.FindAssignmentsAsync("Example administration");
+    Equal(statuses.Length, found.Count); True(statuses.All(s => found.Any(a => a.Status == s)));
+    var query = f.Server.QueryRequests.Single(q => q.GetProperty("from").GetString() == f.Settings.AssignmentsTable);
+    var where = query.GetProperty("where").GetString()!;
+    True(where.Contains("{13.CT.'Example'}OR{16.CT.'Example'}OR{23.CT.'Example'}"));
+    True(where.Contains(")AND(")); True(!where.Contains("11.")); True(!where.Contains("73."));
+    Equal(201, query.GetProperty("options").GetProperty("top").GetInt32()); Equal(0, f.Server.WriteCount);
+});
+await Check("project and assignment searches support exact record IDs and escaped multiple words", async () =>
+{
+    using var f = new Fixture();
+    f.Server.RowsByTable[f.Settings.ProjectsTable] = [FakeApi.Row((3, 321), (6, "O'Connor intake case"))];
+    var projects = await f.Api.FindProjectsAsync("O'Connor #321"); Equal(321, projects.Single().Id);
+    var request = f.Server.QueryRequests.Single(q => q.GetProperty("from").GetString() == f.Settings.ProjectsTable);
+    var where = request.GetProperty("where").GetString()!;
+    True(where.Contains("{6.CT.'O\\'Connor'}")); True(where.Contains("OR{3.EX.'321'}")); True(where.Contains(")AND("));
+    True(request.GetProperty("select").EnumerateArray().Select(n => n.GetInt32()).SequenceEqual(new[] { 3, 6 }));
+    await f.Api.FindAssignmentsAsync("#201");
+    True(f.Server.QueryRequests.Last(q => q.GetProperty("from").GetString() == f.Settings.AssignmentsTable).GetProperty("where").GetString()!.Contains("OR{3.EX.'201'}"));
+});
+await Check("lookup rejects invalid input and broad results without returning partial choices", async () =>
+{
+    using var f = new Fixture();
+    foreach (var text in new[] { "", "  ", new string('a', 151), string.Join(' ', Enumerable.Repeat("word", 13)) })
+    {
+        await Throws<ArgumentException>(() => f.Api.FindProjectsAsync(text));
+        await Throws<ArgumentException>(() => f.Api.FindAssignmentsAsync(text));
+    }
+    Equal(0, f.Server.QueryRequests.Count);
+    f.Server.RowsByTable[f.Settings.ProjectsTable] = Enumerable.Range(1, 201).Select(i => FakeApi.Row((3, i), (6, "Case " + i))).ToList();
+    await Throws<InvalidDataException>(() => f.Api.FindProjectsAsync("Case"));
+    f.Server.RowsByTable[f.Settings.AssignmentsTable] = Enumerable.Range(1, 201).Select(i => FakeApi.Row((3, i), (15, 100), (13, "Work"))).ToList();
+    await Throws<InvalidDataException>(() => f.Api.FindAssignmentsAsync("Work")); Equal(0, f.Server.WriteCount);
+});
+await Check("direct project submission rechecks the project omits assignment and blocks replay", async () =>
+{
+    using var f = new Fixture(); var session = await f.Read();
+    session = session with { Reference = session.Reference with { Projects = [.. session.Reference.Projects, new(321, "Case intake")] } };
+    var proposal = f.Proposal(session); proposal = proposal with { Rows = [proposal.Rows[0] with { Project = 321 }] };
+    f.Server.ProjectRowsById[321] = [FakeApi.Row((3, 321), (6, "Case intake"))];
+    var review = Rules.Validate(session, proposal); True(review.IsValid);
+    var receipt = await f.Service.SubmitAsync(session, proposal, review.Rows);
+    Equal("complete", receipt.Status); var direct = receipt.Rows.Single(r => r.Row.Kind == "work");
+    Equal(321, direct.Row.Project); Equal<int?>(null, direct.Row.Assignment); Equal<int?>(null, f.Server.Existing.Single(r => r.Project == 321).Assignment);
+    True(f.Server.QueryRequests.Any(q => q.GetProperty("from").GetString() == f.Settings.ProjectsTable && q.GetProperty("where").GetString() == "{3.EX.'321'}"));
+    var writes = f.Server.WriteCount; await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(session, proposal, review.Rows)); Equal(writes, f.Server.WriteCount);
+});
+await Check("missing renamed and untrusted direct projects block before any write", async () =>
+{
+    foreach (var renamed in new[] { false, true })
+    {
+        using var f = new Fixture(); var session = await f.Read();
+        var proposal = f.Proposal(session); proposal = proposal with { Rows = [proposal.Rows[0] with { Project = 321 }] };
+        True(!Rules.Validate(session, proposal).IsValid);
+        session = session with { Reference = session.Reference with { Projects = [.. session.Reference.Projects, new(321, "Original case")] } };
+        f.Server.ProjectRowsById[321] = renamed ? [FakeApi.Row((3, 321), (6, "Renamed case"))] : [];
+        var review = Rules.Validate(session, proposal); True(review.IsValid);
+        await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(session, proposal, review.Rows));
+        Equal(0, f.Server.WriteCount); Equal(0, f.Store.LoadReceipts(f.Settings.ProfileKey).Count);
+    }
+});
 await Check("field diagnostics bound text and redact credentials without dumping records", async () =>
 {
     using var f = new Fixture();
@@ -790,6 +856,8 @@ sealed class Fixture : IDisposable
 sealed class FakeApi : HttpMessageHandler
 {
     public Dictionary<string, List<object>> RowsByTable = [];
+    public Dictionary<int, List<object>> ProjectRowsById = [];
+    public List<JsonElement> QueryRequests = [];
     public string EntryUrl = "";
     public string? IdentityJson;
     public object? EntriesResponse;
@@ -834,6 +902,7 @@ sealed class FakeApi : HttpMessageHandler
         if (url.AbsolutePath.EndsWith("/records/query"))
         {
             var root = body.RootElement; var table = root.GetProperty("from").GetString(); var skip = root.GetProperty("options").GetProperty("skip").GetInt32();
+            QueryRequests.Add(root.Clone());
             if (table == "bd3bsxtbp" && body.RootElement.GetProperty("select").GetArrayLength() == 1)
             {
                 BeforeRecordIdRead?.Invoke();
@@ -864,6 +933,11 @@ sealed class FakeApi : HttpMessageHandler
                 _ => throw new Exception("Unexpected table")
             };
             if (RowsByTable.TryGetValue(table!, out var overrideRows)) rows = overrideRows;
+            if (table == "bd3bsxtbj" && root.TryGetProperty("where", out var projectWhere))
+            {
+                var projectId = System.Text.RegularExpressions.Regex.Match(projectWhere.GetString()!, @"^\{3\.EX\.'(\d+)'\}$");
+                if (projectId.Success && ProjectRowsById.TryGetValue(int.Parse(projectId.Groups[1].Value), out var projectRows)) rows = projectRows;
+            }
             if (table == "beb9dvs6p") CategoryQueries++;
             var total = OverCap ? 20001 : rows.Count + (ChangingTotal && skip > 0 ? 1 : 0);
             return Json(new { data = rows.Skip(skip).Take(table == "beb9dvs6p" ? CategoryPageSize : 1000).ToArray(), metadata = new { totalRecords = total } });

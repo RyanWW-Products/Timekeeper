@@ -18,7 +18,8 @@ internal sealed class ReviewRow(VerifiedRow row, bool canOverride, Action change
     public bool HasUnavailableOverride => !CanOverride && Row.BillableOverride.HasValue;
     public string DurationHint => Row.OriginalHours is decimal original ? $"Edited from {original:0.00} h. Double-click to edit again." : "Double-click to edit hours. Single-clicking does not change them.";
     public string DefaultBillingLabel => billing?.DefaultFor(Row.Project, Row.Task) switch { true => "Billable - Default", false => "Nonbillable - Default", _ => "Default unavailable" };
-    public string BillingHint => CanOverride ? "Changes billing only. Assignment and task stay the same. Related email activities regroup and hours recalculate." : "Timekeeper could not confirm Modify access to Billable Override. Check the message below the table. Quickbase default remains available.";
+    public string BillingHint => (billing?.DefaultUnavailableReason(Row.Project, Row.Task) ?? "Billing has not been checked. Use Refresh billing to try again.") is { Length: > 0 } reason ? reason
+        : CanOverride ? "Changes billing only. Project, assignment and task stay the same. Related email activities regroup and hours recalculate." : "Quickbase default is resolved. Your account cannot change the billing override.";
     public int BillingIndex
     {
         get => Row.BillableOverride is null ? 0 : Row.BillableOverride.Value ? 1 : 2;
