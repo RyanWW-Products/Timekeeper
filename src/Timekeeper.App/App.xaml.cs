@@ -48,6 +48,7 @@ public partial class App : Application
 
                 var emptyWindow=new MainWindow(new SessionStore(Path.Combine(output,"empty-smoke-data")),true);
                 emptyWindow.ShowSmokeEmptyState();
+                File.AppendAllText(report,emptyWindow.SmokeWorkspaceDates());
                 RenderWindow(emptyWindow,Path.Combine(output,"timekeeper-initial.png"),(int)emptyWindow.Width,(int)emptyWindow.Height);
                 emptyWindow.ShowSmokeHistory();
                 RenderWindow(emptyWindow,Path.Combine(output,"timekeeper-history-empty.png"),(int)emptyWindow.Width,(int)emptyWindow.Height);

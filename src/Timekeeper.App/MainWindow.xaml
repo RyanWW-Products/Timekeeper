@@ -58,35 +58,74 @@
           <Border x:Name="DemoBanner" Visibility="Collapsed" Background="{DynamicResource WarningSoft}" CornerRadius="7" Padding="14,10" Margin="0,0,0,14">
             <TextBlock Text="SAMPLE WORKSPACE  ·  Explore the workflow with sample data. Quickbase writing is disabled." Foreground="{DynamicResource Warning}" FontSize="12"/>
           </Border>
-          <Border Style="{StaticResource Card}" Padding="18,13" Margin="{DynamicResource SectionGap}">
+          <Border Style="{StaticResource Card}" Padding="20,16" Margin="{DynamicResource SectionGap}">
             <Grid>
               <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-              <WrapPanel VerticalAlignment="Center" Margin="0,0,20,0">
-              <Button x:Name="ReadTodayButton" Content="Read today's data" Style="{StaticResource Primary}" Click="ReadToday_Click" Margin="0,0,24,6" VerticalAlignment="Bottom"/>
-              <WrapPanel>
-              <StackPanel Margin="0,0,10,6"><TextBlock Text="From" Foreground="{DynamicResource Muted}" FontSize="11" Margin="1,0,0,5"/><DatePicker x:Name="StartDate" Width="140" AutomationProperties.Name="Read from date"/></StackPanel>
-              <StackPanel Margin="0,0,12,6"><TextBlock Text="Through" Foreground="{DynamicResource Muted}" FontSize="11" Margin="1,0,0,5"/><DatePicker x:Name="EndDate" Width="140" AutomationProperties.Name="Read through date"/></StackPanel>
-              <Button x:Name="ReadRangeButton" Content="Read dates" Click="ReadRange_Click" VerticalAlignment="Bottom" Margin="0,0,0,6"/>
-              </WrapPanel>
-              </WrapPanel>
-              <Button x:Name="EmailImportButton" Grid.Column="1" Click="EmailImport_Click" HorizontalAlignment="Right" VerticalAlignment="Center" Padding="16,12" MinHeight="82"
-                      AllowDrop="True" PreviewDragEnter="EmailImport_DragOver" PreviewDragOver="EmailImport_DragOver" PreviewDragLeave="EmailImport_DragLeave" PreviewDrop="EmailImport_Drop"
-                      AutomationProperties.Name="Import email Excel" AutomationProperties.HelpText="Drop one Excel workbook here, or click to browse for an .xlsx file."
-                      ToolTip="Drop an email Excel workbook here, or click to browse.">
-                <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Style.Triggers><Trigger Property="Tag" Value="DropReady"><Setter Property="Background" Value="{DynamicResource AccentSoft}"/><Setter Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger></Style.Triggers></Style></Button.Style>
-                <StackPanel Orientation="Horizontal" IsHitTestVisible="False">
-                  <Grid Width="48" Height="40" Margin="0,0,14,0" VerticalAlignment="Center">
-                    <Rectangle Margin="1,3" RadiusX="4" RadiusY="4" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2"/>
-                    <Path Data="M 3,6 L 24,23 L 45,6 M 3,34 L 17,21 M 45,34 L 31,21" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2" StrokeLineJoin="Round"/>
-                  </Grid>
-                  <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="Import email Excel"/>
-                    <TextBlock Text="Drop .xlsx or click to browse" FontSize="11" FontWeight="Normal" Margin="0,5,0,0"/>
-                  </StackPanel>
-                </StackPanel>
-              </Button>
+              <StackPanel Margin="0,0,20,0">
+                <TextBlock Text="WORK DATE" Style="{StaticResource SectionLabel}" Foreground="{DynamicResource Accent}" Margin="0,0,0,9"/>
+                <WrapPanel>
+                  <DatePicker x:Name="StartDate" Width="152" VerticalAlignment="Top" Margin="0,0,18,0" SelectedDateChanged="WorkspaceDate_Changed" AutomationProperties.Name="Work date"/>
+                  <Expander x:Name="DateRangeOptions" Header="More than one day" FontSize="12" VerticalAlignment="Top" Collapsed="DateRange_Collapsed">
+                    <StackPanel Margin="20,2,0,0"><TextBlock Text="Through" Foreground="{DynamicResource Muted}" FontSize="11" Margin="1,0,0,5"/><DatePicker x:Name="EndDate" Width="152" SelectedDateChanged="WorkspaceDate_Changed" AutomationProperties.Name="Work through date"/></StackPanel>
+                  </Expander>
+                </WrapPanel>
+                <TextBlock x:Name="SelectedDateSummary" Text="Choose a date, then import data or add a timecard." Foreground="{DynamicResource Muted}" FontSize="12" TextWrapping="Wrap" Margin="0,10,0,0"/>
+              </StackPanel>
+              <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right">
+                <Button x:Name="AddTimecardButton" Content="+ Add timecard" Click="AddTimecard_Click" Padding="18,10" HorizontalAlignment="Right"/>
+                <TextBlock Text="Add work before importing." Foreground="{DynamicResource Muted}" FontSize="11" Margin="0,8,0,0" TextAlignment="Right"/>
+              </StackPanel>
             </Grid>
           </Border>
+          <Grid Margin="{DynamicResource SectionGap}" Grid.IsSharedSizeScope="True">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="18"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Border Style="{StaticResource Card}" Padding="20,17">
+              <Grid>
+                <Grid.RowDefinitions><RowDefinition Height="Auto" SharedSizeGroup="ImportHeaders"/><RowDefinition Height="*"/><RowDefinition Height="Auto" SharedSizeGroup="ImportFooters"/></Grid.RowDefinitions>
+                <StackPanel>
+                  <TextBlock Text="Toggl / Quickbase" FontFamily="{StaticResource DisplayFont}" FontSize="22"/>
+                  <Grid Margin="0,9,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="17"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Ellipse x:Name="TogglLoadedLight" Width="9" Height="9" Fill="{DynamicResource Muted}" Opacity="0.55" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TogglLoadedText" Grid.Column="1" Text="No data loaded for this date" Foreground="{DynamicResource Muted}" FontSize="11" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
+                  </Grid>
+                </StackPanel>
+                <StackPanel Grid.Row="1" Margin="0,15,0,15" VerticalAlignment="Center">
+                  <TextBlock Text="Read your Toggl entries and existing Quickbase time, then prepare the proposal with Copilot." Foreground="{DynamicResource Muted}" TextWrapping="Wrap" FontSize="12" LineHeight="19"/>
+                  <Button x:Name="ReadRangeButton" Content="Read selected date" Style="{StaticResource Primary}" Click="ReadRange_Click" HorizontalAlignment="Left" Margin="0,14,0,0"/>
+                </StackPanel>
+                <Button x:Name="ReadTodayButton" Grid.Row="2" Content="Read today's data" Style="{StaticResource Quiet}" Click="ReadToday_Click" HorizontalAlignment="Left" FontSize="12" Padding="0,7"/>
+              </Grid>
+            </Border>
+            <Border Grid.Column="2" Style="{StaticResource Card}" Padding="20,17">
+              <Grid>
+                <Grid.RowDefinitions><RowDefinition Height="Auto" SharedSizeGroup="ImportHeaders"/><RowDefinition Height="*"/><RowDefinition Height="Auto" SharedSizeGroup="ImportFooters"/></Grid.RowDefinitions>
+                <StackPanel>
+                  <TextBlock Text="Email / Quickbase" FontFamily="{StaticResource DisplayFont}" FontSize="22"/>
+                  <Grid Margin="0,9,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="17"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Ellipse x:Name="EmailLoadedLight" Width="9" Height="9" Fill="{DynamicResource Muted}" Opacity="0.55" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="EmailLoadedText" Grid.Column="1" Text="No data loaded for this date" Foreground="{DynamicResource Muted}" FontSize="11" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
+                  </Grid>
+                </StackPanel>
+                <Button x:Name="EmailImportButton" Grid.Row="1" Click="EmailImport_Click" HorizontalAlignment="Stretch" VerticalAlignment="Center" Padding="14,13" MinHeight="86" Margin="0,15,0,15"
+                        AllowDrop="True" PreviewDragEnter="EmailImport_DragOver" PreviewDragOver="EmailImport_DragOver" PreviewDragLeave="EmailImport_DragLeave" PreviewDrop="EmailImport_Drop"
+                        AutomationProperties.Name="Import email Excel" AutomationProperties.HelpText="Drop one Excel workbook here, or click to browse for an .xlsx file."
+                        ToolTip="Drop an email Excel workbook here, or click to browse.">
+                  <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Style.Triggers><Trigger Property="Tag" Value="DropReady"><Setter Property="Background" Value="{DynamicResource AccentSoft}"/><Setter Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger></Style.Triggers></Style></Button.Style>
+                  <StackPanel Orientation="Horizontal" IsHitTestVisible="False">
+                    <Grid Width="48" Height="40" Margin="0,0,14,0" VerticalAlignment="Center">
+                      <Rectangle Margin="1,3" RadiusX="4" RadiusY="4" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2"/>
+                      <Path Data="M 3,6 L 24,23 L 45,6 M 3,34 L 17,21 M 45,34 L 31,21" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="2" StrokeLineJoin="Round"/>
+                    </Grid>
+                    <StackPanel VerticalAlignment="Center">
+                      <TextBlock Text="Import email Excel"/>
+                      <TextBlock Text="Drop .xlsx or click to browse" FontSize="11" FontWeight="Normal" Margin="0,5,0,0"/>
+                    </StackPanel>
+                  </StackPanel>
+                </Button>
+                <Button x:Name="EmailCopilotButton" Grid.Row="2" Content="Open email Copilot agent &#x2197;" Style="{StaticResource Quiet}" Click="OpenEmailCopilot_Click" HorizontalAlignment="Left" FontSize="12" Padding="0,7"/>
+              </Grid>
+            </Border>
+          </Grid>
           <Border Style="{StaticResource Card}" Padding="0" Margin="{DynamicResource SectionGap}">
             <UniformGrid Columns="4" Grid.IsSharedSizeScope="True">
               <Border Padding="20,14" BorderBrush="{DynamicResource Line}" BorderThickness="0,0,1,0"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto" SharedSizeGroup="MetricLabels"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><TextBlock x:Name="TrackedLabel" Text="Tracked in Toggl" Style="{StaticResource MetricLabel}"/><TextBlock Grid.Row="1" x:Name="TrackedMetric" Text="—" Style="{StaticResource MetricValue}"/></Grid></Border>
@@ -95,6 +134,7 @@
               <Border Padding="20,14"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto" SharedSizeGroup="MetricLabels"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><TextBlock Text="Weekday fill target" Style="{StaticResource MetricLabel}"/><TextBlock Grid.Row="1" x:Name="TargetMetric" Text="8.00 h" Style="{StaticResource MetricValue}"/></Grid></Border>
             </UniformGrid>
           </Border>
+          <StackPanel x:Name="TogglWorkflowPanel">
           <Border x:Name="CopilotRefreshNotice" Visibility="Collapsed" Background="{DynamicResource WarningSoft}" BorderBrush="{DynamicResource Warning}" BorderThickness="1" CornerRadius="9" Padding="18,14" Margin="{DynamicResource SectionGap}" AutomationProperties.LiveSetting="Assertive">
             <StackPanel>
               <TextBlock Text="Assignment added. Send the updated file to Copilot again." Foreground="{DynamicResource Warning}" FontWeight="SemiBold" FontSize="17" TextWrapping="Wrap"/>
@@ -139,6 +179,7 @@
               </Grid>
             </Border>
           </Grid>
+          </StackPanel>
           <Border Style="{StaticResource Card}" Padding="0">
             <StackPanel>
               <Grid Margin="20,18,20,14"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -146,10 +187,7 @@
                 <Border x:Name="VerifiedBadge" Grid.Column="1" VerticalAlignment="Top" Background="{DynamicResource SuccessSoft}" BorderBrush="{DynamicResource VerificationLine}" BorderThickness="1" Padding="12,6" CornerRadius="6" Visibility="Collapsed"><TextBlock Text="✓  Data verified" Foreground="{DynamicResource Success}" FontWeight="SemiBold" FontSize="12"/></Border>
               </Grid>
               <TextBlock x:Name="ValidationMessage" Text="The app checks the returned file and calculates your time before you submit." Foreground="{DynamicResource Muted}" Margin="20,0,20,14" FontSize="12"/>
-              <DockPanel Margin="20,0,20,14" LastChildFill="True">
-                <Button x:Name="AddTimecardButton" DockPanel.Dock="Right" Content="+ Add timecard" Click="AddTimecard_Click" Padding="14,8" Margin="12,0,0,0"/>
-                <TextBlock x:Name="ManualSummary" Text="Add work that was not captured in Toggl or email." VerticalAlignment="Center" TextWrapping="Wrap" Foreground="{DynamicResource Muted}" FontSize="12"/>
-              </DockPanel>
+              <TextBlock x:Name="ManualSummary" Text="Add work that was not captured in Toggl or email." Margin="20,0,20,14" VerticalAlignment="Center" TextWrapping="Wrap" Foreground="{DynamicResource Muted}" FontSize="12"/>
               <Expander x:Name="ManualPanel" Header="Manual timecards" Visibility="Collapsed" IsExpanded="True" Margin="20,0,20,14">
                 <StackPanel>
                   <DataGrid x:Name="ManualGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" SelectionChanged="ManualGrid_SelectionChanged" MinHeight="70" MaxHeight="175" Margin="0,8,0,0">

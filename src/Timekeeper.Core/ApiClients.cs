@@ -136,7 +136,7 @@ public sealed partial class TimecardApi : IDisposable
             var existing = await ReadExistingAsync(date, ct);
             days.Add(new DaySnapshot { Date = date, Entries = entries, Existing = existing });
         }
-        return new ReadSession { Settings = settings, Reference = reference, Days = days };
+        return new ReadSession { Settings = settings, Reference = reference, Days = days, LoadedSourceDates = days.Select(d => d.Date).ToList() };
     }
 
     public async Task<ReadSession> ReadEmailBaselineAsync(EmailWorkbook workbook, IProgress<string>? progress = null, CancellationToken ct = default)
@@ -154,7 +154,7 @@ public sealed partial class TimecardApi : IDisposable
             progress?.Report($"Reading existing Quickbase time for {date:yyyy-MM-dd}...");
             days.Add(new DaySnapshot { Date = date, Existing = await ReadExistingAsync(date, ct) });
         }
-        return new ReadSession { Settings = settings, Reference = reference, Days = days, EmailWorkbook = workbook };
+        return new ReadSession { Settings = settings, Reference = reference, Days = days, LoadedSourceDates = days.Select(d => d.Date).ToList(), EmailWorkbook = workbook };
     }
 
     internal Task<List<TimeEntry>> ReadEntriesAsync(DateOnly date, CancellationToken ct) => ReadEntriesRangeAsync(date, date, ct);

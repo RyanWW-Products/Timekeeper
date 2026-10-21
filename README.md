@@ -16,6 +16,8 @@ The installer is per user and includes an optional desktop shortcut and standard
 
 ## Daily workflow
 
+Version 0.11.0 puts **Work date** above separate Toggl / Quickbase and Email / Quickbase panels. Choose the date first, then use **Add timecard**, **Read selected date**, or **Import email Excel**. Manual preloads need only Quickbase, even if another date was previously loaded. Status lights identify source data loaded for the selected date; saved manual drafts on other dates remain pending. The email panel opens its own shared Copilot agent. See [release notes](docs/releases/0.11.0.md).
+
 Record time in Toggl, stop running timers, and choose **Read today's data** in Timekeeper. Drag the exported file into your Timekeeper agent in Microsoft 365 Copilot. Answer its matching questions, then return the proposal using drag and drop, **Open file**, or **Paste**. Review validated rows and choose **Write to Quickbase**. Keep the resulting history entry; it records confirmed and unresolved outcomes.
 
 The first release uses your browser for Microsoft 365 sign-in and chat. Embedded Microsoft 365 sign-in/chat is not implemented. File generation and attachment support depend on your tenant; JSON text can be pasted back into Timekeeper when Copilot cannot create a downloadable proposal.

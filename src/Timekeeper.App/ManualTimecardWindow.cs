@@ -14,6 +14,7 @@ internal sealed class ManualTimecardWindow : Window, INotifyPropertyChanged
 {
     private readonly TimecardApi? _api;
     private readonly ManualTimecard? _existing;
+    private readonly DateOnly? _initialDate;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly ComboBox _date = new();
     private readonly TextBox _hours = new() { MaxLength = 12 };
@@ -54,10 +55,10 @@ internal sealed class ManualTimecardWindow : Window, INotifyPropertyChanged
     }
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public ManualTimecardWindow(Window owner, ReadSession session, TimecardApi? api, ManualTimecard? existing = null, bool smoke = false)
+    public ManualTimecardWindow(Window owner, ReadSession session, TimecardApi? api, ManualTimecard? existing = null, bool smoke = false, DateOnly? initialDate = null)
     {
         if (!smoke) Owner = owner;
-        Session = session; _api = api; _existing = existing;
+        Session = session; _api = api; _existing = existing; _initialDate = existing?.Date ?? initialDate;
         _projectId = existing?.Project ?? session.Reference.InternalProject?.Id ?? 0;
         _assignmentId = existing?.Assignment;
         _billableOverride = existing is not null ? existing.BillableOverride : session.Reference.Billing?.CanOverride == true ? false : null;
@@ -74,10 +75,10 @@ internal sealed class ManualTimecardWindow : Window, INotifyPropertyChanged
         header.Children.Add(new TextBlock { Text = "TIMECARDS / MANUAL", Style = (Style)FindResource("SectionLabel") });
         var heading = new TextBlock { Text = existing is null ? "Add manual timecard" : "Edit manual timecard", FontSize = 29, Margin = new Thickness(0, 7, 0, 10) };
         heading.SetResourceReference(TextBlock.FontFamilyProperty, "DisplayFont"); header.Children.Add(heading);
-        header.Children.Add(new TextBlock { Text = "Add work that is missing from your imported time. This entry stays in your draft until you review and submit it.", TextWrapping = TextWrapping.Wrap }); root.Children.Add(header);
+        header.Children.Add(new TextBlock { Text = "Save work now, then append it to a Toggl read or email import later. Nothing is sent until you review and submit it.", TextWrapping = TextWrapping.Wrap }); root.Children.Add(header);
 
         var dates = session.Days.Select(day => day.Date).Distinct().Order().Select(date => new DateChoice(date)).ToList();
-        _date.ItemsSource = dates; _date.SelectedItem = existing is null ? dates.FirstOrDefault() : dates.FirstOrDefault(date => date.Date == existing.Date);
+        _date.ItemsSource = dates; _date.SelectedItem = _initialDate is DateOnly chosen ? dates.FirstOrDefault(date => date.Date == chosen) : dates.FirstOrDefault();
         _hours.Text = (existing?.Hours ?? .25m).ToString("0.00", CultureInfo.CurrentCulture);
         _description.Text = existing?.Description ?? "";
         var firstRow = new Grid(); firstRow.ColumnDefinitions.Add(new()); firstRow.ColumnDefinitions.Add(new() { Width = new GridLength(18) }); firstRow.ColumnDefinitions.Add(new());
@@ -271,6 +272,8 @@ internal sealed class ManualTimecardWindow : Window, INotifyPropertyChanged
                 throw new InvalidOperationException("Manual timecards must start with the configured internal mapping and permission-aware nonbillable default.");
             _description.Text = "Manual UI smoke test"; _hours.Text = ".25";
             if (!TryBuild(out var valid, out var failure) || valid is null || valid.Hours != .25m) throw new InvalidOperationException("Valid manual timecard was rejected: " + failure);
+            if (_initialDate.HasValue && valid.Date != _initialDate.Value)
+                throw new InvalidOperationException("Manual timecards must use the chosen workspace date even when older dates are loaded.");
             if (_existing is not null && (valid.Id != _existing.Id || valid.Project != _existing.Project || valid.Assignment != _existing.Assignment || valid.Task != _existing.Task || valid.BillableOverride != _existing.BillableOverride))
                 throw new InvalidOperationException("Editing a manual timecard must preserve its identity and mapping.");
             foreach (var badHours in new[] { "", "0", "-1", "24.01", "0.001", "abc", "1,000" })

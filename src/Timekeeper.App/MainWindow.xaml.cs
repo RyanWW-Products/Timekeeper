@@ -39,7 +39,8 @@ public partial class MainWindow : Window
         VersionText.Text=$"Timekeeper {UpdatesWindow.VersionLabel} · Windows";
         DateOnly today;
         try { today=_settings.Today(); } catch { today=DateOnly.FromDateTime(DateTime.Today); }
-        StartDate.SelectedDate=EndDate.SelectedDate=today.ToDateTime(TimeOnly.MinValue);
+        SetWorkspaceDates(today,today);
+        _workspaceReady=true;
         RefreshProfile();
         Appearance.Attach(this);
         Closing+=OnClosing;
@@ -50,11 +51,12 @@ public partial class MainWindow : Window
             var previous=_store.LoadLatestSession(_settings.ProfileKey);
             if(previous is not null && !previous.Demo && JsonSerializer.Serialize(previous.Settings,JsonDefaults.Options)==JsonSerializer.Serialize(_settings,JsonDefaults.Options))
             {
-                PresentSession(previous with { ManualTimecards=previous.ManualTimecards.Where(m=>_manualDrafts.Any(d=>d.Id==m.Id)).Select(m=>_manualDrafts.Single(d=>d.Id==m.Id)).ToList() });
+                PresentSession(previous with { ManualTimecards=previous.ManualTimecards.Where(m=>_manualDrafts.Any(d=>d.Id==m.Id)).Select(m=>_manualDrafts.Single(d=>d.Id==m.Id)).ToList() },adoptDates:true);
                 if(previous.ManualOnly && !_store.LoadReceipts(_settings.ProfileKey).Any(r=>r.SessionId==previous.SessionId)) RebuildManualReview();
                 StatusText.Text="Previous read restored. Read again if your time has changed; files expire after 24 hours.";
             }
         }
+        UpdateWorkspaceStatus();
     }
     private void RefreshProfile()
     {
@@ -114,6 +116,7 @@ public partial class MainWindow : Window
             &&selected.Rows.Any(r=>r.Status=="created"&&r.RecordId>0&&r.Row.Kind is "work" or "manual"&&(r.Row.SourceEntryIds.Count>0||r.Row.EmailEvidenceKeys.Count>0||r.Row.ManualEntryIds.Count>0)&&r.DeletionConfirmedAtUtc is null);
         WriteButton.IsEnabled=!_busy&&_session is { Demo:false }&&_proposal!=null&&_validation is { IsValid:true }&&_validation.Rows.Count>0&&(_validation.Warnings.Count==0||AcknowledgeWarnings.IsChecked==true)&&_reviewRows.All(r=>r.Row.BillableOverride is null||r.CanOverride);
         UpdateManualEnabled();
+        UpdateWorkspaceStatus();
     }
     private void ResetReview()
     {
@@ -127,11 +130,17 @@ public partial class MainWindow : Window
         CopilotRefreshNotice.Visibility=Visibility.Collapsed;
         _session=null; _exportPath=null; ResetReview(); TrackedMetric.Text=ExistingMetric.Text="—"; SourceDetails.Text="";
         ExportTitle.Text="Your file will appear here"; ExportDetail.Text="Start by reading your time above."; DemoBanner.Visibility=Visibility.Collapsed;
+        TrackedLabel.Text="Source time"; TargetMetric.Text=$"{_settings.TargetHours:0.00} h";
+        ReviewTitle.Text="No timecards loaded"; ValidationMessage.Text="Choose a date above, then read Toggl, import email or add a manual timecard.";
+        UpdateManualPanel();
     }
     private async void ReadToday_Click(object sender,RoutedEventArgs e)
     {
         if(_busy||!Configured()) return;
-        var today=_settings.Today(); StartDate.SelectedDate=EndDate.SelectedDate=today.ToDateTime(TimeOnly.MinValue);
+        var today=_settings.Today();
+        var changed=WorkspaceDates() is not [var only] || only!=today;
+        SetWorkspaceDates(today,today);
+        if(changed) ResetSource();
         await ReadAsync(today,today);
     }
     private async void ReadRange_Click(object sender,RoutedEventArgs e)
@@ -143,8 +152,9 @@ public partial class MainWindow : Window
     private async Task ReadAsync(DateOnly start,DateOnly end)
     {
         if(end<start||end.DayNumber-start.DayNumber>=31) { StatusText.Text="Choose a date range of 1 to 31 days."; return; }
-        var carry=ChooseManualCarry(); if(carry==ManualCarryChoice.Cancel) return;
-        var manual=CarryEntries(carry);
+        var pending=ManualDraftsForDates(Enumerable.Range(0,end.DayNumber-start.DayNumber+1).Select(start.AddDays));
+        var carry=ChooseManualCarry(pending); if(carry==ManualCarryChoice.Cancel) return;
+        var manual=CarryEntries(carry,pending);
         ShowDay_Click(this,new RoutedEventArgs());
         await RunAsync(async ct=>
         {
@@ -152,16 +162,16 @@ public partial class MainWindow : Window
             var progress=new Progress<string>(message=>StatusText.Text=message);
             var session=await api.ReadAsync(start,end,progress,ct);
             session=await api.PrepareManualEntriesAsync(session,manual,ct);
-            _store.SaveSession(session); SaveManualDrafts(session.ManualTimecards); PresentSession(session);
+            _store.SaveSession(session); SaveCarriedManualDrafts(pending,session.ManualTimecards); PresentSession(session);
             StatusText.Text=$"Read complete · {session.Days.Sum(d=>d.Entries.Count)} entries. Drag your file into your Copilot agent.";
         },true);
     }
-    private void PresentSession(ReadSession session)
+    private void PresentSession(ReadSession session,bool adoptDates=false)
     {
         CopilotRefreshNotice.Visibility=Visibility.Collapsed;
         _session=session; ResetReview();
         var start=session.Days.Min(d=>d.Date); var end=session.Days.Max(d=>d.Date);
-        StartDate.SelectedDate=start.ToDateTime(TimeOnly.MinValue); EndDate.SelectedDate=end.ToDateTime(TimeOnly.MinValue);
+        if(adoptDates) SetWorkspaceDates(start,end);
         if (session.ManualOnly)
         {
             _exportPath=null; ExportTitle.Text="Manual timecards";
@@ -203,7 +213,7 @@ public partial class MainWindow : Window
     private void LoadDemo()
     {
         if(_busy) return;
-        ShowDay_Click(this,new RoutedEventArgs()); var demo=DemoData.CreateSession(); PresentSession(demo);
+        ShowDay_Click(this,new RoutedEventArgs()); var demo=DemoData.CreateSession(); PresentSession(demo,adoptDates:true);
         AcceptProposal(JsonSerializer.Serialize(DemoData.CreateProposal(demo),JsonDefaults.Options));
         StatusText.Text="Sample day loaded · Try exporting or importing a proposal. Live writes are disabled.";
     }
@@ -298,8 +308,11 @@ public partial class MainWindow : Window
     private async Task ImportEmailAsync(string path)
     {
         if(_busy||!Configured()) return;
-        var carry=ChooseManualCarry(); if(carry==ManualCarryChoice.Cancel) return;
-        var manual=CarryEntries(carry);
+        var requestedDates=WorkspaceDates();
+        if(requestedDates.Length==0) { StatusText.Text="Choose a date or a range of 1 to 31 days before importing email."; return; }
+        var pending=ManualDraftsForDates(requestedDates);
+        var carry=ChooseManualCarry(pending); if(carry==ManualCarryChoice.Cancel) return;
+        var manual=CarryEntries(carry,pending);
         ShowDay_Click(this,new RoutedEventArgs());
         await RunAsync(async ct=>
         {
@@ -307,6 +320,7 @@ public partial class MainWindow : Window
             var workbook=EmailWorkbookReader.Read(path);
             var errors=EmailWorkbookReader.ValidateForReview(workbook,_settings);
             if(errors.Count>0) throw new InvalidDataException(string.Join("\n",errors));
+            CheckEmailWorkspaceDates(workbook,requestedDates);
             using var api=MakeApi();
             var session=await api.ReadEmailBaselineAsync(workbook,new Progress<string>(text=>StatusText.Text=text),ct);
             session=await api.PrepareManualEntriesAsync(session,manual,ct);
@@ -315,7 +329,7 @@ public partial class MainWindow : Window
             if(session.Days.Count>1)
             {
                 var outline=new ProposalEnvelope { SessionId=session.SessionId,EmployeeId=session.Settings.EmployeeId,Rows=workbook.Activities.Select(a=>new ProposalRow { Date=a.Date }).ToList() };
-                var dates=new ProposalDatesWindow(this,session,outline);
+                var dates=new ProposalDatesWindow(this,session,outline,requestedDates);
                 if(dates.ShowDialog()!=true) { StatusText.Text="Email import cancelled. Nothing was submitted."; return; }
                 importDates=dates.SelectedDates;
                 session=session with { Days=session.Days.Where(d=>dates.SelectedDates.Contains(d.Date)).ToList(),ManualTimecards=session.ManualTimecards.Where(m=>dates.SelectedDates.Contains(m.Date)).ToList() };
@@ -324,7 +338,9 @@ public partial class MainWindow : Window
             if(dialog.ShowDialog()!=true) { StatusText.Text="Email import cancelled. Nothing was submitted."; return; }
             var activeDates=session.Days.Select(d=>d.Date).ToHashSet();
             fullSession=fullSession with { Reference=dialog.Session.Reference,ManualTimecards=fullSession.ManualTimecards.Where(m=>!activeDates.Contains(m.Date)).Concat(dialog.Session.ManualTimecards).ToList() };
-            _store.SaveSession(fullSession); SaveManualDrafts(fullSession.ManualTimecards); PresentSession(fullSession);
+            var reviewedDates=importDates??session.Days.Select(d=>d.Date).ToArray();
+            _store.SaveSession(fullSession); SaveCarriedManualDrafts(pending,fullSession.ManualTimecards);
+            SetWorkspaceDates(reviewedDates.Min(),reviewedDates.Max()); PresentSession(fullSession);
             AcceptProposal("",(_,_)=>importDates,forceDateChoice:importDates is not null,emailProposal:dialog.Proposal,emailEdits:dialog.ReviewEdits);
             if(dialog.SubmitDirectly)
             {
@@ -395,6 +411,7 @@ public partial class MainWindow : Window
             _durationEdits=durationEdits?.ToList()??[];
             _validation=ReviewDurations.Apply(scope.Session,Rules.Validate(scope.Session,scope.Proposal,emailEdits:_emailEdits),_durationEdits);
             if(!_validation.IsValid) { ImportError(string.Join("\n",_validation.Errors)); return; }
+            if(_selectedDates is { Count:>0 }) SetWorkspaceDates(_selectedDates.Min(),_selectedDates.Max());
             if(CopilotRefreshNotice.Visibility==Visibility.Visible)
             {
                 CopilotRefreshNotice.Visibility=Visibility.Collapsed;
@@ -700,8 +717,7 @@ public partial class MainWindow : Window
             ResetSource();
             var history=_store.LoadReceipts(_settings.ProfileKey); HistoryGrid.ItemsSource=history;
             HistoryGrid.SelectedItem=history.Single(r=>r.SubmissionId==result.SubmissionId);
-            StartDate.SelectedDate=session.Days.Min(d=>d.Date).ToDateTime(TimeOnly.MinValue);
-            EndDate.SelectedDate=session.Days.Max(d=>d.Date).ToDateTime(TimeOnly.MinValue);
+            SetWorkspaceDates(session.Days.Min(d=>d.Date),session.Days.Max(d=>d.Date));
             StatusText.Text=session.ManualOnly?"Deletion confirmed. The recovered manual drafts are saved. Edit a draft to load fresh Quickbase data, then review and submit.":session.EmailWorkbook is null?"Deletion confirmed. Open Timecards, choose Read dates, and send the new export to Copilot to prepare replacement entries.":"Deletion confirmed. Open Timecards and import the email workbook again to prepare replacement entries with fresh Quickbase data.";
         });
     }

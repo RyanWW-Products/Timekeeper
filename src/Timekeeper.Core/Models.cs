@@ -20,6 +20,7 @@ public static class JsonDefaults
 public sealed record AppSettings
 {
     public const string SharedCopilotUrl = "https://m365.cloud.microsoft/chat/?titleId=T_b313a74c-f0a1-7381-7c08-0d5992e75a3f&source=embedded-builder";
+    public const string SharedEmailCopilotUrl = "https://m365.cloud.microsoft/chat/?titleId=T_25bb8860-f901-f22e-1753-e0f546ad321e&source=embedded-builder";
     public string Realm { get; init; } = "trialexhibits.quickbase.com";
     public string Email { get; init; } = "";
     public string EmployeeId { get; init; } = "";
@@ -86,6 +87,9 @@ public sealed record ReadSession
     public AppSettings Settings { get; init; } = new();
     public ReferenceData Reference { get; init; } = new();
     public List<DaySnapshot> Days { get; init; } = [];
+    // Dates covered by the original Toggl read or email workbook, excluding later manual-only dates.
+    // Older sessions have no confirmed source coverage; do not infer it from their expanded Days list.
+    public List<DateOnly> LoadedSourceDates { get; init; } = [];
     public bool Demo { get; init; }
     public bool ManualOnly { get; init; }
     public List<ManualTimecard> ManualTimecards { get; init; } = [];

@@ -32,7 +32,7 @@ Use your own user token for each person's installation. The shared Copilot agent
 ## Record and read your time
 
 1. Record your work in Toggl and stop any running timer when the day is complete.
-2. Choose **Read today's data**, or select the intended date range and choose **Read dates**. “Today” follows your configured timezone.
+2. Choose **Work date** above the two import panels, then **Read selected date** in Toggl / Quickbase. Expand **More than one day** for a range. **Read today's data** uses your configured timezone.
 3. Check the dates and summary. Resolve any running timer or incomplete-read message before continuing.
 4. Drag the large export file in the middle of Timekeeper into your agent's Microsoft 365 Copilot chat. If the browser does not accept the drag, choose **Save file** in Timekeeper and use the browser's attachment picker to select that saved file.
 
@@ -48,11 +48,17 @@ Timekeeper checks the file against the retained read session. A validation error
 
 If you read several dates but asked Copilot to prepare only one, version 0.4.3 or later asks **Which dates do you want to submit?** on import. Leave just the intended date checked and choose **Continue with selected dates**. You can also select all dates; the proposal must then account for every source on all those dates. Cancelling clears the proposed submission. The review identifies the included and excluded dates, and **Change dates** lets you revise the selection before writing. Totals, automatic additions and Quickbase checks apply only to the selected dates. Excluded days receive no new rows and do not need invented `already_recorded` links. A receipt records your date selection; read again before preparing another submission from the original range.
 
+## Choose a date and source
+
+Version 0.11.0 uses a shared **Work date** for both import panels and manual preloads. Changing it clears the active source and review, keeping saved manual drafts. Green means source data is loaded for the selected date; gray means it is not, and amber indicates partial or expired coverage. Manual-only Quickbase lookups do not light either source indicator. Append/delete choices affect drafts on the selected dates; other drafts stay saved.
+
+Use **Open email Copilot agent** on the right to open the team's separate email agent. Choose the workbook's date before importing. A workbook with no matching activities is rejected without changing its dates.
+
 ## Add work manually
 
 Version 0.10.0 adds **Add timecard** to the dashboard and the **Review email activities** window. Use it for work missing from Toggl or the email workbook. You can also start directly from the dashboard with only Quickbase configured: select the intended start date and choose **Add timecard**. Timekeeper reads Quickbase reference data and existing time for that day; no Toggl read or Copilot proposal is needed for a manual-only review.
 
-Choose a loaded date, enter exact decimal hours and a description, then check the project, assignment, task and billing. **0.25 h** is 15 minutes. New entries start with your configured internal project/task and no assignment. Use lookup to choose an assignment or **Direct to project**, and search tasks by name or ID. A new entry selects nonbillable only when your account can apply a billing override. Otherwise it uses the real Quickbase default; **Default unavailable** is not a promise that the row will be nonbillable.
+On the dashboard, choose the work date first, then **Add timecard** beside it. The entry starts on that date even after an older read. In email review, choose one of the included dates. Enter exact decimal hours and a description, then check the project, assignment, task and billing. **0.25 h** is 15 minutes. New entries start with your configured internal project/task and no assignment. Use lookup to choose an assignment or **Direct to project**, and search tasks by name or ID. A new entry selects nonbillable only when your account can apply a billing override. Otherwise it uses the real Quickbase default; **Default unavailable** is not a promise that the row will be nonbillable.
 
 Saved manual entries have their own table on the dashboard and in email review. Use **Edit** to change an entry or **Delete** to remove it; deletion asks for confirmation and only removes the local draft, not Quickbase records or imported work. Changes reset review approval. Manual hours are exact and enter the total before automatic additions are calculated. A manual-only review has Timecards and weekday fill off. Appending manual work to Toggl or email uses that workflow's policy, so manual hours reduce any remaining fill.
 

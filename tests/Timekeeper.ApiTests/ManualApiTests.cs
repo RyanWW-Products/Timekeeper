@@ -11,6 +11,7 @@ static class ManualApiTests
             using var api = new TimecardApi(f.Settings, new("", "test-qb"), new HttpClient(f.Server));
             var service = new SubmissionService(api, f.Store);
             var session = await api.ReadManualBaselineAsync(Fixture.Day, Fixture.Day); var manual = Entry();
+            Equal(0, session.LoadedSourceDates.Count);
             session = session with { ManualTimecards = [manual] }; var proposal = Envelope(session); var validation = Rules.Validate(session, proposal); Valid(validation);
             Equal(1, validation.Rows.Count); Equal(.25m, validation.Rows.Single().Hours);
             await Throws<InvalidOperationException>(() => service.SubmitAsync(session, proposal, validation.Rows)); Equal(0, f.Server.WriteCount);
@@ -67,9 +68,49 @@ static class ManualApiTests
             f.Server.ProjectRowsById[321] = [FakeApi.Row((3, 321), (6, "Carried case"))];
             var prepared = await f.Api.PrepareManualEntriesAsync(session, [manual]);
             Equal(session.SessionId, prepared.SessionId); Equal(session.GeneratedAtUtc, prepared.GeneratedAtUtc); Equal(2, prepared.Days.Count);
+            Equal(0, prepared.LoadedSourceDates.Count);
             Equal(0, session.ManualTimecards.Count); Equal(1, session.Days.Count); Equal("Carried case", prepared.Reference.Projects.Single(p => p.Id == 321).Name);
             Valid(Rules.Validate(prepared, Envelope(prepared))); Equal(0, f.Server.EntryQueries);
             f.Server.ProjectRowsById[321] = []; await Throws<InvalidOperationException>(() => f.Api.PrepareManualEntriesAsync(session, [manual]));
+        });
+        await check("Toggl coverage includes empty read dates but excludes carried manual dates after save and restore", async () =>
+        {
+            using var f = new Fixture(); f.Server.FilterExistingDates = true;
+            var session = await f.Api.ReadAsync(Fixture.Day, Fixture.Day.AddDays(1));
+            Require(session.LoadedSourceDates.SequenceEqual(new[] { Fixture.Day, Fixture.Day.AddDays(1) }));
+            Equal(0, session.Days.Single(d => d.Date == Fixture.Day.AddDays(1)).Entries.Count);
+            var prepared = await f.Api.PrepareManualEntriesAsync(session, [Entry() with { Date = Fixture.Day.AddDays(2) }]);
+            Equal(3, prepared.Days.Count); Require(prepared.LoadedSourceDates.SequenceEqual(session.LoadedSourceDates));
+            f.Store.SaveSession(prepared);
+            var restored = f.Store.LoadSession(prepared.SessionId)!;
+            Require(restored.LoadedSourceDates.SequenceEqual(session.LoadedSourceDates)); Equal(3, restored.Days.Count);
+            Equal(0, f.Server.WriteCount);
+        });
+        await check("email coverage follows the workbook period without Toggl or unrelated carried dates", async () =>
+        {
+            using var f = new Fixture(); f.Server.WrongToggl = true; f.Server.FilterExistingDates = true;
+            using var api = new TimecardApi(f.Settings, new("", "test-qb"), new HttpClient(f.Server));
+            var workbook = new EmailWorkbook
+            {
+                Metadata = new() { EmployeeEmail = f.Settings.Email, TimeZone = f.Settings.TimeZoneId, EmployeeConfirmed = true,
+                    PeriodStart = Fixture.Day, PeriodEnd = Fixture.Day.AddDays(1), GeneratedAtUtc = DateTimeOffset.UtcNow },
+                Activities = [new() { ActivityId = "source-day", Date = Fixture.Day, Minutes = 15, Description = "Email case research",
+                    TimeBasis = "employee_confirmed_estimate", EvidenceIds = ["immutable-source-message"] }]
+            };
+            var session = await api.ReadEmailBaselineAsync(workbook);
+            Require(session.LoadedSourceDates.SequenceEqual(new[] { Fixture.Day, Fixture.Day.AddDays(1) }));
+            var prepared = await api.PrepareManualEntriesAsync(session, [Entry() with { Date = Fixture.Day.AddDays(2) }]);
+            Require(prepared.LoadedSourceDates.SequenceEqual(session.LoadedSourceDates)); Equal(3, prepared.Days.Count);
+            Require(ReferenceEquals(workbook, prepared.EmailWorkbook));
+            Equal(0, f.Server.EntryQueries); Equal(0, f.Server.CurrentQueries); Equal(0, f.Server.WriteCount);
+        });
+        await check("older saved sessions remain readable without inventing source coverage", async () =>
+        {
+            using var f = new Fixture(); var session = await f.Read();
+            var saved = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(session, JsonDefaults.Options))!;
+            Require(saved.AsObject().Remove("loaded_source_dates"));
+            var restored = JsonSerializer.Deserialize<ReadSession>(saved.ToJsonString(), JsonDefaults.Options)!;
+            Equal(session.SessionId, restored.SessionId); Equal(1, restored.Days.Count); Equal(0, restored.LoadedSourceDates.Count);
         });
         await check("manual carry rejects unrelated accounts excessive date spans and outside-range Toggl work", async () =>
         {
