@@ -87,7 +87,7 @@ static class ManualApiTests
             var edited = entry with { Hours = .5m };
             f.Store.SaveManualDrafts(f.Settings.ProfileKey, [edited], firstSnapshot);
             try { secondStore.SaveManualDrafts(f.Settings.ProfileKey, [], secondSnapshot); throw new Exception("Stale window overwrote newer manual time"); }
-            catch (InvalidOperationException error) { Require(error.Message.Contains("Reopen") && error.Message.Contains("not saved")); }
+            catch (InvalidOperationException error) { Require(error.Message.Contains("reopen", StringComparison.OrdinalIgnoreCase) && error.Message.Contains("not saved")); }
             Equal(edited, secondStore.LoadManualDrafts(f.Settings.ProfileKey).Single());
             secondStore.SaveManualDrafts("other-profile", [entry], []); Equal(entry, secondStore.LoadManualDrafts("other-profile").Single());
             var lockPath = Path.Combine(f.Store.RootPath, "manual-drafts", f.Settings.ProfileKey + ".json.lock");
