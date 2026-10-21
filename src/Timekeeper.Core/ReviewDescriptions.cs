@@ -31,6 +31,11 @@ public static class ReviewDescriptions
             var (row, index) = matches[0];
             var description = edit.Description.Trim();
             if (description == row.Description) continue;
+            if (row.Kind is not ("work" or "manual"))
+            {
+                result.Errors.Add("Generated Timecards and Misc internal labels cannot be renamed. Edit an activity or manual timecard description instead.");
+                continue;
+            }
             result.Rows[index] = row with { Description = description };
             result.Warnings.Add($"{row.Date:yyyy-MM-dd}: activity description changed in review. Confirm the updated text before submitting.");
         }

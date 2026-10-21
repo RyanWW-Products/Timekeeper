@@ -5,6 +5,19 @@ static class ReviewDescriptionApiTests
 {
     public static async Task Run(Func<string, Func<Task>, Task> check)
     {
+        await check("generated description edits are rejected before creating a receipt or Quickbase row", async () =>
+        {
+            using var f = new Fixture(); var session = await f.Read(); var proposal = f.Proposal(session);
+            var baseline = Rules.Validate(session, proposal); Require(baseline.IsValid);
+            var generated = baseline.Rows.Where(r => r.Kind is "timecards" or "misc_internal").ToList(); Equal(2, generated.Count);
+            foreach (var row in generated)
+            {
+                var edit = new ReviewDescription(ReviewDurations.Key(row), row.Description, "Renamed generated activity");
+                var changedPreview = baseline.Rows.Select(r => r.RowId == row.RowId ? r with { Description = edit.Description } : r).ToList();
+                await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(session, proposal, changedPreview, warningsAcknowledged: true, descriptionEdits: [edit]));
+            }
+            Equal(0, f.Server.WriteCount); Equal(0, f.Store.LoadReceipts().Count);
+        });
         await check("description submission rejects unreviewed stale and invalid edits before any write", async () =>
         {
             using var f = new Fixture(); var session = await f.Read(); var proposal = f.Proposal(session);

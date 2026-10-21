@@ -107,7 +107,7 @@ public partial class MainWindow : Window
         ReviewGrid.IsEnabled=!_busy;
         SaveExportButton.IsEnabled=!_busy&&_exportPath!=null;
         RowDetailsButton.IsEnabled=!_busy&&_validation is { IsValid:true }&&_validation.Rows.Count>0;
-        EditDescriptionButton.IsEnabled=RowDetailsButton.IsEnabled;
+        EditDescriptionButton.IsEnabled=RowDetailsButton.IsEnabled&&ReviewGrid.SelectedItem is ReviewRow { CanEditDescription:true };
         RefreshBillingButton.IsEnabled=!_busy&&_session is { Demo:false }&&_validation is { IsValid:true }&&_validation.Rows.Count>0;
         ChangeProposalDatesButton.IsEnabled=!_busy&&_proposal is not null;
         ExportCard.Cursor=!_busy&&_exportPath!=null?Cursors.Hand:Cursors.Arrow;

@@ -33,7 +33,7 @@ static class ReviewDescriptionTests
             var duplicateRows = baseline with { Rows = [row, row with { RowId = "other" }] };
             Reject(ReviewDescriptions.Apply(session, duplicateRows, [new(key, row.Description, "New activity")]), "original timecard");
         });
-        test("description edits support exact limit no-op and automatic rows without changing totals", () =>
+        test("description edits support exact limit and no-op but preserve generated labels", () =>
         {
             var session = DemoData.CreateSession(); var baseline = Rules.Validate(session, DemoData.CreateProposal(session));
             var row = baseline.Rows.First();
@@ -41,11 +41,15 @@ static class ReviewDescriptionTests
             Equal(4000, edited.Rows.First().Description.Length); Equal(baseline.Rows.Sum(r => r.Hours), edited.Rows.Sum(r => r.Hours));
             var unchanged = ReviewDescriptions.Apply(session, baseline, [new(ReviewDurations.Key(row), row.Description, row.Description)]); Valid(unchanged);
             Equal(baseline.Warnings.Count, unchanged.Warnings.Count);
-            foreach (var automatic in baseline.Rows.Where(r => r.Kind != "work"))
+            foreach (var (kind, description) in new[] { ("timecards", "Timecards"), ("misc_internal", "Misc internal") })
             {
-                var automaticEdit = ReviewDescriptions.Apply(session, baseline, [new(ReviewDurations.Key(automatic), automatic.Description, "Reviewed internal activity")]); Valid(automaticEdit);
-                Equal("Reviewed internal activity", automaticEdit.Rows.Single(r => r.Kind == automatic.Kind && r.Date == automatic.Date).Description);
-                Equal(baseline.Rows.Sum(r => r.Hours), automaticEdit.Rows.Sum(r => r.Hours));
+                var automatic = row with { Kind = kind, Description = description, SourceEntryIds = [], Hours = .17m };
+                var generated = baseline with { Rows = [automatic] };
+                var automaticEdit = ReviewDescriptions.Apply(session, generated, [new(ReviewDurations.Key(automatic), automatic.Description, "Reviewed internal activity")]);
+                Reject(automaticEdit, "Generated Timecards and Misc internal labels cannot be renamed");
+                Equal(description, automaticEdit.Rows.Single().Description); Equal(.17m, automaticEdit.Rows.Single().Hours);
+                var noOp = ReviewDescriptions.Apply(session, generated, [new(ReviewDurations.Key(automatic), automatic.Description, automatic.Description)]); Valid(noOp);
+                Equal(generated.Warnings.Count, noOp.Warnings.Count); Equal(description, noOp.Rows.Single().Description);
             }
         });
         test("description overlays keep deduplicated manual aliases included once", () =>

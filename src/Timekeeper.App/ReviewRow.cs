@@ -14,6 +14,9 @@ internal sealed class ReviewRow(VerifiedRow row, bool canOverride, Action change
     public string TaskName => Row.TaskName;
     public string CategoryName => Row.CategoryName;
     public string Description => Row.Description;
+    public bool CanEditDescription => Row.Kind is "work" or "manual";
+    public string DescriptionHint => CanEditDescription ? "Double-click or press F2 to edit this description before submitting."
+        : "Generated Timecards and Misc internal labels stay fixed so later reads can recognize automatic additions.";
     public bool CanOverride { get; } = canOverride;
     public bool HasUnavailableOverride => !CanOverride && Row.BillableOverride.HasValue;
     public string DurationHint => Row.OriginalHours is decimal original ? $"Edited from {original:0.00} h. Double-click to edit again." : "Double-click to edit hours. Single-clicking does not change them.";

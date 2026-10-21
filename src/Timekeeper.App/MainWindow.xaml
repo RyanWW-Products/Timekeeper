@@ -208,7 +208,7 @@
               <Border x:Name="ProposalDatesPanel" Visibility="Collapsed" Background="{DynamicResource AccentSoft}" CornerRadius="6" Padding="12" Margin="20,0,20,14">
                 <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="ProposalDatesText" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,12,0"/><Button x:Name="ChangeProposalDatesButton" Grid.Column="1" Content="Change dates" Click="ChangeProposalDates_Click"/></Grid>
               </Border>
-              <DataGrid x:Name="ReviewGrid" FrozenColumnCount="2" MinHeight="100" MaxHeight="320" Visibility="Collapsed" ScrollViewer.HorizontalScrollBarVisibility="Auto" MouseDoubleClick="RowDetails_Click" ToolTip="Double-click a row to inspect its full description and field IDs.">
+              <DataGrid x:Name="ReviewGrid" FrozenColumnCount="2" MinHeight="100" MaxHeight="320" Visibility="Collapsed" ScrollViewer.HorizontalScrollBarVisibility="Auto" MouseDoubleClick="RowDetails_Click" SelectionChanged="ReviewSelection_Changed" ToolTip="Double-click a row to inspect its full description and field IDs.">
                 <DataGrid.Columns>
                   <DataGridTextColumn Header="Date" Binding="{Binding Date, StringFormat=yyyy-MM-dd}" ElementStyle="{StaticResource TableText}" Width="110" MinWidth="110"/>
                   <DataGridTemplateColumn Header="Hours" Width="88" MinWidth="88">
@@ -246,7 +246,7 @@
                   <DataGridTemplateColumn Header="Description" Width="*" MinWidth="230">
                     <DataGridTemplateColumn.CellStyle><Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}"><Setter Property="Padding" Value="4,2"/></Style></DataGridTemplateColumn.CellStyle>
                     <DataGridTemplateColumn.CellTemplate><DataTemplate>
-                      <TextBox Text="{Binding Description, Mode=OneWay}" IsReadOnly="True" IsReadOnlyCaretVisible="False" TextWrapping="Wrap" MaxHeight="58" Padding="7,4" Margin="2" ToolTip="Double-click or press F2 to edit this description before submitting." PreviewMouseDoubleClick="Description_DoubleClick" PreviewKeyDown="Description_KeyDown" AutomationProperties.Name="Activity description. Double-click or press F2 to edit."/>
+                      <TextBox Text="{Binding Description, Mode=OneWay}" IsReadOnly="True" IsEnabled="{Binding CanEditDescription}" ToolTipService.ShowOnDisabled="True" IsReadOnlyCaretVisible="False" TextWrapping="Wrap" MaxHeight="58" Padding="7,4" Margin="2" ToolTip="{Binding DescriptionHint}" PreviewMouseDoubleClick="Description_DoubleClick" PreviewKeyDown="Description_KeyDown" AutomationProperties.Name="Activity description. Double-click or press F2 to edit."/>
                     </DataTemplate></DataGridTemplateColumn.CellTemplate>
                   </DataGridTemplateColumn>
                 </DataGrid.Columns>

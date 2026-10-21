@@ -25,9 +25,14 @@ public partial class MainWindow
     {
         if(ReviewGrid.SelectedItem is ReviewRow row) EditDescription(row);
     }
+    private void ReviewSelection_Changed(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if(EditDescriptionButton is not null)
+            EditDescriptionButton.IsEnabled=!_busy && _validation is { IsValid:true } && ReviewGrid.SelectedItem is ReviewRow { CanEditDescription:true };
+    }
     private void EditDescription(ReviewRow row)
     {
-        if(_busy || _session is null || _proposal is null || _validation is not { IsValid:true }) return;
+        if(_busy || !row.CanEditDescription || _session is null || _proposal is null || _validation is not { IsValid:true }) return;
         var key=ReviewDurations.Key(row.Row);
         var original=_descriptionEdits.FirstOrDefault(d=>d.RowKey==key)?.OriginalDescription;
         var dialog=new DescriptionEditWindow(this,row.Description,original);
@@ -119,9 +124,9 @@ public partial class MainWindow
         ApplyDuration(edited,edited.Hours+.25m);
         if(_reviewRows.Single(r=>ReviewDurations.Key(r.Row)==key).Description!=edited.Description)
             throw new InvalidOperationException("Hours editing discarded the description.");
-        var automatic=_reviewRows.First(r=>r.Row.Kind=="timecards"); var hours=_reviewRows.Sum(r=>r.Hours);
-        ApplyDescription(automatic,"Prepared daily time entries.");
-        if(_reviewRows.Sum(r=>r.Hours)!=hours) throw new InvalidOperationException("Renaming automatic time changed calculated hours.");
+        var automatic=_reviewRows.First(r=>r.Row.Kind=="timecards");
+        ReviewGrid.SelectedItem=automatic;
+        if(automatic.CanEditDescription || EditDescriptionButton.IsEnabled) throw new InvalidOperationException("Automatic labels must stay fixed for later reads.");
         ApplyDescription(_reviewRows.Single(r=>ReviewDurations.Key(r.Row)==key),original);
         if(_descriptionEdits.Any(e=>e.RowKey==key)) throw new InvalidOperationException("Restoring original description retained an unnecessary edit.");
         if(source!=JsonSerializer.Serialize(session,JsonDefaults.Options) || originalProposal!=JsonSerializer.Serialize(proposal,JsonDefaults.Options))
