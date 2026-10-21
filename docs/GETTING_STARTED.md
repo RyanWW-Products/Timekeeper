@@ -50,6 +50,8 @@ If you read several dates but asked Copilot to prepare only one, version 0.4.3 o
 
 ## Choose a date and source
 
+Before submitting, you can edit activity descriptions in email review or the dashboard. Double-click the description, focus it and press **F2**, or select its row and choose **Edit description**. Enter up to 4,000 characters, then choose **Save description**. **Cancel** leaves the text unchanged. **Use original** is available for imported activities and existing dashboard edits. Check the preview and confirm the review again after changes. Already-recorded Quickbase links cannot be edited here.
+
 Version 0.11.0 uses a shared **Work date** for both import panels and manual preloads. Changing it clears the active source and review, keeping saved manual drafts. Green means source data is loaded for the selected date; gray means it is not, and amber indicates partial or expired coverage. Manual-only Quickbase lookups do not light either source indicator. Append/delete choices affect drafts on the selected dates; other drafts stay saved.
 
 Use **Open email Copilot agent** on the right to open the team's separate email agent. Choose the workbook's date before importing. A workbook with no matching activities is rejected without changing its dates.

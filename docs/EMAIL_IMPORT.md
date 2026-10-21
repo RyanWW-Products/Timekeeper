@@ -26,6 +26,8 @@ Word remains your supporting review file, and approval in M365 is still required
 
 ## Add work missing from the workbook
 
+To change an imported activity's wording, double-click its **Activity** field, press **F2**, or select it and choose **Edit description**. The editor supports multiline text up to 4,000 characters. Save to update the proposal and submission preview; cancel to keep the existing text. **Use original** restores the workbook description. Saving clears the final confirmation. Original workbook/evidence remain unchanged, and known matching manual entries stay counted once. Descriptions linked to existing Quickbase records are read-only. You can also edit descriptions later in the dashboard.
+
 **Add timecard** opens the same editor available on the Timekeeper dashboard. Choose one of the loaded dates, exact decimal hours, a description and a verified project/assignment/task. New entries start with the configured internal project and task. They select nonbillable only if your Quickbase account permits that override; otherwise check the actual Quickbase default. A gray **Default unavailable** status does not establish nonbillable status. Lookup supports assignments or **Direct to project**, and task choices can be searched by name or ID.
 
 Manual entries remain separate from email activities, and their exact hours count before weekday fill. The preview includes both. **Edit** preserves the entry's identity; **Delete** asks for confirmation and removes only the pending local entry. Either action clears review approval. Mapping changes and **Refresh billing** preserve manual entries. The original workbook and the agent's proposal are unchanged.

@@ -5,6 +5,8 @@ using System.Windows.Data;
 using System.Windows.Media;
 using System.Windows.Input;
 using System.Globalization;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Timekeeper.Core;
 using ValidationResult = Timekeeper.Core.ValidationResult;
 
@@ -37,10 +39,12 @@ internal sealed class EmailImportWindow : Window
     private readonly TextBlock _warnings = new() { TextWrapping = TextWrapping.Wrap, FontSize = 12 };
     private readonly CheckBox _approve = new() { Content = new TextBlock { Text = "I reviewed the timecards, hours, billing and warnings, and checked for existing time.", TextWrapping = TextWrapping.Wrap }, Margin = new Thickness(0, 10, 0, 6) };
     private ValidationResult? _review;
+    private ValidationResult? _lastValidReview;
     private bool _finding;
     private bool _closed;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Button _details = new() { Content = "View selected activity", HorizontalAlignment = HorizontalAlignment.Left };
+    private readonly Button _editDescription = new() { Content = "Edit description", Margin = new Thickness(10, 0, 0, 0) };
     private readonly Button _refreshBilling = new() { Content = "Refresh billing", Margin = new Thickness(10, 0, 0, 0) };
     private readonly Button _addManual = new() { Content = "+ Add timecard", Padding = new Thickness(12, 6, 12, 6), FontSize = 12 };
     private readonly TextBlock _manualTitle = new() { Text = "Added timecards", FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
@@ -80,7 +84,7 @@ internal sealed class EmailImportWindow : Window
         header.Children.Add(new TextBlock { Text = "EMAIL / QUICKBASE", Style = (Style)FindResource("SectionLabel") });
         var title = new TextBlock { Text = "Review email activities", FontSize = 30, Margin = new Thickness(0, 7, 0, 8) };
         title.SetResourceReference(TextBlock.FontFamilyProperty, "DisplayFont"); header.Children.Add(title);
-        header.Children.Add(new TextBlock { Text = "Check suggested matches. Double-click hours to edit (0.25 h = 15 minutes). Billing keeps the same assignment and task. Review the submission preview for grouped hours and additions.", TextWrapping = TextWrapping.Wrap });
+        header.Children.Add(new TextBlock { Text = "Check suggested matches. Double-click hours or an activity description to edit (0.25 h = 15 minutes). Review the submission preview for grouped hours and additions.", TextWrapping = TextWrapping.Wrap });
         var account = new TextBlock { Text = $"{session.EmailWorkbook.Metadata.EmployeeEmail} · {session.EmailWorkbook.Metadata.TimeZone}", FontSize = 12, Margin = new Thickness(0, 8, 0, 0) };
         account.SetResourceReference(TextBlock.ForegroundProperty, "Muted"); header.Children.Add(account); outer.Children.Add(header);
 
@@ -101,8 +105,16 @@ internal sealed class EmailImportWindow : Window
         var activity = new FrameworkElementFactory(typeof(StackPanel));
         var matter = Text(nameof(EmailMappingRow.MatterSummary), bold: true, lines: 1);
         matter.SetBinding(FrameworkElement.ToolTipProperty, new Binding("Activity.MatterHint")); activity.AppendChild(matter);
-        var description = Text(nameof(EmailMappingRow.ActivitySummary), lines: 2);
-        description.SetBinding(FrameworkElement.ToolTipProperty, new Binding("Activity.Description")); activity.AppendChild(description);
+        var description = new FrameworkElementFactory(typeof(TextBox));
+        description.SetBinding(TextBox.TextProperty, new Binding(nameof(EmailMappingRow.ActivitySummary)) { Mode = BindingMode.OneWay });
+        description.SetBinding(FrameworkElement.ToolTipProperty, new Binding(nameof(EmailMappingRow.DescriptionHint)));
+        description.SetBinding(UIElement.IsEnabledProperty, new Binding(nameof(EmailMappingRow.CanEditNew)));
+        description.SetValue(ToolTipService.ShowOnDisabledProperty, true);
+        description.SetValue(TextBox.IsReadOnlyProperty, true); description.SetValue(TextBox.TextWrappingProperty, TextWrapping.Wrap);
+        description.SetValue(Control.PaddingProperty, new Thickness(6)); description.SetValue(FrameworkElement.MaxHeightProperty, 60d);
+        description.SetValue(AutomationProperties.NameProperty, "Activity description; double-click or F2 to edit");
+        description.AddHandler(Control.MouseDoubleClickEvent, new MouseButtonEventHandler(Description_DoubleClick));
+        description.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(Description_KeyDown)); activity.AppendChild(description);
         _activities.Columns.Add(new DataGridTemplateColumn { Header = "Activity", Width = new DataGridLength(1.15, DataGridLengthUnitType.Star), MinWidth = 180, CellTemplate = new DataTemplate { VisualTree = activity } });
         var assignment = new FrameworkElementFactory(typeof(StackPanel));
         assignment.AppendChild(Choice(nameof(EmailMappingRow.AssignmentChoices), nameof(EmailMappingRow.AssignmentSelection), "Assignment and project", true));
@@ -133,7 +145,7 @@ internal sealed class EmailImportWindow : Window
             for (var i = 0; i < minimum.Length; i++) _activities.Columns[i].Width = minimum[i] + extra * weights[i];
         };
         _activities.ItemsSource = _mappings;
-        _activities.SelectionChanged += (_, _) => _details.IsEnabled = _activities.SelectedItem is EmailMappingRow;
+        _activities.SelectionChanged += (_, _) => UpdateDescriptionAction();
         _activityBody.RowDefinitions.Add(new()); _activityBody.RowDefinitions.Add(new() { Height = GridLength.Auto });
         _activityBody.Children.Add(_activities);
         var manualSection = CreateManualSection(); Grid.SetRow(manualSection, 1); _activityBody.Children.Add(manualSection);
@@ -154,6 +166,7 @@ internal sealed class EmailImportWindow : Window
         var policyPanel = new WrapPanel { Margin = new Thickness(0, 10, 0, 4), VerticalAlignment = VerticalAlignment.Center };
         policyPanel.Children.Add(_fill); policyPanel.Children.Add(_target); policyPanel.Children.Add(new TextBlock { Text = "hours", VerticalAlignment = VerticalAlignment.Center }); policyPanel.Children.Add(_timecards);
         _details.Margin = new Thickness(22, 0, 0, 0); _details.Click += (_, _) => ShowDetails(); policyPanel.Children.Add(_details); footer.Children.Add(policyPanel);
+        _editDescription.Click += (_, _) => { if (_activities.SelectedItem is EmailMappingRow row) EditDescription(row); }; policyPanel.Children.Add(_editDescription);
         _refreshBilling.Click += async (_, _) => await RefreshBillingAsync(); policyPanel.Children.Add(_refreshBilling);
         foreach (var box in new[] { _fill, _timecards }) { box.Checked += (_, _) => Update(); box.Unchecked += (_, _) => Update(); }
         _target.TextChanged += (_, _) => Update();
@@ -342,8 +355,33 @@ internal sealed class EmailImportWindow : Window
     private void EditHours(EmailMappingRow row)
     {
         if (!row.CanEditNew || _finding) return;
-        var dialog = new DurationEditWindow(this, new VerifiedRow { Date = row.Activity.Date, Hours = row.Hours, Description = row.Activity.Description, TaskName = row.TaskSelection?.Label ?? row.Activity.TaskHint }, emailActivity: true);
+        var dialog = new DurationEditWindow(this, new VerifiedRow { Date = row.Activity.Date, Hours = row.Hours, Description = row.Description, TaskName = row.TaskSelection?.Label ?? row.Activity.TaskHint }, emailActivity: true);
         if (dialog.ShowDialog() == true) row.SetHours(dialog.ResetRequested ? null : dialog.Hours);
+    }
+    private void Description_DoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true; if (sender is FrameworkElement { DataContext: EmailMappingRow row }) EditDescription(row);
+    }
+    private void Description_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.F2) return; e.Handled = true; if (sender is FrameworkElement { DataContext: EmailMappingRow row }) EditDescription(row);
+    }
+    private void EditDescription(EmailMappingRow row)
+    {
+        if (!row.CanEditNew || _finding) return;
+        _activities.SelectedItem = row;
+        var dialog = new DescriptionEditWindow(this, row.Description, row.Activity.Description);
+        if (dialog.ShowDialog() == true) row.SetDescription(dialog.Description);
+    }
+    private void UpdateDescriptionAction()
+    {
+        var selected = _activities.SelectedItem as EmailMappingRow;
+        _details.IsEnabled = selected is not null;
+        _editDescription.IsEnabled = !_finding && selected?.CanEditNew == true;
+        _editDescription.ToolTip = selected?.Existing is not null
+            ? "This activity is linked to an existing Quickbase record. Its description will not be sent or changed."
+            : "Edit the selected activity's description before submitting to Quickbase.";
+        ToolTipService.SetShowOnDisabled(_editDescription, true);
     }
     private EmailReviewEdits BuildEdits(decimal target) => new()
     {
@@ -353,7 +391,9 @@ internal sealed class EmailImportWindow : Window
     private void Update()
     {
         if (_mappings is null) return;
+        var previousReview = _review is { IsValid: true } ? _review : _lastValidReview;
         _approve.IsChecked = false;
+        UpdateDescriptionAction();
         _target.IsEnabled = _fill.IsChecked == true;
         _addManual.IsEnabled = _manualRows.IsEnabled = !_finding;
         var count = _mappings.Count(m => m.IsResolved);
@@ -362,7 +402,11 @@ internal sealed class EmailImportWindow : Window
         _review = null;
         if (_mappings.Count > 0 && count == _mappings.Count && validTarget)
         {
-            ReviewEdits = BuildEdits(target); _review = EmailRules.Validate(Session, BuildProposal(), emailEdits: ReviewEdits);
+            ReviewEdits = BuildEdits(target);
+            var proposal = BuildProposal();
+            PreserveManualDescriptionAliases(previousReview, proposal);
+            _review = EmailRules.Validate(Session, proposal, emailEdits: ReviewEdits);
+            if (_review.IsValid) _lastValidReview = _review;
         }
         var selectedManualId = (_manualRows.SelectedItem as ManualReviewRow)?.Entry.Id;
         var manualRows = Session.ManualTimecards.Select(entry => new ManualReviewRow(entry, Session.Reference, _review)).ToList();
@@ -384,6 +428,37 @@ internal sealed class EmailImportWindow : Window
             : _review is { IsValid: false } ? string.Join("\n", _review.Errors)
             : $"{count} of {_mappings.Count} activities matched" + (manualRows.Count > 0 ? $" · {manualRows.Count} added timecard{(manualRows.Count == 1 ? "" : "s")}" : "") + ". Settings above apply only to this import. " + (Session.Demo ? "Demo: submission is disabled." : unavailableOverride ? "Billing override access is unavailable. Clear the override in its editor or review in the dashboard." : "Open the preview and confirm to submit directly.");
     }
+    private void PreserveManualDescriptionAliases(ValidationResult? previous, ProposalEnvelope proposal)
+    {
+        if (previous is not { IsValid: true } || Session.ManualTimecards.Count == 0) return;
+        var aliases = previous.Rows.Where(row => row.Kind == "work" && row.SourceActivityIds.Count > 0 && row.ManualEntryIds.Count > 0).ToList();
+        if (aliases.Count == 0) return;
+        // Compare imported groups before appending manual drafts. A description-only edit
+        // must not turn an already proven alias into a second charge for the same work.
+        var imported = EmailRules.Validate(Session with { ManualTimecards = [] }, proposal, emailEdits: ReviewEdits);
+        if (!imported.IsValid) return;
+        var replacements = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var old in aliases)
+        {
+            var matches = imported.Rows.Where(row => row.Kind == "work" && row.Date == old.Date && row.Project == old.Project
+                && row.Assignment == old.Assignment && row.Task == old.Task && row.Category == old.Category && row.Hours == old.Hours
+                && row.BillableOverride == old.BillableOverride && row.SourceActivityIds.Order(StringComparer.Ordinal).SequenceEqual(old.SourceActivityIds.Order(StringComparer.Ordinal))).ToList();
+            if (matches.Count != 1 || string.Equals(matches[0].Description, old.Description, StringComparison.Ordinal)) continue;
+            foreach (var entry in Session.ManualTimecards.Where(entry => old.ManualEntryIds.Contains(entry.Id)))
+            {
+                var defaultBilling = Session.Reference.Billing?.DefaultFor(entry.Project, entry.Task);
+                var sameBilling = entry.BillableOverride == old.BillableOverride
+                    || (entry.BillableOverride ?? defaultBilling) is bool manualBilling && (old.BillableOverride ?? defaultBilling) is bool importedBilling && manualBilling == importedBilling;
+                if (entry.Date != old.Date || entry.Project != old.Project || entry.Assignment != old.Assignment || entry.Task != old.Task
+                    || Session.Reference.Tasks.SingleOrDefault(task => task.Id == entry.Task)?.CategoryId != old.Category || entry.Hours != old.Hours || !sameBilling
+                    || !string.Equals(NormalizedDescription(entry.Description), NormalizedDescription(old.Description), StringComparison.OrdinalIgnoreCase)) continue;
+                replacements[entry.Id] = matches[0].Description;
+            }
+        }
+        if (replacements.Count > 0)
+            Session = Session with { ManualTimecards = Session.ManualTimecards.Select(entry => replacements.TryGetValue(entry.Id, out var description) ? entry with { Description = description } : entry).ToList() };
+    }
+    private static string NormalizedDescription(string value) => Regex.Replace(value.Trim(), @"\s+", " ");
     private void UpdatePreviewLabel() => _preview.Content = _previewOpen ? "Back to activity table" : _review is { IsValid: true } ? $"Show submission preview · {_review.Rows.Count} timecards · {_review.Rows.Sum(r => r.Hours):0.00} h new" : "Show submission preview";
     private void ShowPreview(bool show)
     {
@@ -449,7 +524,8 @@ internal sealed class EmailImportWindow : Window
     {
         if (_activities.SelectedItem is not EmailMappingRow map) return;
         var a = map.Activity;
-        var text = $"{a.Date:dddd, MMMM d, yyyy} · {map.Hours:0.00} h\nImported: {a.Minutes / 60m:0.00} h · {(a.TimeBasis == "measured" ? "Measured time" : "Estimated time")}\n\n{a.Description}\n\nMatter: {a.MatterHint}\nAssignment hint: {a.AssignmentHint}\nTask hint: {a.TaskHint}\nBilling: {map.BillingLabel}\n\n{map.State}: {map.Reason}";
+        var text = $"{a.Date:dddd, MMMM d, yyyy} · {map.Hours:0.00} h\nImported: {a.Minutes / 60m:0.00} h · {(a.TimeBasis == "measured" ? "Measured time" : "Estimated time")}\n\n{map.Description}\n\nMatter: {a.MatterHint}\nAssignment hint: {a.AssignmentHint}\nTask hint: {a.TaskHint}\nBilling: {map.BillingLabel}\n\n{map.State}: {map.Reason}";
+        if (map.IsDescriptionEdited) text += "\n\nOriginal imported description:\n" + a.Description;
         if (map.Existing is int id)
         {
             var existing = Session.Days.Single(d => d.Date == a.Date).Existing.Single(r => r.RecordId == id);
@@ -481,7 +557,7 @@ internal sealed class EmailImportWindow : Window
             if (map.Existing is int existing) { recorded.Add(new() { ActivityId = map.Activity.ActivityId, ExistingRecordId = existing }); continue; }
             var assignment = map.Assignment.HasValue ? Session.Reference.Assignments.Single(a => a.Id == map.Assignment) : null;
             var task = Session.Reference.Tasks.Single(t => t.Id == map.Task);
-            rows.Add(new() { Date = map.Activity.Date, SourceActivityIds = [map.Activity.ActivityId], Project = map.ProjectId, Assignment = assignment?.Id, Task = task.Id, Category = task.CategoryId, Description = map.Activity.Description, BillableOverride = map.BillableOverride });
+            rows.Add(new() { Date = map.Activity.Date, SourceActivityIds = [map.Activity.ActivityId], Project = map.ProjectId, Assignment = assignment?.Id, Task = task.Id, Category = task.CategoryId, Description = map.Description, BillableOverride = map.BillableOverride });
         }
         return new() { SessionId = Session.SessionId, EmployeeId = Session.Settings.EmployeeId, Rows = rows, EmailAlreadyRecorded = recorded };
     }
@@ -556,12 +632,41 @@ internal sealed class EmailImportWindow : Window
         var originalSession = Session; var originals = _mappings.Select(m => m.Capture()).ToArray();
         var fill = _fill.IsChecked; var target = _target.Text; var timecards = _timecards.IsChecked;
         var first = _mappings[0];
+        var sourceWorkbook = JsonSerializer.Serialize(Session.EmailWorkbook, JsonDefaults.Options);
         try
         {
             var quarter = new EmailMappingRow(first.Activity with { Minutes = 15 }, Session, () => { });
             if (quarter.Hours != .25m || quarter.HoursLabel != $"{.25m:0.00} h") throw new InvalidOperationException("Fifteen minutes did not display as decimal hours.");
             if (VisualDescendants(_activities).OfType<TextBox>().Where(t => t.DataContext is EmailMappingRow).Any(t => !t.IsReadOnly))
                 throw new InvalidOperationException("Email hours could be typed into without the edit dialog.");
+            const string editedDescription = "Updated activity description before submission.";
+            var activityEditor = VisualDescendants(_activities).OfType<TextBox>().Single(box => box.DataContext == first && AutomationProperties.GetName(box) == "Activity description; double-click or F2 to edit");
+            _approve.IsChecked = true; first.SetDescription(editedDescription);
+            if (_approve.IsChecked == true || !first.IsDescriptionEdited || activityEditor.Text != editedDescription
+                || BuildProposal().Rows.Single(row => row.SourceActivityIds.Contains(first.Activity.ActivityId)).Description != editedDescription
+                || !_review!.Rows.Any(row => row.SourceActivityIds.Contains(first.Activity.ActivityId) && row.Description.Contains(editedDescription)))
+                throw new InvalidOperationException("Email description edits did not update the table, proposal, preview or confirmation.");
+            foreach (var invalidDescription in new[] { " \t\n ", new string('x', 4001), "Invalid\0description" })
+            {
+                var rejected = false;
+                try { first.SetDescription(invalidDescription); } catch (InvalidOperationException) { rejected = true; }
+                if (!rejected || first.Description != editedDescription) throw new InvalidOperationException("An invalid email description was accepted.");
+            }
+            var savedDescriptionSelection = first.Capture(); first.RefreshChoices(Session); first.Restore(savedDescriptionSelection);
+            if (first.Description != editedDescription || JsonSerializer.Serialize(Session.EmailWorkbook, JsonDefaults.Options) != sourceWorkbook)
+                throw new InvalidOperationException("Refreshing selections lost the description or changed source evidence.");
+            var linkedRecord = new ExistingTimecard(987648, first.Activity.Date, 1m, first.ProjectId, first.Task!.Value,
+                Session.Reference.Tasks.Single(task => task.Id == first.Task).CategoryId, first.Assignment, "Existing Quickbase description");
+            var unlinkedSession = Session;
+            Session = Session with { Days = Session.Days.Select(day => day.Date == first.Activity.Date ? day with { Existing = day.Existing.Append(linkedRecord).ToList() } : day).ToList() };
+            first.RefreshChoices(Session); first.ExistingSelection = first.ExistingChoices.Single(choice => choice.Id == linkedRecord.RecordId);
+            first.SetDescription("Must not change an existing record");
+            if (first.CanEditNew || first.IsDescriptionEdited || activityEditor.IsEnabled || _editDescription.IsEnabled
+                || first.Description != first.Activity.Description || BuildProposal().Rows.Any(row => row.SourceActivityIds.Contains(first.Activity.ActivityId)))
+                throw new InvalidOperationException("A linked Quickbase activity exposed an editable or resubmitted description.");
+            first.ExistingSelection = first.ExistingChoices.Single(choice => choice.Id is null);
+            Session = unlinkedSession; first.RefreshChoices(Session); Update();
+            if (first.Description != editedDescription) throw new InvalidOperationException("Returning to new work lost the local description edit.");
             _approve.IsChecked = true; first.SetHours(.25m);
             if (_approve.IsChecked == true || ReviewEdits.ActivityHours.Single().Hours != .25m || !first.HoursLabel.EndsWith(" *"))
                 throw new InvalidOperationException("Email hours did not update the preview and reset confirmation.");
@@ -593,6 +698,8 @@ internal sealed class EmailImportWindow : Window
                 throw new InvalidOperationException("Clearing a restricted override did not restore its actual default.");
             first.SetHours(null);
             if (ReviewEdits.ActivityHours.Count != 0 || first.EditedHours.HasValue) throw new InvalidOperationException("Use imported did not restore source duration and rounding.");
+            if (first.Description != editedDescription || JsonSerializer.Serialize(Session.EmailWorkbook, JsonDefaults.Options) != sourceWorkbook)
+                throw new InvalidOperationException("Hours, mapping or billing changes lost the edited description or changed the imported source.");
         }
         finally
         {
@@ -605,7 +712,7 @@ internal sealed class EmailImportWindow : Window
             if (combo.DataContext is EmailMappingRow row && (combo.SelectedIndex != row.BillingIndex || combo.SelectedItem is not EmailBillingChoice
                 || !VisualDescendants(combo).OfType<TextBlock>().Any(t => t.Text == row.BillingLabel)))
                 throw new InvalidOperationException("Billing selections disappeared or failed to render their labels after table changes.");
-        return "PASS: decimal email hours, protected editors, billing permissions, target recalculation and direct-submit confirmation gates\n";
+        return "PASS: decimal email hours, protected editors, billing permissions, target recalculation and direct-submit confirmation gates\nPASS: email description edits reach the proposal and preview, preserve source evidence, reset approval, reject invalid text and lock linked records\n";
     }
     internal void PreviewForSmoke()
     {
@@ -671,6 +778,32 @@ internal sealed class EmailImportWindow : Window
             if (_review is not { IsValid: true } || _review.Rows.Single(row => row.ManualEntryIds.Contains(duplicate.Id)).SourceActivityIds.Count == 0 || _review.Rows.Single(row => row.Kind == "misc_internal").Hours != baselineFill
                 || !_manualRows.Items.Cast<ManualReviewRow>().Single().ReviewState.Contains("counted once"))
                 throw new InvalidOperationException("Exact manual/email overlap was counted twice or its review status was hidden.");
+            var independent = duplicate with { Id = Guid.NewGuid().ToString("N"), Hours = .25m, Description = "Separate research work that must stay independent." };
+            ApplyManualEntry(Session, independent);
+            var aliasMap = _mappings.Single(map => map.Activity.ActivityId == imported.SourceActivityIds[0]);
+            var originalAliasSelection = aliasMap.Capture();
+            var originalWorkbook = JsonSerializer.Serialize(Session.EmailWorkbook, JsonDefaults.Options);
+            var beforeDescriptionHours = _review!.Rows.Sum(row => row.Hours);
+            var beforeDescriptionWorkHours = _review.Rows.Where(row => row.Kind is "work" or "manual").Sum(row => row.Hours);
+            var beforeDescriptionCount = _review.Rows.Count;
+            _approve.IsChecked = true;
+            _target.Text = "invalid";
+            aliasMap.SetDescription("Updated description for the matched email and manual timecard.");
+            _target.Text = "8";
+            var editedAlias = _review!.Rows.Single(row => row.ManualEntryIds.Contains(duplicate.Id));
+            if (!_review.IsValid || _approve.IsChecked == true || _review.Rows.Count != beforeDescriptionCount
+                || _review.Rows.Sum(row => row.Hours) != beforeDescriptionHours
+                || _review.Rows.Where(row => row.Kind is "work" or "manual").Sum(row => row.Hours) != beforeDescriptionWorkHours
+                || !editedAlias.SourceActivityIds.SequenceEqual(imported.SourceActivityIds)
+                || Session.ManualTimecards.Single(row => row.Id == duplicate.Id).Description != editedAlias.Description
+                || Session.ManualTimecards.Single(row => row.Id == independent.Id) != independent
+                || JsonSerializer.Serialize(Session.EmailWorkbook, JsonDefaults.Options) != originalWorkbook)
+                throw new InvalidOperationException("Editing an email description doubled a matched manual entry, lost aliases, changed other work or modified source evidence.");
+            aliasMap.Restore(originalAliasSelection);
+            if (_review!.Rows.Single(row => row.ManualEntryIds.Contains(duplicate.Id)).SourceActivityIds.Count == 0
+                || Session.ManualTimecards.Single(row => row.Id == duplicate.Id).Description != imported.Description)
+                throw new InvalidOperationException("Restoring the imported description split a previously matched manual entry.");
+            RemoveManualEntry(independent.Id);
             RemoveManualEntry(duplicate.Id);
 
             var existingEntry = entry with { Id = Guid.NewGuid().ToString("N"), Description = "Confirmed existing manual example." };
@@ -701,7 +834,7 @@ internal sealed class EmailImportWindow : Window
             for (var i = 0; i < _mappings.Count; i++) { _mappings[i].RefreshChoices(Session); _mappings[i].Restore(originals[i]); }
             ShowPreview(previewOpen); Update(); Proposal = BuildProposal();
         }
-        return "PASS: email manual additions stay separate, support edits/removal, preserve mappings and billing, recalculate fill, show duplicate disposition, and reset final approval\n";
+        return "PASS: email manual additions stay separate, support edits/removal, preserve mappings and billing, recalculate fill, show duplicate disposition, and reset final approval\nPASS: editing or restoring email descriptions preserves known manual aliases and hours, including after temporary invalid input, without changing independent drafts or source evidence\n";
     }
     internal void ManualPreviewForSmoke()
     {

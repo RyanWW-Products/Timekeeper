@@ -5,7 +5,7 @@ namespace Timekeeper.Core;
 /// <summary>One reviewed row per request. Every possible side effect has a durable pending journal first.</summary>
 public sealed class SubmissionService(TimecardApi api, SessionStore store)
 {
-    public async Task<SubmissionReceipt> SubmitAsync(ReadSession session, ProposalEnvelope proposal, IReadOnlyList<VerifiedRow> reviewedRows, CancellationToken ct = default, bool warningsAcknowledged = false, IReadOnlyCollection<DateOnly>? selectedDates = null, IReadOnlyList<ReviewDuration>? durationEdits = null, EmailReviewEdits? emailEdits = null)
+    public async Task<SubmissionReceipt> SubmitAsync(ReadSession session, ProposalEnvelope proposal, IReadOnlyList<VerifiedRow> reviewedRows, CancellationToken ct = default, bool warningsAcknowledged = false, IReadOnlyCollection<DateOnly>? selectedDates = null, IReadOnlyList<ReviewDuration>? durationEdits = null, EmailReviewEdits? emailEdits = null, IReadOnlyList<ReviewDescription>? descriptionEdits = null)
     {
         using var localLock = store.AcquireSubmissionLock();
         if (session.Demo) throw new InvalidOperationException("Demo sessions cannot write to Quickbase.");
@@ -13,6 +13,7 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
         if (reviewedRows.Count == 0) throw new InvalidOperationException("There are no new rows to submit.");
         var scope = ProposalScope.Select(session, proposal, selectedDates);
         var validation = ReviewDurations.Apply(scope.Session, Rules.Validate(scope.Session, scope.Proposal, emailEdits: emailEdits), durationEdits);
+        validation = ReviewDescriptions.Apply(scope.Session, validation, descriptionEdits);
         if (!validation.IsValid) throw new InvalidOperationException("The proposal is no longer valid: " + string.Join(" ", validation.Errors));
         if (validation.Warnings.Count > 0 && !warningsAcknowledged)
             throw new InvalidOperationException("Review and acknowledge every proposal warning before writing to Quickbase.");

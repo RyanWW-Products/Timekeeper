@@ -107,6 +107,7 @@ public partial class MainWindow : Window
         ReviewGrid.IsEnabled=!_busy;
         SaveExportButton.IsEnabled=!_busy&&_exportPath!=null;
         RowDetailsButton.IsEnabled=!_busy&&_validation is { IsValid:true }&&_validation.Rows.Count>0;
+        EditDescriptionButton.IsEnabled=RowDetailsButton.IsEnabled;
         RefreshBillingButton.IsEnabled=!_busy&&_session is { Demo:false }&&_validation is { IsValid:true }&&_validation.Rows.Count>0;
         ChangeProposalDatesButton.IsEnabled=!_busy&&_proposal is not null;
         ExportCard.Cursor=!_busy&&_exportPath!=null?Cursors.Hand:Cursors.Arrow;
@@ -121,8 +122,9 @@ public partial class MainWindow : Window
     private void ResetReview()
     {
         _selectedDates=null; _emailEdits=null; ProposalDatesPanel.Visibility=Visibility.Collapsed;
+        _parkedDescriptionEdits=[]; _parkedDescriptionRows=[];
         if(_session is not null) UpdateMetrics(_session);
-        _proposal=null; _validation=null; _reviewRows=[]; _durationEdits=[]; ReviewGrid.ItemsSource=null; ReviewGrid.Visibility=VerifiedBadge.Visibility=WarningsText.Visibility=AcknowledgeWarnings.Visibility=BillingNotice.Visibility=Visibility.Collapsed;
+        _proposal=null; _validation=null; _reviewRows=[]; _durationEdits=[]; _descriptionEdits=[]; ReviewGrid.ItemsSource=null; ReviewGrid.Visibility=VerifiedBadge.Visibility=WarningsText.Visibility=AcknowledgeWarnings.Visibility=BillingNotice.Visibility=Visibility.Collapsed;
         AcknowledgeWarnings.IsChecked=false; ReviewTitle.Text="Waiting for your proposal"; ValidationMessage.Text="The app checks the returned file and calculates your time before you submit."; ValidationMessage.Foreground=(Brush)FindResource("Muted"); DailyTotals.Text=""; ReadyMetric.Text="—"; WriteHint.Text="Nothing is sent until you click Write to Quickbase."; UpdateEnabled();
     }
     private void ResetSource()
@@ -376,7 +378,7 @@ public partial class MainWindow : Window
             }).ToList() };
             // Billing defines an email rounding group. Recalculate after changes so two groups
             // that now share billing cannot retain inflated separately-rounded hours.
-            AcceptProposal(JsonSerializer.Serialize(updated,JsonDefaults.Options),(_,_)=>dates??_session.Days.Select(d=>d.Date).ToArray(),dates is not null,emailProposal:_session.EmailWorkbook is null?null:updated,emailEdits:_emailEdits);
+            AcceptProposal(JsonSerializer.Serialize(updated,JsonDefaults.Options),(_,_)=>dates??_session.Days.Select(d=>d.Date).ToArray(),dates is not null,emailProposal:_session.EmailWorkbook is null?null:updated,emailEdits:_emailEdits,preserveDescriptions:true);
             foreach(var row in _reviewRows.Where(r=>r.Row.Kind is "timecards" or "misc_internal"))
             {
                 var previous=choices.FirstOrDefault(r=>r.Row.Kind==row.Row.Kind&&r.Row.Date==row.Row.Date);
@@ -394,8 +396,10 @@ public partial class MainWindow : Window
         var dialog=new TextDialog(this,"Paste Copilot's proposal","",true);
         if(dialog.ShowDialog()==true) AcceptImportedProposal(dialog.Value);
     }
-    private void AcceptProposal(string json, Func<ReadSession,ProposalEnvelope,IReadOnlyCollection<DateOnly>?>? chooseDates=null, bool forceDateChoice=false, ProposalEnvelope? emailProposal=null, IReadOnlyList<ReviewDuration>? durationEdits=null, EmailReviewEdits? emailEdits=null)
+    private void AcceptProposal(string json, Func<ReadSession,ProposalEnvelope,IReadOnlyCollection<DateOnly>?>? chooseDates=null, bool forceDateChoice=false, ProposalEnvelope? emailProposal=null, IReadOnlyList<ReviewDuration>? durationEdits=null, EmailReviewEdits? emailEdits=null, bool preserveDescriptions=false)
     {
+        var previousDescriptions=preserveDescriptions?_descriptionEdits.Concat(_parkedDescriptionEdits).DistinctBy(e=>e.RowKey).ToList():[];
+        var previousRows=preserveDescriptions?_reviewRows.Select(r=>r.Row).Concat(_parkedDescriptionRows).DistinctBy(ReviewDurations.Key).ToList():[];
         ResetReview(); if(_session is null) return;
         _emailEdits=emailEdits;
         try
@@ -408,8 +412,14 @@ public partial class MainWindow : Window
                 if(_selectedDates is null) { ResetReview(); StatusText.Text="Date selection cancelled. Nothing was submitted."; return; }
             }
             var scope=ProposalScope.Select(_session,_proposal,_selectedDates);
+            var activeDates=scope.Session.Days.Select(d=>d.Date).ToHashSet();
+            _parkedDescriptionRows=previousRows.Where(r=>!activeDates.Contains(r.Date)).ToList();
+            var parkedKeys=_parkedDescriptionRows.Select(ReviewDurations.Key).ToHashSet(StringComparer.Ordinal);
+            _parkedDescriptionEdits=previousDescriptions.Where(e=>parkedKeys.Contains(e.RowKey)).ToList();
             _durationEdits=durationEdits?.ToList()??[];
             _validation=ReviewDurations.Apply(scope.Session,Rules.Validate(scope.Session,scope.Proposal,emailEdits:_emailEdits),_durationEdits);
+            _descriptionEdits=RebaseDescriptions(previousDescriptions,previousRows,_validation.Rows);
+            _validation=ReviewDescriptions.Apply(scope.Session,_validation,_descriptionEdits);
             if(!_validation.IsValid) { ImportError(string.Join("\n",_validation.Errors)); return; }
             if(_selectedDates is { Count:>0 }) SetWorkspaceDates(_selectedDates.Min(),_selectedDates.Max());
             if(CopilotRefreshNotice.Visibility==Visibility.Visible)
@@ -432,7 +442,7 @@ public partial class MainWindow : Window
             BillingNotice.Visibility=Visibility.Visible;
             ReviewTitle.Text=_validation.Rows.Count==0?"Everything is already accounted for":$"{_validation.Rows.Count} {(_validation.Rows.Count==1?"timecard":"timecards")} ready for your review";
             VerifiedBadge.Visibility=Visibility.Visible;
-            ValidationMessage.Text="Source entries, relationships and hours checked. Double-click an hours box to edit, or focus it and press F2.";
+            ValidationMessage.Text="Source entries, relationships and hours checked. Double-click hours or a description to edit, or focus the field and press F2.";
             ReadyMetric.Text=$"{_validation.Rows.Sum(r=>r.Hours):0.00} h";
             DailyTotals.Text=string.Join("\n",scope.Session.Days.Select(day=>$"{day.Date:MMM d}:  {day.Existing.Sum(c=>c.Hours):0.00} h existing + {_validation.Rows.Where(r=>r.Date==day.Date).Sum(r=>r.Hours):0.00} h new = {day.Existing.Sum(c=>c.Hours)+_validation.Rows.Where(r=>r.Date==day.Date).Sum(r=>r.Hours):0.00} h total"));
             if(_validation.Warnings.Count>0)
@@ -466,12 +476,11 @@ public partial class MainWindow : Window
     {
         if(_busy||_session is null||_proposal is null) return;
         var previous=_selectedDates;
+        var dialog=new ProposalDatesWindow(this,_session,_proposal,previous);
+        if(dialog.ShowDialog()!=true) return;
+        var selection=dialog.SelectedDates;
         var billing=_reviewRows.ToDictionary(r=>ReviewIdentity(r.Row),r=>r.BillingIndex);
-        AcceptProposal(JsonSerializer.Serialize(_proposal,JsonDefaults.Options),(session,proposal)=>
-        {
-            var dialog=new ProposalDatesWindow(this,session,proposal,previous);
-            return dialog.ShowDialog()==true?dialog.SelectedDates:null;
-        },true,emailProposal:_session.EmailWorkbook is null?null:_proposal,emailEdits:_emailEdits);
+        AcceptProposal(JsonSerializer.Serialize(_proposal,JsonDefaults.Options),(_,_)=>selection,true,emailProposal:_session.EmailWorkbook is null?null:_proposal,emailEdits:_emailEdits,preserveDescriptions:true);
         RestoreBillingChoices(billing);
         UpdateEnabled();
     }
@@ -501,15 +510,16 @@ public partial class MainWindow : Window
         if(!WriteButton.IsEnabled||_session is null||_proposal is null||_validation is null) return;
         var session=_session; var proposal=_proposal; var rows=_reviewRows.Select(r=>r.Row).ToList(); var warningsAcknowledged=AcknowledgeWarnings.IsChecked==true; var selectedDates=_selectedDates?.ToArray();
         var durationEdits=_durationEdits.ToList(); var emailEdits=_emailEdits;
-        await RunAsync(ct=>SubmitReviewedAsync(session,proposal,rows,warningsAcknowledged,selectedDates,durationEdits,emailEdits,ct));
+        var descriptionEdits=_descriptionEdits.ToList();
+        await RunAsync(ct=>SubmitReviewedAsync(session,proposal,rows,warningsAcknowledged,selectedDates,durationEdits,emailEdits,ct,descriptionEdits));
     }
-    private async Task SubmitReviewedAsync(ReadSession session,ProposalEnvelope proposal,IReadOnlyList<VerifiedRow> rows,bool warningsAcknowledged,IReadOnlyCollection<DateOnly>? selectedDates,IReadOnlyList<ReviewDuration> durationEdits,EmailReviewEdits? emailEdits,CancellationToken ct)
+    private async Task SubmitReviewedAsync(ReadSession session,ProposalEnvelope proposal,IReadOnlyList<VerifiedRow> rows,bool warningsAcknowledged,IReadOnlyCollection<DateOnly>? selectedDates,IReadOnlyList<ReviewDuration> durationEdits,EmailReviewEdits? emailEdits,CancellationToken ct,IReadOnlyList<ReviewDescription>? descriptionEdits=null)
     {
         try
         {
             _writing=true; StatusText.Text="Rechecking current data, then writing the reviewed rows…";
             using var api=MakeApi();
-            var result=await new SubmissionService(api,_store).SubmitAsync(session,proposal,rows,ct,warningsAcknowledged: warningsAcknowledged,selectedDates:selectedDates,durationEdits:durationEdits,emailEdits:emailEdits);
+            var result=await new SubmissionService(api,_store).SubmitAsync(session,proposal,rows,ct,warningsAcknowledged: warningsAcknowledged,selectedDates:selectedDates,durationEdits:durationEdits,emailEdits:emailEdits,descriptionEdits:descriptionEdits);
             ResetReview(); ReviewTitle.Text=result.Status=="complete"?"Your timecards are submitted":"Review the submission result"; ValidationMessage.Text=result.Message;
             StatusText.Text=result.Message;
             new TextDialog(this,"Quickbase submission receipt",ReceiptText(result)).ShowDialog();
@@ -631,7 +641,7 @@ public partial class MainWindow : Window
         var billing=_reviewRows.ToDictionary(r=>ReviewDurations.Key(r.Row),r=>r.BillingIndex);
         var dates=_selectedDates?.ToArray(); var proposal=_proposal;
         AcceptProposal(JsonSerializer.Serialize(proposal,JsonDefaults.Options),(_,_)=>dates??_session.Days.Select(d=>d.Date).ToArray(),dates is not null,
-            emailProposal:_session.EmailWorkbook is null?null:proposal,durationEdits:edits,emailEdits:_emailEdits);
+            emailProposal:_session.EmailWorkbook is null?null:proposal,durationEdits:edits,emailEdits:_emailEdits,preserveDescriptions:true);
         _refreshingBilling=true;
         try { foreach(var r in _reviewRows) if(billing.TryGetValue(ReviewDurations.Key(r.Row),out var value)) r.BillingIndex=value; }
         finally { _refreshingBilling=false; }

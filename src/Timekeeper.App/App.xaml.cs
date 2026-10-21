@@ -130,6 +130,13 @@ public partial class App : Application
                 var hoursWindow=new DurationEditWindow(window,new VerifiedRow { Hours=1.25m, TaskName="Case meeting", Description="Reviewed case materials", Date=DateOnly.FromDateTime(DateTime.Today) },smoke:true);
                 RenderWindow(hoursWindow,Path.Combine(output,"timekeeper-duration-editor.png"),450,440); hoursWindow.Close();
                 var emailSession=EmailSmoke.Session();
+                var descriptionDashboard=new MainWindow(store,true);
+                File.AppendAllText(report,descriptionDashboard.SmokeDescriptions());
+                var descriptionEditor=new DescriptionEditWindow(window,"Reviewed project research and prepared the activity summary.","Original imported activity description.",smoke:true);
+                File.AppendAllText(report,descriptionEditor.SmokeSummary());
+                RenderWindow(descriptionEditor,Path.Combine(output,"timekeeper-description-editor.png"),680,470);
+                RenderWindow(descriptionEditor,Path.Combine(output,"timekeeper-description-editor-minimum.png"),480,360);
+                descriptionEditor.Close(); descriptionDashboard.Close();
                 var manualDashboard=new MainWindow(new SessionStore(Path.Combine(output,"manual-review-data")),true);
                 File.AppendAllText(report,manualDashboard.SmokeManualDashboard());
                 ((ScrollViewer)manualDashboard.FindName("WorkScroll")).ScrollToEnd();

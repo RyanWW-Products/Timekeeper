@@ -43,6 +43,12 @@ internal sealed class EmailMappingRow : INotifyPropertyChanged
     public decimal Hours => EditedHours ?? decimal.Round(Activity.Minutes / 60m, 2, MidpointRounding.AwayFromZero);
     public string HoursLabel => $"{Hours:0.00} h{(EditedHours.HasValue ? " *" : "")}";
     public string HoursHint => $"Imported: {Activity.Minutes / 60m:0.00} h. Double-click or press F2 to edit. Edited hours are exact; unedited activities are grouped and rounded in the submission preview.";
+    public string? EditedDescription { get; private set; }
+    public string Description => CanEditNew ? EditedDescription ?? Activity.Description : Activity.Description;
+    public bool IsDescriptionEdited => CanEditNew && EditedDescription is not null;
+    public string DescriptionHint => (CanEditNew
+        ? (IsDescriptionEdited ? "Edited in Timekeeper. " : "") + "Double-click or press F2 to edit the description sent to Quickbase."
+        : "Already recorded in Quickbase. This activity is linked, so its description will not be sent or changed.") + "\n\n" + Description;
     public bool? BillableOverride { get; private set; }
     public bool CanOverride => CanEditNew && _session.Reference.Billing?.CanOverride == true;
     public bool HasUnavailableOverride => CanEditNew && !CanOverride && BillableOverride.HasValue;
@@ -72,7 +78,16 @@ internal sealed class EmailMappingRow : INotifyPropertyChanged
         if (hours is decimal value && (value is <= 0 or > 24 || decimal.Round(value, 2) != value)) throw new InvalidOperationException("Enter decimal hours greater than 0 and at most 24, with up to two decimal places.");
         EditedHours = hours; Changed();
     }
-    public string ActivitySummary => Short(Activity.Description, 130);
+    public void SetDescription(string description)
+    {
+        if (!CanEditNew) return;
+        if (string.IsNullOrWhiteSpace(description) || description.Length > 4000 || description.Any(c => char.IsControl(c) && c is not '\r' and not '\n' and not '\t'))
+            throw new InvalidOperationException("Enter a plain description of 1 to 4,000 characters.");
+        var edited = description.Trim();
+        EditedDescription = string.Equals(edited, Activity.Description, StringComparison.Ordinal) ? null : edited;
+        Changed();
+    }
+    public string ActivitySummary => Short(Description, 130);
     public string MatterSummary => Short(Activity.MatterHint, 70);
     public bool CanEditNew => !Existing.HasValue;
     public bool IsResolved => Existing.HasValue || ((Assignment.HasValue || DirectProjectId.HasValue || Internal) && Task.HasValue);
@@ -156,20 +171,21 @@ internal sealed class EmailMappingRow : INotifyPropertyChanged
         finally { _refreshing = false; }
     }
 
-    internal sealed record Selection(int? Assignment, bool Internal, int? Task, int? Existing, bool AssignmentEdited, bool TaskEdited, string SuggestionReason, decimal? EditedHours, bool? BillableOverride, int? DirectProjectId);
-    internal Selection Capture() => new(Assignment, Internal, Task, Existing, _assignmentEdited, _taskEdited, _suggestionReason, EditedHours, BillableOverride, DirectProjectId);
+    internal sealed record Selection(int? Assignment, bool Internal, int? Task, int? Existing, bool AssignmentEdited, bool TaskEdited, string SuggestionReason, decimal? EditedHours, bool? BillableOverride, int? DirectProjectId, string? EditedDescription);
+    internal Selection Capture() => new(Assignment, Internal, Task, Existing, _assignmentEdited, _taskEdited, _suggestionReason, EditedHours, BillableOverride, DirectProjectId, EditedDescription);
     internal void Restore(Selection value)
     {
         Assignment = value.Assignment; Internal = value.Internal; Task = value.Task; Existing = value.Existing;
         DirectProjectId = value.DirectProjectId;
         _assignmentEdited = value.AssignmentEdited; _taskEdited = value.TaskEdited; _suggestionReason = value.SuggestionReason;
         EditedHours = value.EditedHours; BillableOverride = value.BillableOverride;
+        EditedDescription = value.EditedDescription;
         Changed();
     }
     private void Changed()
     {
         BillingChoices[0].Update(DefaultBillingLabel);
-        foreach (var property in new[] { nameof(AssignmentSelection), nameof(TaskSelection), nameof(ExistingSelection), nameof(CanEditNew), nameof(IsResolved), nameof(State), nameof(Reason), nameof(Hours), nameof(HoursLabel), nameof(HoursHint), nameof(CanOverride), nameof(DefaultBillingLabel), nameof(BillingIndex), nameof(BillingLabel), nameof(BillingLight), nameof(BillingHint), nameof(HasUnavailableOverride) })
+        foreach (var property in new[] { nameof(AssignmentSelection), nameof(TaskSelection), nameof(ExistingSelection), nameof(CanEditNew), nameof(IsResolved), nameof(State), nameof(Reason), nameof(Hours), nameof(HoursLabel), nameof(HoursHint), nameof(Description), nameof(EditedDescription), nameof(IsDescriptionEdited), nameof(ActivitySummary), nameof(DescriptionHint), nameof(CanOverride), nameof(DefaultBillingLabel), nameof(BillingIndex), nameof(BillingLabel), nameof(BillingLight), nameof(BillingHint), nameof(HasUnavailableOverride) })
             PropertyChanged?.Invoke(this, new(property));
         _changed();
     }

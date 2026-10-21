@@ -243,12 +243,18 @@
                   <DataGridTextColumn Header="Assignment" Binding="{Binding AssignmentName}" ElementStyle="{StaticResource TableText}" Width="145" MinWidth="145"/>
                   <DataGridTextColumn Header="Task" Binding="{Binding TaskName}" ElementStyle="{StaticResource TableText}" Width="110" MinWidth="110"/>
                   <DataGridTextColumn Header="Category" Binding="{Binding CategoryName}" ElementStyle="{StaticResource TableText}" Width="105" MinWidth="105"/>
-                  <DataGridTextColumn Header="Description" Binding="{Binding Description}" ElementStyle="{StaticResource TableText}" Width="*" MinWidth="185"/>
+                  <DataGridTemplateColumn Header="Description" Width="*" MinWidth="230">
+                    <DataGridTemplateColumn.CellStyle><Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}"><Setter Property="Padding" Value="4,2"/></Style></DataGridTemplateColumn.CellStyle>
+                    <DataGridTemplateColumn.CellTemplate><DataTemplate>
+                      <TextBox Text="{Binding Description, Mode=OneWay}" IsReadOnly="True" IsReadOnlyCaretVisible="False" TextWrapping="Wrap" MaxHeight="58" Padding="7,4" Margin="2" ToolTip="Double-click or press F2 to edit this description before submitting." PreviewMouseDoubleClick="Description_DoubleClick" PreviewKeyDown="Description_KeyDown" AutomationProperties.Name="Activity description. Double-click or press F2 to edit."/>
+                    </DataTemplate></DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
                 </DataGrid.Columns>
               </DataGrid>
               <TextBlock x:Name="BillingNotice" Visibility="Collapsed" TextWrapping="Wrap" Margin="20,10,20,0" FontSize="12" Foreground="{DynamicResource Muted}"/>
               <WrapPanel>
                 <Button x:Name="RowDetailsButton" Content="View selected row details ↗" Click="RowDetails_Click" Style="{StaticResource Quiet}" HorizontalAlignment="Left" FontSize="12" Margin="10,6,10,0" Padding="10,6" IsEnabled="False"/>
+                <Button x:Name="EditDescriptionButton" Content="Edit description" Click="EditDescription_Click" FontSize="12" Margin="0,6,10,0" Padding="10,6" IsEnabled="False"/>
                 <Button x:Name="RefreshBillingButton" Content="Refresh billing" Click="RefreshBilling_Click" Style="{StaticResource Quiet}" FontSize="12" Margin="0,6,20,0" Padding="10,6" Visibility="{Binding Visibility, ElementName=ReviewGrid}" IsEnabled="False"/>
               </WrapPanel>
               <TextBlock x:Name="DailyTotals" Margin="20,9,20,14" FontFamily="{StaticResource MonoFont}" FontSize="12"/>

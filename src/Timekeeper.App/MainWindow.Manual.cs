@@ -184,7 +184,7 @@ public partial class MainWindow
             var baseline = Rules.Validate(scope.Session, scope.Proposal, emailEdits: emailEdits);
             var edits = _durationEdits.Where(edit => baseline.Rows.Any(r => ReviewDurations.Key(r) == edit.RowKey && r.Hours == edit.OriginalHours)).ToList();
             AcceptProposal(JsonSerializer.Serialize(proposal, JsonDefaults.Options), (_, _) => dates, dates is not null,
-                emailProposal: _session.EmailWorkbook is null ? null : proposal, durationEdits: edits, emailEdits: emailEdits);
+                emailProposal: _session.EmailWorkbook is null ? null : proposal, durationEdits: edits, emailEdits: emailEdits, preserveDescriptions: true);
             _refreshingBilling = true;
             try
             {
