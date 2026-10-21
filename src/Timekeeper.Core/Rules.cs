@@ -52,6 +52,7 @@ public static class Rules
 
     public static ValidationResult Validate(ReadSession session, ProposalEnvelope proposal, DateTimeOffset? now = null, EmailReviewEdits? emailEdits = null)
     {
+        if (session?.ManualOnly == true && session.EmailWorkbook is not null) return new() { Errors = ["A manual-only session cannot contain an email workbook."] };
         if (session?.EmailWorkbook is not null) return EmailRules.Validate(session, proposal, now, emailEdits);
         var result = new ValidationResult();
         var errors = result.Errors;
@@ -63,6 +64,9 @@ public static class Rules
         if (session.Settings is null || session.Reference is null || session.Days is null || proposal.Rows is null || proposal.AlreadyRecorded is null)
         { errors.Add("The source session or proposal contains a null collection or settings object."); return result; }
         errors.AddRange(ValidateSettings(session.Settings));
+        errors.AddRange(ManualTimecards.ValidateDrafts(session.ManualTimecards));
+        if (session.ManualOnly && (proposal.Rows.Count > 0 || proposal.AlreadyRecorded.Count > 0 || session.Days.Any(d => d?.Entries?.Count > 0)))
+            errors.Add("Manual-only sessions cannot contain Toggl entries or agent proposal rows.");
         if (session.SchemaVersion != 1 || proposal.SchemaVersion != 1) errors.Add("Unsupported schema version. Read the source again with this application.");
         if (string.IsNullOrWhiteSpace(session.SessionId) || proposal.SessionId != session.SessionId) errors.Add("This proposal belongs to a different read session. Use the latest exported file.");
         if (proposal.EmployeeId != session.Settings.EmployeeId) errors.Add("The proposal employee ID does not match this profile.");
@@ -205,11 +209,14 @@ public static class Rules
             result.Rows.Add(verified);
         }
 
+        ManualTimecards.Append(session, result);
+        if (!result.IsValid) return result;
         foreach (var day in days.Values.OrderBy(d => d.Date))
         {
-            if (day.Entries.Count == 0 || day.Date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) continue;
+            if (session.ManualOnly || (day.Entries.Count == 0 && !session.ManualTimecards.Any(m => m.Date == day.Date)) || day.Date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday) continue;
             var total = day.Existing.Sum(c => c.Hours) + result.Rows.Where(r => r.Date == day.Date).Sum(r => r.Hours);
             var timecardsAlreadyPresent = day.Existing.Any(c => c.Project == reference.InternalProject!.Id && Named(c.Description, "Timecards")) ||
+                result.Rows.Any(r => r.Date == day.Date && r.Project == reference.InternalProject!.Id && Named(r.Description, "Timecards")) ||
                 proposal.Rows.Any(r => r.Date == day.Date && r.Project == reference.InternalProject!.Id &&
                     (Named(r.Description, "Timecards") || r.SourceEntryIds.Any(id => Named(entries[id].Entry.Description, "Timecards")))) ||
                 proposal.AlreadyRecorded.Any(link => entries[link.SourceEntryId].Date == day.Date &&
@@ -243,7 +250,7 @@ public static class Rules
         }
     }
 
-    private static int KindOrder(string kind) => kind == "work" ? 0 : kind == "timecards" ? 1 : 2;
+    private static int KindOrder(string kind) => kind is "work" or "manual" ? 0 : kind == "timecards" ? 1 : 2;
     private sealed class WorkGroup(ProposalRow row)
     {
         public ProposalRow Row { get; } = row;

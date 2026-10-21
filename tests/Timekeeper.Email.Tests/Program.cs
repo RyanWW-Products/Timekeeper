@@ -219,6 +219,38 @@ Test("Direct email project time groups separately from assignment work and retai
     Reject(EmailRules.Validate(session with { Reference = session.Reference with { Projects = [] } }, proposal), "trusted project choices");
     Reject(EmailRules.Validate(session, proposal with { Rows = [proposal.Rows[0], proposal.Rows[0]] }), "more than once");
 });
+Test("Manual email additions retain source identity use exact hours and reduce weekday fill", () =>
+{
+    var session = Session(5); var original = JsonSerializer.Serialize(session.EmailWorkbook, JsonDefaults.Options);
+    var manual = new ManualTimecard { Date = session.Days[0].Date, Hours = .26m, Project = 100, Assignment = 501, Task = 60, Description = "Additional administration" };
+    session = session with { ManualTimecards = [manual] };
+    var result = EmailRules.Validate(session, Proposal(session), emailEdits: new() { FillWeekdays = true, AddTimecards = true }); Valid(result);
+    Equal(result.Rows.Single(r => r.Kind == "manual").Hours, .26m); Equal(result.Rows.Single(r => r.Kind == "misc_internal").Hours, 7.49m); Equal(result.Rows.Sum(r => r.Hours), 8m);
+    Equal(JsonSerializer.Serialize(session.EmailWorkbook, JsonDefaults.Options), original);
+    Reject(EmailRules.Validate(session, Proposal(session) with { Rows = [] }), "missing");
+});
+Test("Manual exact email duplicate keeps email evidence and stable manual ID once", () =>
+{
+    var session = Session(5); var activity = session.EmailWorkbook!.Activities.Single();
+    var manual = new ManualTimecard { Date = activity.Date, Hours = .08m, Project = 100, Assignment = 501, Task = 60, Description = activity.Description };
+    session = session with { ManualTimecards = [manual] };
+    var result = EmailRules.Validate(session, Proposal(session)); Valid(result); Equal(result.Rows.Count, 1);
+    var row = result.Rows.Single(); Equal(row.Kind, "work"); Equal(row.Hours, .08m); Equal(row.ManualEntryIds.Single(), manual.Id); Equal(row.SourceActivityIds.Single(), activity.ActivityId); Equal(row.EmailEvidenceKeys.Count, 1);
+    var edits = new EmailReviewEdits { ActivityHours = [new(activity.ActivityId, activity.Minutes, .25m)] };
+    var corrected = EmailRules.Validate(session, Proposal(session), emailEdits: edits); Valid(corrected); Equal(corrected.Rows.Count, 2); Equal(corrected.Rows.Sum(r => r.Hours), .33m);
+});
+Test("Manual email dates outside workbook preserve scope and empty leftover baselines add nothing", () =>
+{
+    var session = Session(5); var next = session.Days[0].Date.AddDays(1); var workbook = session.EmailWorkbook!;
+    var manual = new ManualTimecard { Date = next, Hours = .25m, Project = 100, Assignment = 501, Task = 60, Description = "Next-day administration" };
+    session = session with { ManualTimecards = [manual], Days = [session.Days[0], new() { Date = next }] };
+    var policy = new EmailReviewEdits { FillWeekdays = true, AddTimecards = true };
+    var result = EmailRules.Validate(session, Proposal(session), emailEdits: policy); Valid(result); Equal(result.Rows.Sum(r => r.Hours), 16m);
+    var scope = ProposalScope.Select(session, Proposal(session), [next]); var selected = EmailRules.Validate(scope.Session, scope.Proposal, emailEdits: policy); Valid(selected); Equal(selected.Rows.Sum(r => r.Hours), 8m);
+    Equal(session.EmailWorkbook, workbook); Equal(scope.Session.EmailWorkbook, workbook);
+    var removed = EmailRules.Validate(session with { ManualTimecards = [] }, Proposal(session), emailEdits: policy); Valid(removed); RequireNoNextDay();
+    void RequireNoNextDay() => True(removed.Rows.All(r => r.Date != next));
+});
 Test("Email direct project suggestions require a unique trusted exact match", () =>
 {
     var session = Session(); var activity = session.EmailWorkbook!.Activities[0] with { MatterHint = "Case intake example", TaskHint = "Internal work" };

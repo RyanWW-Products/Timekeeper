@@ -159,6 +159,60 @@ public sealed partial class TimecardApi : IDisposable
 
     internal Task<List<TimeEntry>> ReadEntriesAsync(DateOnly date, CancellationToken ct) => ReadEntriesRangeAsync(date, date, ct);
 
+    public async Task<ReadSession> ReadManualBaselineAsync(DateOnly start, DateOnly end, IProgress<string>? progress = null, CancellationToken ct = default)
+    {
+        if (start == default || end < start || end.DayNumber - start.DayNumber >= 31) throw new ArgumentException("Choose a range of one to 31 days.");
+        progress?.Report("Verifying your Quickbase identity...");
+        await TestQuickbaseAsync(ct);
+        progress?.Report("Reading Quickbase tasks, categories, and assignments...");
+        var reference = await ReadReferenceAsync(ct);
+        var days = new List<DaySnapshot>();
+        for (var offset = 0; offset <= end.DayNumber - start.DayNumber; offset++)
+        {
+            var date = start.AddDays(offset);
+            progress?.Report($"Reading existing Quickbase time for {date:yyyy-MM-dd}...");
+            days.Add(new DaySnapshot { Date = date, Existing = await ReadExistingAsync(date, ct) });
+        }
+        return new ReadSession { Settings = settings, Reference = reference, Days = days, ManualOnly = true };
+    }
+
+    /// <summary>Carry local entries to a read without altering the imported source or its timestamp.</summary>
+    public async Task<ReadSession> PrepareManualEntriesAsync(ReadSession session, IReadOnlyList<ManualTimecard> entries, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var errors = ManualTimecards.ValidateDrafts(entries);
+        if (errors.Count > 0) throw new InvalidDataException(string.Join(" ", errors));
+        if (session.Demo || session.Settings != settings) throw new InvalidOperationException("Use the same Quickbase account and settings to carry manual timecards.");
+        if (session.Days is null || session.Days.Count == 0 || session.Days.Any(d => d is null) || session.Days.Select(d => d.Date).Distinct().Count() != session.Days.Count)
+            throw new InvalidDataException("Read the source dates before carrying manual timecards.");
+        var dates = session.Days.Select(d => d.Date).Concat(entries.Select(m => m.Date)).Distinct().Order().ToList();
+        if (dates.Count > 31 || dates[^1].DayNumber - dates[0].DayNumber >= 31)
+            throw new InvalidOperationException("The source and carried manual entries must fit within 31 days. Choose fewer manual dates.");
+        await TestQuickbaseAsync(ct);
+        var projects = session.Reference.Projects.ToList();
+        var assignments = session.Reference.Assignments.ToList();
+        foreach (var id in entries.Where(m => m.Assignment.HasValue).Select(m => m.Assignment!.Value).Distinct())
+        {
+            var assignment = await ReadAssignmentAsync(id, ct) ?? throw new InvalidOperationException($"Manual assignment #{id} is no longer available in Quickbase. Choose another assignment.");
+            if (entries.Any(m => m.Assignment == id && m.Project != assignment.ProjectId)) throw new InvalidOperationException($"Manual assignment #{id} changed projects. Review the entry again.");
+            assignments.RemoveAll(a => a.Id == id); assignments.Add(assignment);
+        }
+        foreach (var id in entries.Select(m => m.Project).Distinct())
+        {
+            var project = await ReadProjectAsync(id, ct) ?? throw new InvalidOperationException($"Manual project #{id} is no longer available in Quickbase. Choose another project.");
+            projects.RemoveAll(p => p.Id == id); projects.Add(project);
+        }
+        var days = session.Days.ToList();
+        foreach (var date in dates.Where(date => !days.Any(d => d.Date == date)))
+        {
+            if (!session.ManualOnly && session.EmailWorkbook is null && (await ReadEntriesAsync(date, ct)).Count > 0)
+                throw new InvalidOperationException($"{date:yyyy-MM-dd} contains Toggl time outside this read. Read that date as well before carrying manual entries into this session.");
+            days.Add(new DaySnapshot { Date = date, Existing = await ReadExistingAsync(date, ct) });
+        }
+        var billing = await ReadBillingDefaultsAsync(assignments.Select(a => a.ProjectId).Concat(projects.Select(p => p.Id)).Append(session.Reference.InternalProject!.Id), ct);
+        return session with { ManualTimecards = entries.ToList(), Days = days.OrderBy(d => d.Date).ToList(), Reference = session.Reference with { Assignments = assignments, Projects = projects, Billing = billing } };
+    }
+
     internal async Task<List<TimeEntry>> ReadEntriesRangeAsync(DateOnly start, DateOnly end, CancellationToken ct)
     {
         var timezone = TimeZoneInfo.FindSystemTimeZoneById(settings.TimeZoneId);

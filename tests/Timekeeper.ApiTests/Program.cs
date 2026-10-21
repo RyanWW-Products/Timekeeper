@@ -790,6 +790,7 @@ await Check("selected-day pending outcomes reconcile against the retained full s
     Equal("created", reconciled.Rows[0].Status); Equal(1, f.Server.WriteCount); Equal(selected, reconciled.SelectedDates!.Single());
     True(f.Server.ExistingReadDates.All(d => d == selected)); Equal(2, f.Store.LoadSession(s.SessionId)!.Days.Count);
 });
+await ManualApiTests.Run(Check);
 await BillingApiTests.Run(Check);
 await SubmissionBillingEmailTests.Run(Check);
 await CredentialVaultTests.Run(Check);

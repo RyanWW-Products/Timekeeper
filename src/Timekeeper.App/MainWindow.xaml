@@ -49,7 +49,7 @@
         <StackPanel Margin="0,0,18,0">
           <TextBlock x:Name="PageEyebrow" Text="TOGGL / QUICKBASE" Style="{StaticResource SectionLabel}" Foreground="{DynamicResource Accent}"/>
           <TextBlock x:Name="PageTitle" Text="Timecards" FontFamily="{StaticResource DisplayFont}" FontSize="31" Margin="0,6,0,6"/>
-          <TextBlock x:Name="PageSubtitle" Text="Read Toggl time or import an email workbook, review, and submit to Quickbase." Foreground="{DynamicResource Muted}" FontSize="13" TextWrapping="Wrap"/>
+          <TextBlock x:Name="PageSubtitle" Text="Read Toggl time, import email or add time manually, then review and submit to Quickbase." Foreground="{DynamicResource Muted}" FontSize="13" TextWrapping="Wrap"/>
         </StackPanel>
         <Button Grid.Column="1" Content="Try a sample day ↗" Style="{StaticResource Quiet}" Click="Demo_Click" VerticalAlignment="Top" FontSize="12" Margin="0,15,0,0"/>
       </Grid>
@@ -146,6 +146,27 @@
                 <Border x:Name="VerifiedBadge" Grid.Column="1" VerticalAlignment="Top" Background="{DynamicResource SuccessSoft}" BorderBrush="{DynamicResource VerificationLine}" BorderThickness="1" Padding="12,6" CornerRadius="6" Visibility="Collapsed"><TextBlock Text="✓  Data verified" Foreground="{DynamicResource Success}" FontWeight="SemiBold" FontSize="12"/></Border>
               </Grid>
               <TextBlock x:Name="ValidationMessage" Text="The app checks the returned file and calculates your time before you submit." Foreground="{DynamicResource Muted}" Margin="20,0,20,14" FontSize="12"/>
+              <DockPanel Margin="20,0,20,14" LastChildFill="True">
+                <Button x:Name="AddTimecardButton" DockPanel.Dock="Right" Content="+ Add timecard" Click="AddTimecard_Click" Padding="14,8" Margin="12,0,0,0"/>
+                <TextBlock x:Name="ManualSummary" Text="Add work that was not captured in Toggl or email." VerticalAlignment="Center" TextWrapping="Wrap" Foreground="{DynamicResource Muted}" FontSize="12"/>
+              </DockPanel>
+              <Expander x:Name="ManualPanel" Header="Manual timecards" Visibility="Collapsed" IsExpanded="True" Margin="20,0,20,14">
+                <StackPanel>
+                  <DataGrid x:Name="ManualGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" SelectionChanged="ManualGrid_SelectionChanged" MinHeight="70" MaxHeight="175" Margin="0,8,0,0">
+                    <DataGrid.Columns>
+                      <DataGridTextColumn Header="Date" Binding="{Binding Date, StringFormat=yyyy-MM-dd}" Width="105"/>
+                      <DataGridTextColumn Header="Hours" Binding="{Binding Hours, StringFormat=F2}" Width="70"/>
+                      <DataGridTextColumn Header="Project / task" Binding="{Binding Mapping}" Width="250"/>
+                      <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="*" MinWidth="180"/>
+                      <DataGridTextColumn Header="Billing" Binding="{Binding Billing}" Width="155"/>
+                    </DataGrid.Columns>
+                  </DataGrid>
+                  <WrapPanel Margin="0,8,0,0">
+                    <Button x:Name="EditManualButton" Content="Edit selected" Click="EditManual_Click" FontSize="12" Padding="10,6" Margin="0,0,8,0" IsEnabled="False"/>
+                    <Button x:Name="DeleteManualButton" Content="Delete selected" Click="DeleteManual_Click" FontSize="12" Padding="10,6" IsEnabled="False"/>
+                  </WrapPanel>
+                </StackPanel>
+              </Expander>
               <Border x:Name="ProposalDatesPanel" Visibility="Collapsed" Background="{DynamicResource AccentSoft}" CornerRadius="6" Padding="12" Margin="20,0,20,14">
                 <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="ProposalDatesText" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,12,0"/><Button x:Name="ChangeProposalDatesButton" Grid.Column="1" Content="Change dates" Click="ChangeProposalDates_Click"/></Grid>
               </Border>

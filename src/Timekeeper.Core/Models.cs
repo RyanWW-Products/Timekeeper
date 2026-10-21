@@ -87,6 +87,8 @@ public sealed record ReadSession
     public ReferenceData Reference { get; init; } = new();
     public List<DaySnapshot> Days { get; init; } = [];
     public bool Demo { get; init; }
+    public bool ManualOnly { get; init; }
+    public List<ManualTimecard> ManualTimecards { get; init; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public EmailWorkbook? EmailWorkbook { get; init; }
 }
@@ -139,11 +141,13 @@ public sealed record VerifiedRow
     public List<long> SourceEntryIds { get; init; } = [];
     public List<string> SourceActivityIds { get; init; } = [];
     public List<string> EmailEvidenceKeys { get; init; } = [];
+    public List<string> ManualEntryIds { get; init; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? BillableOverride { get; init; }
 }
 public sealed record ValidationResult
 {
+    public List<string> AlreadyRecordedManualEntryIds { get; init; } = [];
     public List<string> Errors { get; init; } = [];
     public List<string> Warnings { get; init; } = [];
     public List<VerifiedRow> Rows { get; init; } = [];

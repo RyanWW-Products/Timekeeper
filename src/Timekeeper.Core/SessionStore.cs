@@ -25,6 +25,32 @@ public sealed class SessionStore
     }
     public void SaveSettings(AppSettings settings) => Write(Path.Combine(RootPath, "settings.json"), settings);
     public void SaveSession(ReadSession session) => Write(SessionPath(session.SessionId), session);
+    public List<ManualTimecard> LoadManualDrafts(string profileKey)
+    {
+        var drafts = Read<List<ManualTimecard>>(Path.Combine(RootPath, "manual-drafts", SafeId(profileKey) + ".json")) ?? [];
+        var errors = ManualTimecards.ValidateDrafts(drafts);
+        if (errors.Count > 0) throw new InvalidDataException("Saved manual timecards are invalid: " + string.Join(" ", errors));
+        return drafts;
+    }
+    public void SaveManualDrafts(string profileKey, IReadOnlyList<ManualTimecard> drafts, IReadOnlyList<ManualTimecard>? expectedEntries = null)
+    {
+        var snapshot = drafts?.ToList();
+        var expected = expectedEntries?.ToList();
+        var errors = ManualTimecards.ValidateDrafts(snapshot);
+        if (expected is not null) errors.AddRange(ManualTimecards.ValidateDrafts(expected));
+        if (errors.Count > 0) throw new InvalidDataException(string.Join(" ", errors));
+        var path = Path.Combine(RootPath, "manual-drafts", SafeId(profileKey) + ".json");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using var draftLock = AcquireManualDraftLock(path + ".lock");
+        if (expected is not null && !LoadManualDrafts(profileKey).SequenceEqual(expected))
+            throw new InvalidOperationException("Manual timecards changed in another Timekeeper window. Close and reopen Timekeeper to load the current drafts before saving. Your older list was not saved.");
+        Write(path, snapshot!);
+    }
+    private static FileStream AcquireManualDraftLock(string path)
+    {
+        try { return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
+        catch (IOException) { throw new InvalidOperationException("Another Timekeeper window is saving manual timecards. Wait for it to finish, then close and reopen Timekeeper to load the current drafts."); }
+    }
     public ReadSession? LoadSession(string sessionId) => Read<ReadSession>(SessionPath(sessionId));
     public ReadSession? LoadLatestSession(string? profileKey = null)
     {

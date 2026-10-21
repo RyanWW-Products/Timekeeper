@@ -25,6 +25,8 @@ public static class EmailRules
         if (session?.EmailWorkbook is null || session.Settings is null || session.Reference is null || session.Days is null || proposal is null || proposal.Rows is null || proposal.AlreadyRecorded is null || proposal.EmailAlreadyRecorded is null)
         { errors.Add("The email workbook, source session and proposal are required."); return result; }
         errors.AddRange(Rules.ValidateSettings(session.Settings));
+        errors.AddRange(ManualTimecards.ValidateDrafts(session.ManualTimecards));
+        if (session.ManualOnly) errors.Add("A manual-only session cannot contain an email workbook.");
         errors.AddRange(EmailWorkbookReader.ValidateForReview(session.EmailWorkbook, session.Settings, now));
         // Every email import, including measured time without other warnings, needs
         // the final review checkbox. Suggestions and import never imply approval.
@@ -66,7 +68,8 @@ public static class EmailRules
         {
             if (day is null || day.Date == default || day.Entries is null || day.Existing is null || !days.TryAdd(day.Date, day)) { errors.Add("The source days contain an invalid or duplicate date."); continue; }
             if (day.Entries.Count != 0) errors.Add("An email import cannot also contain Toggl timers.");
-            if (day.Date < session.EmailWorkbook.Metadata.PeriodStart || day.Date > session.EmailWorkbook.Metadata.PeriodEnd) errors.Add("A selected date falls outside the email workbook period.");
+            // Extra Quickbase-only baseline dates can remain after a carried manual entry
+            // is removed. Workbook activity dates are checked against its own period.
             if (day.Existing.Count > 10_000) { errors.Add("A source day has too many Quickbase records."); continue; }
             foreach (var card in day.Existing)
             {
@@ -176,13 +179,15 @@ public static class EmailRules
                 EmailEvidenceKeys = group.Activities.SelectMany(a => a.EvidenceIds).Select(id => EvidenceKey(session.EmailWorkbook.Metadata.EmployeeEmail, id)).Order(StringComparer.Ordinal).ToList()
             });
         }
+        ManualTimecards.Append(session, result);
+        if (!result.IsValid) return result;
         foreach (var day in days.Values.OrderBy(d => d.Date))
         {
             var source = activities.Values.Where(a => a.Date == day.Date).ToList();
             var work = result.Rows.Where(r => r.Date == day.Date).ToList();
             if (source.Any(a => a.TimeBasis == "employee_confirmed_estimate")) warnings.Add($"{day.Date:yyyy-MM-dd}: email activity includes employee-confirmed estimated time. Confirm the allocations represent work performed and do not overlap meetings, timers or other timecards.");
             if (day.Existing.Count > 0 && work.Count > 0) warnings.Add($"{day.Date:yyyy-MM-dd}: Quickbase already contains {day.Existing.Sum(c => c.Hours):0.00} hours. Confirm the proposed email work is additional. Link already-covered activities to existing records instead of adding them again.");
-            if ((policy.FillWeekdays || policy.AddTimecards) && source.Count > 0 && day.Date.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday))
+            if ((policy.FillWeekdays || policy.AddTimecards) && (source.Count > 0 || session.ManualTimecards.Any(m => m.Date == day.Date)) && day.Date.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday))
             {
                 var total = day.Existing.Sum(c => c.Hours) + work.Sum(r => r.Hours);
                 bool Timecards(string text) => string.Equals(text.Trim(), "Timecards", StringComparison.OrdinalIgnoreCase);

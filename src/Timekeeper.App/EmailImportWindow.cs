@@ -14,6 +14,8 @@ internal sealed class EmailImportWindow : Window
 {
     private readonly TimecardApi? _api;
     private readonly List<EmailMappingRow> _mappings;
+    private readonly Grid _activityBody = new() { Height = 360 };
+    private readonly ScrollViewer _activityViewport = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
     private readonly DataGrid _activities = new()
     {
         AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false,
@@ -40,6 +42,16 @@ internal sealed class EmailImportWindow : Window
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Button _details = new() { Content = "View selected activity", HorizontalAlignment = HorizontalAlignment.Left };
     private readonly Button _refreshBilling = new() { Content = "Refresh billing", Margin = new Thickness(10, 0, 0, 0) };
+    private readonly Button _addManual = new() { Content = "+ Add timecard", Padding = new Thickness(12, 6, 12, 6), FontSize = 12 };
+    private readonly TextBlock _manualTitle = new() { Text = "Added timecards", FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBlock _manualEmpty = new() { Text = "Add work missing from the email workbook.", FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 7, 0, 0) };
+    private readonly DataGrid _manualRows = new()
+    {
+        AutoGenerateColumns = false, IsReadOnly = true, CanUserAddRows = false, CanUserDeleteRows = false,
+        CanUserReorderColumns = false, SelectionMode = DataGridSelectionMode.Single,
+        SelectionUnit = DataGridSelectionUnit.FullRow, MinRowHeight = 42, MaxHeight = 160,
+        Margin = new Thickness(0, 9, 0, 0), Visibility = Visibility.Collapsed,
+    };
     public ReadSession Session { get; private set; }
     public ProposalEnvelope Proposal { get; private set; } = new();
     public EmailReviewEdits ReviewEdits { get; private set; } = new();
@@ -122,7 +134,20 @@ internal sealed class EmailImportWindow : Window
         };
         _activities.ItemsSource = _mappings;
         _activities.SelectionChanged += (_, _) => _details.IsEnabled = _activities.SelectedItem is EmailMappingRow;
-        Grid.SetRow(_activities, 1); outer.Children.Add(_activities);
+        _activityBody.RowDefinitions.Add(new()); _activityBody.RowDefinitions.Add(new() { Height = GridLength.Auto });
+        _activityBody.Children.Add(_activities);
+        var manualSection = CreateManualSection(); Grid.SetRow(manualSection, 1); _activityBody.Children.Add(manualSection);
+        // Keep at least one email row usable at small window sizes. Additional manual
+        // entries scroll with this middle area instead of squeezing the email grid to its header.
+        void FitActivityBody()
+        {
+            var height = Math.Max(_activityViewport.ActualHeight, 180 + manualSection.ActualHeight);
+            if (double.IsNaN(_activityBody.Height) || Math.Abs(_activityBody.Height - height) > 0.5) _activityBody.Height = height;
+        }
+        _activityViewport.Content = _activityBody;
+        _activityViewport.SizeChanged += (_, _) => FitActivityBody();
+        manualSection.SizeChanged += (_, _) => FitActivityBody();
+        Grid.SetRow(_activityViewport, 1); outer.Children.Add(_activityViewport);
         Grid.SetRow(_previewBody, 1); outer.Children.Add(_previewBody);
 
         var footer = new StackPanel();
@@ -151,6 +176,103 @@ internal sealed class EmailImportWindow : Window
         Grid.SetRow(footer, 2); outer.Children.Add(footer);
         Closed += (_, _) => { _closed = true; _lifetime.Cancel(); _lifetime.Dispose(); };
         Content = outer; _activities.SelectedIndex = 0; Update(); Appearance.Attach(this);
+    }
+
+    private FrameworkElement CreateManualSection()
+    {
+        var section = new StackPanel { Margin = new Thickness(0, 12, 0, 0) };
+        var heading = new Grid(); heading.ColumnDefinitions.Add(new()); heading.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        heading.Children.Add(_manualTitle); Grid.SetColumn(_addManual, 1); heading.Children.Add(_addManual);
+        _addManual.Click += (_, _) => EditManual(null);
+        AutomationProperties.SetName(_addManual, "Add a manual timecard to this email review");
+        _manualEmpty.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+        section.Children.Add(heading); section.Children.Add(_manualEmpty); section.Children.Add(_manualRows);
+        _manualRows.SetValue(ScrollViewer.HorizontalScrollBarVisibilityProperty, ScrollBarVisibility.Auto);
+        _manualRows.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty, ScrollBarVisibility.Auto);
+        AutomationProperties.SetName(_manualRows, "Manually added timecards, separate from imported email activities");
+        var cellStyle = new Style(typeof(DataGridCell), (Style)FindResource(typeof(DataGridCell)));
+        cellStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(6, 5, 6, 5))); _manualRows.CellStyle = cellStyle;
+        _manualRows.Columns.Add(new DataGridTextColumn { Header = "Date", Binding = new Binding(nameof(ManualReviewRow.Date)) { StringFormat = "MMM d" }, Width = 60, MinWidth = 60 });
+        _manualRows.Columns.Add(new DataGridTextColumn { Header = "Hours", Binding = new Binding(nameof(ManualReviewRow.Hours)) { StringFormat = "0.00" }, Width = 55, MinWidth = 55 });
+        _manualRows.Columns.Add(new DataGridTemplateColumn { Header = "Project / task", Width = 155, MinWidth = 155, CellTemplate = TextTemplate(nameof(ManualReviewRow.Project), nameof(ManualReviewRow.Task)) });
+        _manualRows.Columns.Add(new DataGridTemplateColumn { Header = "Description / review", Width = 160, MinWidth = 160, CellTemplate = TextTemplate(nameof(ManualReviewRow.Description), nameof(ManualReviewRow.ReviewState)) });
+        var billing = new FrameworkElementFactory(typeof(StackPanel)); billing.SetValue(StackPanel.OrientationProperty, Orientation.Horizontal);
+        billing.SetBinding(FrameworkElement.ToolTipProperty, new Binding(nameof(ManualReviewRow.BillingHint)));
+        var light = new FrameworkElementFactory(typeof(System.Windows.Shapes.Ellipse)); light.SetValue(FrameworkElement.WidthProperty, 8d); light.SetValue(FrameworkElement.HeightProperty, 8d); light.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 0, 6, 0)); light.SetBinding(System.Windows.Shapes.Shape.FillProperty, new Binding(nameof(ManualReviewRow.BillingLight))); billing.AppendChild(light);
+        billing.AppendChild(Text(nameof(ManualReviewRow.Billing)));
+        _manualRows.Columns.Add(new DataGridTemplateColumn { Header = "Billing", Width = 145, MinWidth = 145, CellTemplate = new DataTemplate { VisualTree = billing } });
+        var actions = new FrameworkElementFactory(typeof(StackPanel)); actions.SetValue(StackPanel.OrientationProperty, Orientation.Horizontal);
+        foreach (var label in new[] { "Edit", "Delete" })
+        {
+            var button = new FrameworkElementFactory(typeof(Button)); button.SetValue(ContentControl.ContentProperty, label);
+            button.SetValue(Control.PaddingProperty, new Thickness(8, 4, 8, 4)); button.SetValue(Control.FontSizeProperty, 11d);
+            button.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 0, 6, 0));
+            button.SetValue(AutomationProperties.NameProperty, label + " added timecard");
+            RoutedEventHandler click = label == "Edit" ? EditManual_Click : DeleteManual_Click;
+            button.AddHandler(Button.ClickEvent, click); actions.AppendChild(button);
+        }
+        _manualRows.Columns.Add(new DataGridTemplateColumn { Header = "", Width = 125, MinWidth = 125, CellTemplate = new DataTemplate { VisualTree = actions } });
+        _manualRows.SizeChanged += (_, e) =>
+        {
+            if (!e.WidthChanged) return;
+            var minimum = _manualRows.Columns.Select(column => column.MinWidth).ToArray();
+            var extra = Math.Max(0, e.NewSize.Width - 20 - minimum.Sum());
+            double[] weights = [0, 0, 0.35, 0.65, 0, 0];
+            for (var i = 0; i < minimum.Length; i++) _manualRows.Columns[i].Width = minimum[i] + extra * weights[i];
+        };
+        return section;
+    }
+    private void EditManual_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: ManualReviewRow row }) EditManual(row.Entry);
+    }
+    private void EditManual(ManualTimecard? existing)
+    {
+        if (_closed || _finding) return;
+        var dialog = new ManualTimecardWindow(this, Session, _api, existing);
+        if (dialog.ShowDialog() == true && !_closed && dialog.Entry is ManualTimecard entry) ApplyManualEntry(dialog.Session, entry);
+    }
+    private void ApplyManualEntry(ReadSession refreshed, ManualTimecard entry)
+    {
+        var entries = Session.ManualTimecards.ToList();
+        var index = entries.FindIndex(row => row.Id == entry.Id);
+        if (index < 0) entries.Add(entry); else entries[index] = entry;
+        Session = Session with { Reference = refreshed.Reference, Days = ManualDays(refreshed.Days, entries), ManualTimecards = entries };
+        foreach (var row in _mappings) row.RefreshChoices(Session);
+        Update();
+    }
+    private void DeleteManual_Click(object sender, RoutedEventArgs e)
+    {
+        if (_closed || _finding || sender is not FrameworkElement { DataContext: ManualReviewRow row }) return;
+        if (ManualDeleteConfirmationWindow.Confirm(this, [row.Entry]) && !_closed) RemoveManualEntry(row.Entry.Id);
+    }
+    private void RemoveManualEntry(string id)
+    {
+        var entries = Session.ManualTimecards.Where(row => row.Id != id).ToList();
+        Session = Session with { ManualTimecards = entries, Days = ManualDays(Session.Days, entries) };
+        Update();
+    }
+    private List<DaySnapshot> ManualDays(IEnumerable<DaySnapshot> days, IReadOnlyCollection<ManualTimecard> entries) => days
+        .Where(day => day.Date >= Session.EmailWorkbook!.Metadata.PeriodStart && day.Date <= Session.EmailWorkbook.Metadata.PeriodEnd || entries.Any(entry => entry.Date == day.Date)).OrderBy(day => day.Date).ToList();
+    private sealed class ManualReviewRow(ManualTimecard entry, ReferenceData reference, ValidationResult? review)
+    {
+        public ManualTimecard Entry { get; } = entry;
+        public DateOnly Date => Entry.Date;
+        public decimal Hours => Entry.Hours;
+        public string Project => reference.Assignments.FirstOrDefault(a => a.Id == Entry.Assignment)?.ProjectName
+            ?? (reference.InternalProject?.Id == Entry.Project ? reference.InternalProject.Name : reference.Projects.FirstOrDefault(p => p.Id == Entry.Project)?.Name ?? $"Project #{Entry.Project}");
+        public string Task => (reference.Tasks.FirstOrDefault(t => t.Id == Entry.Task)?.Name ?? $"Task #{Entry.Task}")
+            + (Entry.Assignment is int id ? $" · {reference.Assignments.FirstOrDefault(a => a.Id == id)?.Name ?? $"Assignment #{id}"}" : " · No assignment");
+        public string Description => Entry.Description;
+        public string ReviewState => review is not { IsValid: true } ? "Awaiting complete review"
+            : review.AlreadyRecordedManualEntryIds.Contains(Entry.Id) ? "Already in Quickbase · not added again"
+            : review.Rows.Any(row => row.ManualEntryIds.Contains(Entry.Id) && row.SourceActivityIds.Count > 0) ? "Included with matching email work · counted once"
+            : "Additional work";
+        public string Billing => Entry.BillableOverride switch { true => "Billable", false => "Nonbillable", _ => reference.Billing?.DefaultFor(Entry.Project, Entry.Task) switch { true => "Billable - Default", false => "Nonbillable - Default", _ => "Default unavailable" } };
+        public string BillingHint => Entry.BillableOverride.HasValue
+            ? reference.Billing?.CanOverride == true ? "The selected billing override will be checked again before submission." : "Billing override permission is unavailable. Edit this timecard to clear the override or refresh billing to check access."
+            : reference.Billing?.DefaultUnavailableReason(Entry.Project, Entry.Task) is { Length: > 0 } reason ? reason : "Uses the Quickbase billing default.";
+        public Brush BillingLight => new SolidColorBrush((Entry.BillableOverride ?? reference.Billing?.DefaultFor(Entry.Project, Entry.Task)) switch { true => Color.FromRgb(63, 203, 125), false => Color.FromRgb(139, 75, 78), _ => Color.FromRgb(125, 133, 143) });
     }
 
     private static FrameworkElementFactory Text(string property, bool bold = false, int lines = 2)
@@ -233,6 +355,7 @@ internal sealed class EmailImportWindow : Window
         if (_mappings is null) return;
         _approve.IsChecked = false;
         _target.IsEnabled = _fill.IsChecked == true;
+        _addManual.IsEnabled = _manualRows.IsEnabled = !_finding;
         var count = _mappings.Count(m => m.IsResolved);
         var validTarget = decimal.TryParse(_target.Text, NumberStyles.AllowDecimalPoint, CultureInfo.CurrentCulture, out var target) && target is >= 0 and <= 24 && decimal.Round(target, 2) == target;
         if (!validTarget && _fill.IsChecked != true) { target = Session.Settings.TargetHours; validTarget = true; }
@@ -241,9 +364,17 @@ internal sealed class EmailImportWindow : Window
         {
             ReviewEdits = BuildEdits(target); _review = EmailRules.Validate(Session, BuildProposal(), emailEdits: ReviewEdits);
         }
+        var selectedManualId = (_manualRows.SelectedItem as ManualReviewRow)?.Entry.Id;
+        var manualRows = Session.ManualTimecards.Select(entry => new ManualReviewRow(entry, Session.Reference, _review)).ToList();
+        _manualRows.ItemsSource = manualRows;
+        _manualRows.SelectedItem = manualRows.FirstOrDefault(row => row.Entry.Id == selectedManualId);
+        _manualRows.Visibility = manualRows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        _manualEmpty.Visibility = manualRows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        _manualTitle.Text = manualRows.Count == 0 ? "Added timecards" : $"Added timecards · {manualRows.Count}";
         _continue.IsEnabled = !_finding && _review is { IsValid: true };
         _refreshBilling.IsEnabled = !_finding && _api is not null;
-        _submit.IsEnabled = _continue.IsEnabled && _review!.Rows.Count > 0 && !_mappings.Any(m => m.HasUnavailableOverride) && !Session.Demo;
+        var unavailableOverride = _mappings.Any(m => m.HasUnavailableOverride) || Session.Reference.Billing?.CanOverride != true && _review?.Rows.Any(row => row.ManualEntryIds.Count > 0 && row.BillableOverride.HasValue) == true;
+        _submit.IsEnabled = _continue.IsEnabled && _review!.Rows.Count > 0 && !unavailableOverride && !Session.Demo;
         _previewRows.ItemsSource = _review?.Rows.Select(r => new { r.Date, r.Hours, Project = r.ProjectName, Assignment = r.AssignmentName, Task = r.TaskName, Billing = (r.BillableOverride ?? Session.Reference.Billing?.DefaultFor(r.Project, r.Task)) switch { true => "Billable", false => "Nonbillable", _ => "Default unavailable" }, BillingHint = r.BillableOverride.HasValue ? "Your requested billing override; project, assignment and task stay the same." : (Session.Reference.Billing?.DefaultUnavailableReason(r.Project, r.Task) ?? "Billing has not been checked. Refresh billing to read Quickbase again.") is { Length: > 0 } reason ? reason : "Uses the Quickbase default.", r.Description }).ToList();
         UpdatePreviewLabel();
         _totals.Text = _review is { IsValid: true } ? string.Join("\n", Session.Days.Select(d => $"{d.Date:MMM d}: {d.Existing.Sum(r => r.Hours):0.00} h existing + {_review.Rows.Where(r => r.Date == d.Date).Sum(r => r.Hours):0.00} h new = {d.Existing.Sum(r => r.Hours) + _review.Rows.Where(r => r.Date == d.Date).Sum(r => r.Hours):0.00} h total")) : "";
@@ -251,12 +382,12 @@ internal sealed class EmailImportWindow : Window
         _approve.IsEnabled = _review is { IsValid: true } && _review.Rows.Count > 0;
         _status.Text = !validTarget ? "Enter a weekday target from 0 to 24 hours, with up to two decimal places."
             : _review is { IsValid: false } ? string.Join("\n", _review.Errors)
-            : $"{count} of {_mappings.Count} activities matched. Settings above apply only to this import. " + (Session.Demo ? "Demo: submission is disabled." : _mappings.Any(m => m.HasUnavailableOverride) ? "Billing override access is unavailable. Use default or review in the dashboard." : "Open the preview and confirm to submit directly.");
+            : $"{count} of {_mappings.Count} activities matched" + (manualRows.Count > 0 ? $" · {manualRows.Count} added timecard{(manualRows.Count == 1 ? "" : "s")}" : "") + ". Settings above apply only to this import. " + (Session.Demo ? "Demo: submission is disabled." : unavailableOverride ? "Billing override access is unavailable. Clear the override in its editor or review in the dashboard." : "Open the preview and confirm to submit directly.");
     }
     private void UpdatePreviewLabel() => _preview.Content = _previewOpen ? "Back to activity table" : _review is { IsValid: true } ? $"Show submission preview · {_review.Rows.Count} timecards · {_review.Rows.Sum(r => r.Hours):0.00} h new" : "Show submission preview";
     private void ShowPreview(bool show)
     {
-        _previewOpen = show; _activities.Visibility = show ? Visibility.Collapsed : Visibility.Visible;
+        _previewOpen = show; _activityViewport.Visibility = show ? Visibility.Collapsed : Visibility.Visible;
         _previewBody.Visibility = show ? Visibility.Visible : Visibility.Collapsed; UpdatePreviewLabel();
     }
     private async void Find_Click(object sender, RoutedEventArgs e)
@@ -275,7 +406,7 @@ internal sealed class EmailImportWindow : Window
                 if (_api is not null)
                 {
                     var selectedProjectId = picker.SelectedProject?.Id ?? picker.SelectedAssignment!.ProjectId;
-                    var billing = await _api.ReadBillingDefaultsAsync(Session.Reference.Assignments.Select(a => a.ProjectId).Concat(Session.Reference.Projects.Select(p => p.Id)).Append(selectedProjectId).Append(Session.Reference.InternalProject!.Id), _lifetime.Token);
+                    var billing = await _api.ReadBillingDefaultsAsync(Session.Reference.Assignments.Select(a => a.ProjectId).Concat(Session.Reference.Projects.Select(p => p.Id)).Concat(Session.ManualTimecards.Select(row => row.Project)).Append(selectedProjectId).Append(Session.Reference.InternalProject!.Id), _lifetime.Token);
                     if (_closed) return;
                     Session = Session with { Reference = Session.Reference with { Billing = billing } };
                 }
@@ -306,7 +437,7 @@ internal sealed class EmailImportWindow : Window
         _finding = true; _activities.IsEnabled = false; Update();
         try
         {
-            var billing = await _api.ReadBillingDefaultsAsync(Session.Reference.Assignments.Select(a => a.ProjectId).Concat(Session.Reference.Projects.Select(p => p.Id)).Append(Session.Reference.InternalProject!.Id), _lifetime.Token, refresh: true);
+            var billing = await _api.ReadBillingDefaultsAsync(Session.Reference.Assignments.Select(a => a.ProjectId).Concat(Session.Reference.Projects.Select(p => p.Id)).Concat(Session.ManualTimecards.Select(row => row.Project)).Append(Session.Reference.InternalProject!.Id), _lifetime.Token, refresh: true);
             if (_closed) return;
             Session = Session with { Reference = Session.Reference with { Billing = billing } };
             foreach (var row in _mappings) row.RefreshChoices(Session);
@@ -510,6 +641,72 @@ internal sealed class EmailImportWindow : Window
             Update(); Proposal = BuildProposal();
         }
         return "PASS: direct-project mapping validates without an assignment and preserves task, hours and billing through refresh and mode changes\n";
+    }
+    internal string SmokeManualTimecards()
+    {
+        var originalSession = Session; var originals = _mappings.Select(map => map.Capture()).ToArray();
+        var fill = _fill.IsChecked; var target = _target.Text; var timecards = _timecards.IsChecked; var previewOpen = _previewOpen;
+        try
+        {
+            if (Session.ManualTimecards.Count != 0 || !_continue.IsEnabled) throw new InvalidOperationException("Manual email smoke requires matched sample activities without manual drafts.");
+            _fill.IsChecked = true; _target.Text = "8"; _timecards.IsChecked = true; Update();
+            var baselineFill = _review!.Rows.Single(row => row.Kind == "misc_internal").Hours;
+            var entry = new ManualTimecard { Date = Session.Days[0].Date, Hours = .25m, Project = Session.Reference.InternalProject!.Id, Task = Session.Settings.InternalTaskId, Description = "Reviewed the team scheduling checklist.", BillableOverride = false };
+            _approve.IsChecked = true; ApplyManualEntry(Session, entry);
+            if (_approve.IsChecked == true || _review is not { IsValid: true } || _manualRows.Items.Count != 1 || _manualRows.Visibility != Visibility.Visible || _mappings.Count != originals.Length
+                || _review.Rows.Single(row => row.ManualEntryIds.Contains(entry.Id)).Hours != .25m || _review.Rows.Single(row => row.Kind == "misc_internal").Hours != baselineFill - .25m || _review.Rows.Sum(row => row.Hours) != 8m)
+                throw new InvalidOperationException("Adding manual time did not produce a separate row, recalculate fill or reset approval.");
+            entry = entry with { Hours = .5m };
+            _approve.IsChecked = true; ApplyManualEntry(Session with { Reference = Session.Reference with { Billing = new BillingCapabilities { CanOverride = true, TaskBilling = new() { [entry.Task] = false } } } }, entry);
+            if (_approve.IsChecked == true || Session.ManualTimecards.Count != 1 || _review!.Rows.Single(row => row.ManualEntryIds.Contains(entry.Id)).Hours != .5m
+                || _review.Rows.Single(row => row.Kind == "misc_internal").Hours != baselineFill - .5m || !_mappings.Select(map => map.Capture()).SequenceEqual(originals))
+                throw new InvalidOperationException("Editing added time or refreshing references lost email mappings, doubled the entry or retained approval.");
+            _approve.IsChecked = true; RemoveManualEntry(entry.Id);
+            if (_approve.IsChecked == true || Session.ManualTimecards.Count != 0 || _manualRows.Visibility != Visibility.Collapsed || _review!.Rows.Single(row => row.Kind == "misc_internal").Hours != baselineFill)
+                throw new InvalidOperationException("Removing manual time did not restore fill and clear approval.");
+
+            var imported = _review.Rows.First(row => row.SourceActivityIds.Count > 0);
+            var duplicate = new ManualTimecard { Date = imported.Date, Hours = imported.Hours, Project = imported.Project, Assignment = imported.Assignment, Task = imported.Task, Description = imported.Description, BillableOverride = imported.BillableOverride };
+            ApplyManualEntry(Session, duplicate);
+            if (_review is not { IsValid: true } || _review.Rows.Single(row => row.ManualEntryIds.Contains(duplicate.Id)).SourceActivityIds.Count == 0 || _review.Rows.Single(row => row.Kind == "misc_internal").Hours != baselineFill
+                || !_manualRows.Items.Cast<ManualReviewRow>().Single().ReviewState.Contains("counted once"))
+                throw new InvalidOperationException("Exact manual/email overlap was counted twice or its review status was hidden.");
+            RemoveManualEntry(duplicate.Id);
+
+            var existingEntry = entry with { Id = Guid.NewGuid().ToString("N"), Description = "Confirmed existing manual example." };
+            var existing = new ExistingTimecard(987649, existingEntry.Date, existingEntry.Hours, existingEntry.Project, existingEntry.Task, Session.Reference.Tasks.Single(task => task.Id == existingEntry.Task).CategoryId, null, existingEntry.Description) { Billable = false };
+            ApplyManualEntry(Session with { Days = Session.Days.Select(day => day.Date == existing.Date ? day with { Existing = day.Existing.Append(existing).ToList() } : day).ToList() }, existingEntry);
+            if (_review is not { IsValid: true } || !_review.AlreadyRecordedManualEntryIds.Contains(existingEntry.Id) || _review.Rows.Any(row => row.ManualEntryIds.Contains(existingEntry.Id))
+                || !_manualRows.Items.Cast<ManualReviewRow>().Single().ReviewState.Contains("Already in Quickbase"))
+                throw new InvalidOperationException("An exact existing manual timecard remained in submission or was not identified in review.");
+            RemoveManualEntry(existingEntry.Id);
+
+            var extraDate = Session.EmailWorkbook!.Metadata.PeriodEnd.AddDays(1);
+            var outside = entry with { Id = Guid.NewGuid().ToString("N"), Date = extraDate, Description = "Carried manual draft on a separately read date." };
+            ApplyManualEntry(Session with { Days = Session.Days.Append(new DaySnapshot { Date = extraDate }).ToList() }, outside);
+            if (_review is not { IsValid: true } || !Session.Days.Any(day => day.Date == extraDate)) throw new InvalidOperationException("A carried manual date was lost from email review.");
+            RemoveManualEntry(outside.Id);
+            if (_review is not { IsValid: true } || Session.Days.Any(day => day.Date == extraDate)) throw new InvalidOperationException("Removing the last manual entry left an invalid date outside the workbook.");
+
+            foreach (var map in _mappings) map.BillingIndex = 0;
+            Session = Session with { Demo = false, Reference = Session.Reference with { Billing = new BillingCapabilities { CanOverride = false, TaskBilling = new() { [entry.Task] = false } } } };
+            ApplyManualEntry(Session, entry);
+            if (_submit.IsEnabled || !_continue.IsEnabled) throw new InvalidOperationException("A restricted manual billing override bypassed the direct-submit gate.");
+            ApplyManualEntry(Session, entry with { BillableOverride = null });
+            if (!_submit.IsEnabled) throw new InvalidOperationException("Clearing the unavailable manual override did not restore preview submission.");
+        }
+        finally
+        {
+            Session = originalSession; _fill.IsChecked = fill; _target.Text = target; _timecards.IsChecked = timecards;
+            for (var i = 0; i < _mappings.Count; i++) { _mappings[i].RefreshChoices(Session); _mappings[i].Restore(originals[i]); }
+            ShowPreview(previewOpen); Update(); Proposal = BuildProposal();
+        }
+        return "PASS: email manual additions stay separate, support edits/removal, preserve mappings and billing, recalculate fill, show duplicate disposition, and reset final approval\n";
+    }
+    internal void ManualPreviewForSmoke()
+    {
+        var entry = new ManualTimecard { Date = Session.Days[0].Date, Hours = .25m, Project = Session.Reference.InternalProject!.Id, Task = Session.Settings.InternalTaskId, Description = "Reviewed the team scheduling checklist.", BillableOverride = Session.Reference.Billing?.CanOverride == true ? false : null };
+        ApplyManualEntry(Session, entry); ShowPreview(false);
     }
     internal FrameworkElement TaskSearchPreviewForSmoke(string query) => VisualDescendants(_activities).OfType<SearchableTaskComboBox>().First().SearchPreviewForSmoke(query);
     private static IEnumerable<DependencyObject> VisualDescendants(DependencyObject parent)

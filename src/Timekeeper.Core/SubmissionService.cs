@@ -186,7 +186,7 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
         return saved;
     }
 
-    private static bool CanRecover(RowOutcome row) => row.Status == "created" && row.RecordId > 0 && row.Row.Kind == "work" && (row.Row.SourceEntryIds.Count > 0 || row.Row.EmailEvidenceKeys.Count > 0) && row.DeletionConfirmedAtUtc is null;
+    private static bool CanRecover(RowOutcome row) => row.Status == "created" && row.RecordId > 0 && row.Row.Kind is ("work" or "manual") && (row.Row.SourceEntryIds.Count > 0 || row.Row.EmailEvidenceKeys.Count > 0 || row.Row.ManualEntryIds.Count > 0) && row.DeletionConfirmedAtUtc is null;
 
     private async Task CheckRecoveredStillAbsentAsync(IReadOnlyList<RowOutcome> rows, CancellationToken ct)
     {
@@ -204,7 +204,8 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
             throw new InvalidOperationException("An earlier write on these dates has an unknown outcome. Reconcile its receipt before submitting.");
         var sourceIds = rows.SelectMany(r => r.SourceEntryIds).ToHashSet();
         var evidenceKeys = rows.SelectMany(r => r.EmailEvidenceKeys).ToHashSet(StringComparer.Ordinal);
-        bool Overlaps(VerifiedRow row) => row.SourceEntryIds.Any(sourceIds.Contains) || row.EmailEvidenceKeys.Any(evidenceKeys.Contains);
+        var manualIds = rows.SelectMany(r => r.ManualEntryIds).ToHashSet(StringComparer.Ordinal);
+        bool Overlaps(VerifiedRow row) => row.SourceEntryIds.Any(sourceIds.Contains) || row.EmailEvidenceKeys.Any(evidenceKeys.Contains) || row.ManualEntryIds.Any(manualIds.Contains);
         if (history.SelectMany(r => r.Rows).Where(r => r.Status is "pending" or "unknown").Any(r => Overlaps(r.Row)))
             throw new InvalidOperationException("A source activity has an unresolved earlier write, even if its date has since changed. Reconcile that receipt before submitting.");
         var priorCreates = history.SelectMany(r => r.Rows).Where(r => r.Status == "created" && Overlaps(r.Row)).ToList();
@@ -213,7 +214,7 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
             throw new InvalidOperationException($"A source activity in this proposal was already written as Quickbase record #{blocked.RecordId} ({blocked.Row.Date:yyyy-MM-dd}). If it still exists, read or import again and mark it as already recorded. If you intentionally deleted it, open Submission history, select its receipt, and choose Recover deleted entries.");
         foreach (var row in priorCreates)
         {
-            if (row.RecordId is not > 0 || row.Row.Kind != "work" || row.DeletionConfirmedAtUtc > DateTimeOffset.UtcNow)
+            if (row.RecordId is not > 0 || row.Row.Kind is not ("work" or "manual") || row.DeletionConfirmedAtUtc > DateTimeOffset.UtcNow)
                 throw new InvalidDataException("A saved deletion confirmation is invalid. Restore the receipt before writing.");
             if (session.GeneratedAtUtc <= row.DeletionConfirmedAtUtc)
                 throw new InvalidOperationException("Read the day again after recovering deleted entries, then request a new Copilot proposal before writing.");
@@ -247,13 +248,13 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
             var assignment = await api.ReadAssignmentAsync(id, ct);
             if (original is null || assignment is null || !Same(original, assignment)) throw Stale("Quickbase assignment");
         }
-        if (rows.Any(r => r.Kind != "work") && !Same(session.Reference.InternalProject, reference.InternalProject)) throw Stale("Internal project");
-        var allEntries = session.EmailWorkbook is null ? await api.ReadEntriesRangeAsync(session.Days.Min(d => d.Date), session.Days.Max(d => d.Date), ct) : [];
+        if (rows.Any(r => r.Kind is "timecards" or "misc_internal") && !Same(session.Reference.InternalProject, reference.InternalProject)) throw Stale("Internal project");
+        var allEntries = session.EmailWorkbook is null && !session.ManualOnly ? await api.ReadEntriesRangeAsync(session.Days.Min(d => d.Date), session.Days.Max(d => d.Date), ct) : [];
         var timezone = TimeZoneInfo.FindSystemTimeZoneById(session.Settings.TimeZoneId);
         foreach (var day in session.Days)
         {
             var entries = allEntries.Where(e => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(e.Start, timezone).DateTime) == day.Date);
-            if (session.EmailWorkbook is null && !Same(day.Entries.OrderBy(e => e.Id), entries.OrderBy(e => e.Id))) throw Stale("Toggl entries");
+            if (session.EmailWorkbook is null && !session.ManualOnly && !Same(day.Entries.OrderBy(e => e.Id), entries.OrderBy(e => e.Id))) throw Stale("Toggl entries");
             var existing = await api.ReadExistingAsync(day.Date, ct);
             CheckExistingUnchanged(day.Existing, existing, day.Date);
         }
@@ -308,7 +309,7 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
     private static bool Matches(VerifiedRow row, ExistingTimecard record) => row.Date == record.Date && row.Hours == record.Hours && row.Project == record.Project && row.Task == record.Task && row.Category == record.Category && row.Assignment == record.Assignment && row.Description == record.Description;
     private async Task TestSourceAccountAsync(ReadSession session, CancellationToken ct)
     {
-        if (session.EmailWorkbook is null) await api.TestAsync(ct);
+        if (session.EmailWorkbook is null && !session.ManualOnly) await api.TestAsync(ct);
         else await api.TestQuickbaseAsync(ct);
     }
     private static void Finish(SubmissionReceipt receipt)

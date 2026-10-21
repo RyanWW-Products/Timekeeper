@@ -1,6 +1,6 @@
 # Timekeeper
 
-Timekeeper is a Windows application for turning Toggl entries or confirmed email activities into reviewed Quickbase timecards. It validates imported files locally, shows the exact rows, and writes only after explicit submission from the dashboard or email review.
+Timekeeper is a Windows application for turning Toggl entries, confirmed email activities or manually added work into reviewed Quickbase timecards. It validates imported files locally, shows the exact rows, and writes only after explicit submission from the dashboard or email review.
 
 The installed application includes its .NET runtime. End users do not need Python, a terminal, or a separate .NET installation.
 
@@ -33,6 +33,10 @@ Version 0.7.0 adds `timekeeper_email_import`: exactly **Metadata** and **Timecar
 Version 0.7.1 presents email matching as a table with assignment/task dropdowns prefilled with the best plausible guesses. These are editable suggestions, not verified matches; unmatched fields remain **Choose**. Existing Quickbase records are never linked automatically. The single final review checkbox replaces the opening acknowledgement and the personal-confirmation checkbox during mapping. M365 Word approval and the workbook's `employee_confirmed=true` requirement remain unchanged.
 
 Version 0.9.0 adds **Direct to project** in assignment lookup, so minor case administration can use the case itself without a management assignment. Search includes other employees' accessible assignments and statuses including Active, Case Intake, Proposal and Review. Task dropdowns search by name or ID. Toggl users must upload the refreshed export to Copilot again after lookup; email users select the live result in the matching table.
+
+Version 0.10.0 adds **Add timecard** on the dashboard and in email review for work missing from Toggl or email. Enter a date, exact decimal hours, description and verified project/assignment/task; edit or delete pending entries in their separate table. New entries start with the configured internal project/task and nonbillable when your permissions allow an override. Otherwise they use the actual Quickbase default, which may be unavailable. You can start a manual-only day with Quickbase configured and no Toggl token or Copilot file. Automatic Timecards and fill are off for a manual-only day; when combined with imports, manual hours count before that workflow's configured additions.
+
+Manual drafts are saved locally per Quickbase profile. Before a new read or import, choose **Append manual entries** or **Delete manual entries**; deletion requires a separate confirmation. The new choice is committed only after a successful read or accepted import. Failed or cancelled operations preserve the saved draft, and cancelling email review discards that window's unsaved edits. Exact, unambiguous matches with imported or existing Quickbase work can count once; uncertain similarities remain for review. Confirmed-created drafts are retired, while failed, not-sent or unresolved entries remain pending. Resolve unknown results in Submission history before retrying. Local manual entries stay out of Copilot proposals and do not change the Excel format.
 
 The email table displays decimal hours, with protected duration edits, permission-aware billing and per-import weekday fill controls. Choose **Review in Timekeeper dashboard**, or open the submission preview, confirm its exact timecards and warnings, and choose **Submit directly to Quickbase**. Both routes use the same live checks and saved receipts. The Excel format remains unchanged and still contains whole minutes.
 

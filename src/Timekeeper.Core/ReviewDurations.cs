@@ -10,7 +10,7 @@ public static class ReviewDurations
     public static string Key(VerifiedRow row) => JsonSerializer.Serialize(new
     {
         row.Date, row.Kind, row.Project, row.Assignment, row.Task, row.Category,
-        Entries = row.SourceEntryIds.Order(), Activities = row.SourceActivityIds.Order(StringComparer.Ordinal)
+        Entries = row.SourceEntryIds.Order(), Activities = row.SourceActivityIds.Order(StringComparer.Ordinal), ManualEntries = row.ManualEntryIds.Order(StringComparer.Ordinal)
     });
 
     public static ValidationResult Apply(ReadSession session, ValidationResult calculated, IReadOnlyList<ReviewDuration>? edits)

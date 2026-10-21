@@ -439,6 +439,7 @@ Test("automatic timecard durations can also be edited and reset", () =>
     var unchanged = ReviewDurations.Apply(session, baseline, [new(ReviewDurations.Key(row), row.Hours, row.Hours)]);
     Equal(unchanged.Rows.Single(r => r.Kind == "timecards").OriginalHours, (decimal?)null);
 });
+ManualTimecardTests.Register(Test);
 var failed = 0;
 foreach (var (name, run) in tests)
 {

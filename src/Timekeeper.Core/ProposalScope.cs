@@ -7,6 +7,7 @@ public sealed record ProposalScope(ReadSession Session, ProposalEnvelope Proposa
     {
         var linkedIds = proposal.AlreadyRecorded.Select(r => r.SourceEntryId).ToHashSet();
         return proposal.Rows.Select(r => r.Date)
+            .Concat((session.ManualTimecards ?? []).Where(m => m is not null).Select(m => m.Date))
             .Concat(session.Days.Where(d => d.Entries.Any(e => linkedIds.Contains(e.Id))).Select(d => d.Date))
             .Concat(session.EmailWorkbook?.Activities.Where(a => proposal.EmailAlreadyRecorded.Any(l => l.ActivityId == a.ActivityId)).Select(a => a.Date) ?? [])
             .Distinct().Order().ToList();
@@ -21,6 +22,8 @@ public sealed record ProposalScope(ReadSession Session, ProposalEnvelope Proposa
 
     public static ProposalScope Select(ReadSession session, ProposalEnvelope proposal, IReadOnlyCollection<DateOnly>? selectedDates = null)
     {
+        var manualErrors = ManualTimecards.ValidateDrafts(session.ManualTimecards);
+        if (manualErrors.Count > 0) throw new InvalidOperationException(string.Join(" ", manualErrors));
         if (selectedDates is null) return new(session, proposal);
         if (selectedDates.Count == 0 || selectedDates.Distinct().Count() != selectedDates.Count || selectedDates.Any(date => !session.Days.Any(d => d.Date == date)))
             throw new InvalidOperationException("Choose at least one date from the original read, with no repeated dates.");
@@ -29,7 +32,8 @@ public sealed record ProposalScope(ReadSession Session, ProposalEnvelope Proposa
         var excludedIds = session.Days.Where(d => !selectedDates.Contains(d.Date)).SelectMany(d => d.Entries).Select(e => e.Id).ToHashSet();
         var excludedActivities = session.EmailWorkbook?.Activities.Where(a => !selectedDates.Contains(a.Date)).Select(a => a.ActivityId).ToHashSet() ?? [];
         // Unknown links stay in the proposal so ordinary validation rejects them. Never infer a match.
-        return new(session with { Days = session.Days.Where(d => selectedDates.Contains(d.Date)).ToList() },
+        // Keep invalid manual dates visible to validation; a date picker must not hide malformed data.
+        return new(session with { Days = session.Days.Where(d => selectedDates.Contains(d.Date)).ToList(), ManualTimecards = session.ManualTimecards.Where(m => m is null || !session.Days.Any(d => d.Date == m.Date) || selectedDates.Contains(m.Date)).ToList() },
             proposal with { Rows = proposal.Rows.Where(r => selectedDates.Contains(r.Date)).ToList(),
                 AlreadyRecorded = proposal.AlreadyRecorded.Where(r => !excludedIds.Contains(r.SourceEntryId)).ToList(),
                 EmailAlreadyRecorded = proposal.EmailAlreadyRecorded.Where(r => !excludedActivities.Contains(r.ActivityId)).ToList() });
