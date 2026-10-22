@@ -792,6 +792,7 @@ await Check("selected-day pending outcomes reconcile against the retained full s
 });
 await ManualApiTests.Run(Check);
 await ReviewDescriptionApiTests.Run(Check);
+await SubmissionResumeTests.Run(Check);
 await BillingApiTests.Run(Check);
 await SubmissionBillingEmailTests.Run(Check);
 await CredentialVaultTests.Run(Check);

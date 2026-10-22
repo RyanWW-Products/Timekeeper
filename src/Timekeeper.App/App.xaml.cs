@@ -102,6 +102,18 @@ public partial class App : Application
                 ((DataGrid)window.FindName("HistoryGrid")).SelectedIndex=0;
                 RenderWindow(window,Path.Combine(output,"timekeeper-history.png"),(int)window.Width,(int)window.Height);
                 if (((Button)window.FindName("RecoverDeletedButton")).IsEnabled) throw new InvalidOperationException("Demo history enabled live deletion recovery.");
+                var partial=receipt with { SubmissionId="visual-smoke-partial",Status="partial",Message="Submission paused. Choose Submit remaining rows to recheck and continue.",
+                    Rows=receipt.Rows.Select((r,i)=>i==0?r:r with { Status="not_sent",RecordId=null,Message="Not sent." }).ToList() };
+                store.SaveReceipt(partial); window.ShowSmokeHistory();
+                ((DataGrid)window.FindName("HistoryGrid")).SelectedItem=((DataGrid)window.FindName("HistoryGrid")).Items.Cast<SubmissionReceipt>().Single(r=>r.SubmissionId==partial.SubmissionId);
+                RenderWindow(window,Path.Combine(output,"timekeeper-history-partial.png"),(int)window.Width,(int)window.Height);
+                if (((Button)window.FindName("ResumeButton")).IsEnabled) throw new InvalidOperationException("Demo history enabled live continuation.");
+                var continuation=new TextDialog(window,"Review remaining timecards",Timekeeper.App.MainWindow.ResumePreview(sample,partial),smoke:true,confirmLabel:"Submit remaining rows");
+                File.AppendAllText(report,continuation.SmokeConfirmation());
+                RenderWindow(continuation,Path.Combine(output,"timekeeper-resume-preview.png"),860,660);
+                Appearance.Apply(new("Dark","Theme color",120,"Compact"));
+                RenderWindow(continuation,Path.Combine(output,"timekeeper-resume-preview-dark.png"),860,660);
+                Appearance.Apply(new()); continuation.Close();
                 var recovery=new DeletionRecoveryWindow(window,receipt.Rows.Where(r=>r.Row.Kind=="work").ToList(),smoke:true);
                 File.AppendAllText(report,recovery.SmokeSummary());
                 RenderWindow(recovery,Path.Combine(output,"timekeeper-deletion-recovery.png"),(int)recovery.Width,(int)recovery.Height);

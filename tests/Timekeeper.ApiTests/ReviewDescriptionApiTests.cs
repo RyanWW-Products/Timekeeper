@@ -5,6 +5,44 @@ static class ReviewDescriptionApiTests
 {
     public static async Task Run(Func<string, Func<Task>, Task> check)
     {
+        await check("multiline edited descriptions survive Quickbase line-ending normalization between writes", async () =>
+        {
+            foreach (var endings in new[] { ("\r\n", "\n"), ("\n", "\r\n"), ("\r", "\n") })
+            {
+                using var f = new Fixture(); var session = await f.Read(); var proposal = f.Proposal(session);
+                var baseline = Rules.Validate(session, proposal); var row = baseline.Rows.First(r => r.Kind == "work");
+                var description = "Held the client consultation." + endings.Item1 + endings.Item1 + "Reviewed Materials";
+                var edits = new[] { new ReviewDescription(ReviewDurations.Key(row), row.Description, description) };
+                var reviewed = ReviewDescriptions.Apply(session, baseline, edits);
+                f.Server.BeforeExistingRead = () =>
+                {
+                    if (f.Server.Existing.Count > 0)
+                        f.Server.Existing[0] = f.Server.Existing[0] with { Description = description.Replace(endings.Item1, endings.Item2) };
+                };
+                var receipt = await f.Service.SubmitAsync(session, proposal, reviewed.Rows, warningsAcknowledged: true, descriptionEdits: edits);
+                Equal("complete", receipt.Status); Equal(3, f.Server.WriteCount);
+                Equal(description, receipt.Rows[0].Row.Description); Equal(8m, f.Server.Existing.Sum(r => r.Hours));
+            }
+        });
+        await check("multiline baseline descriptions tolerate only line-ending representation changes", async () =>
+        {
+            using var f = new Fixture(); f.Server.Existing.Add(new(990, Fixture.Day, .5m, 100, 1, 10, null, "Existing work\r\n\r\nReviewed Materials"));
+            var session = await f.Read(); var proposal = f.Proposal(session);
+            f.Server.Existing[0] = f.Server.Existing[0] with { Description = "Existing work\n\nReviewed Materials" };
+            var receipt = await f.Service.SubmitAsync(session, proposal, Rules.Validate(session, proposal).Rows, warningsAcknowledged: true);
+            Equal("complete", receipt.Status); Equal(3, f.Server.WriteCount);
+        });
+        await check("uncertain multiline email writes reconcile normalized text without replay", async () =>
+        {
+            using var f = new SubmissionEmailFixture(); var (session, proposal) = await f.ReadEmail();
+            proposal.Rows[0] = proposal.Rows[0] with { Description = "Email follow-up\r\n\r\nReviewed Materials" };
+            f.Server.WriteMode = "commit-timeout";
+            var receipt = await f.Service.SubmitAsync(session, proposal, Rules.Validate(session, proposal).Rows, warningsAcknowledged: true);
+            Equal("unknown", receipt.Status);
+            f.Server.Existing[0] = f.Server.Existing[0] with { Description = "Email follow-up\n\nReviewed Materials" };
+            var result = await f.Service.ReconcileAsync(session, receipt);
+            Equal("complete", result.Status); Equal(1, f.Server.WriteCount); Equal(0, f.Transport.TogglRequests);
+        });
         await check("generated description edits are rejected before creating a receipt or Quickbase row", async () =>
         {
             using var f = new Fixture(); var session = await f.Read(); var proposal = f.Proposal(session);
@@ -17,6 +55,17 @@ static class ReviewDescriptionApiTests
                 await Throws<InvalidOperationException>(() => f.Service.SubmitAsync(session, proposal, changedPreview, warningsAcknowledged: true, descriptionEdits: [edit]));
             }
             Equal(0, f.Server.WriteCount); Equal(0, f.Store.LoadReceipts().Count);
+        });
+        await check("reconciliation keeps newline-equivalent competing rows ambiguous", async () =>
+        {
+            using var f = new Fixture(); var session = await f.Read(); f.Store.SaveSession(session);
+            var work = Rules.Validate(session, f.Proposal(session)).Rows.First(r => r.Kind == "work") with { Description = "Work\r\nReviewed Materials" };
+            var receipt = new SubmissionReceipt { SessionId = session.SessionId, ProfileKey = session.Settings.ProfileKey,
+                Rows = [new() { Row = work, Status = "unknown" }, new() { Row = work with { RowId = "other", Description = "Work\nReviewed Materials" }, Status = "unknown" }] };
+            f.Store.SaveReceipt(receipt);
+            f.Server.Existing.Add(new(501, work.Date, work.Hours, work.Project, work.Task, work.Category, work.Assignment, "Work\nReviewed Materials"));
+            var result = await f.Service.ReconcileAsync(session, receipt);
+            Equal("unknown", result.Status); Require(result.Rows.All(r => r.Status == "unknown" && r.RecordId is null)); Equal(0, f.Server.WriteCount);
         });
         await check("description submission rejects unreviewed stale and invalid edits before any write", async () =>
         {

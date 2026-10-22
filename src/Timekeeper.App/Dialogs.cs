@@ -9,7 +9,7 @@ internal sealed class TextDialog : Window
     private readonly TextBox _text;
     private readonly WrapPanel _buttons;
     public string Value => _text.Text;
-    public TextDialog(Window owner, string title, string text, bool editable = false, bool smoke = false)
+    public TextDialog(Window owner, string title, string text, bool editable = false, bool smoke = false, string? confirmLabel = null)
     {
         if(!smoke) Owner=owner;
         Style=(Style)Application.Current.FindResource(typeof(Window)); Title=title; Width=860; Height=660; MinWidth=520; MinHeight=360; MaxHeight=SystemParameters.WorkArea.Height; WindowStartupLocation=WindowStartupLocation.CenterOwner;
@@ -24,12 +24,20 @@ internal sealed class TextDialog : Window
         var textCard=new Border { Style=(Style)FindResource("Card"),Padding=new Thickness(0),Child=_text }; Grid.SetRow(textCard,1); grid.Children.Add(textCard);
         var buttons = _buttons = new WrapPanel { HorizontalAlignment=HorizontalAlignment.Right, Margin=new Thickness(0,18,0,0) };
         var copy = new Button { Content="Copy text", Margin=new Thickness(0,0,10,0) }; copy.Click += (_,_) => Clipboard.SetText(_text.Text); buttons.Children.Add(copy);
-        var done = new Button { Content=editable ? "Validate proposal" : "Close", IsDefault=true, Style=(Style)FindResource("Primary") }; done.Click += (_,_) => { DialogResult=editable; Close(); }; buttons.Children.Add(done);
+        if(confirmLabel is not null) buttons.Children.Add(new Button { Content="Cancel", IsCancel=true, Margin=new Thickness(0,0,10,0) });
+        var done = new Button { Content=confirmLabel ?? (editable ? "Validate proposal" : "Close"), IsDefault=confirmLabel is null, Style=(Style)FindResource("Primary") }; done.Click += (_,_) => { DialogResult=editable || confirmLabel is not null; Close(); }; buttons.Children.Add(done);
         Grid.SetRow(buttons,2); grid.Children.Add(buttons); Content=grid;
         Appearance.Attach(this);
     }
     private static Brush Brush(string key)=>(Brush)Application.Current.FindResource(key);
     private static FontFamily Font(string key)=>(FontFamily)Application.Current.FindResource(key);
+    internal string SmokeConfirmation()
+    {
+        var buttons=_buttons.Children.OfType<Button>().ToList();
+        if(!_text.IsReadOnly||!buttons.Any(b=>b.IsCancel)||buttons.Any(b=>b.IsDefault)||!buttons.Any(b=>Equals(b.Content,"Submit remaining rows")))
+            throw new InvalidOperationException("Continuation preview must be read-only, cancellable and require an explicit submit click.");
+        return "PASS: continuation preview is read-only, cancellable and has no default write action\n";
+    }
     public void AddAction(string label,Action action)
     {
         var button=new Button { Content=label,Margin=new Thickness(0,0,10,0) };

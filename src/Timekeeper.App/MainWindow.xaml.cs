@@ -112,6 +112,7 @@ public partial class MainWindow : Window
         ChangeProposalDatesButton.IsEnabled=!_busy&&_proposal is not null;
         ExportCard.Cursor=!_busy&&_exportPath!=null?Cursors.Hand:Cursors.Arrow;
         ReconcileButton.IsEnabled=ExportReceiptButton.IsEnabled=!_busy&&HistoryGrid.SelectedItem is SubmissionReceipt;
+        ResumeButton.IsEnabled=!_busy&&!_smoke&&HistoryGrid.SelectedItem is SubmissionReceipt resumable&&SubmissionService.CanResume(resumable);
         RecoverDeletedButton.IsEnabled=!_busy&&!_smoke&&HistoryGrid.SelectedItem is SubmissionReceipt selected
             &&!selected.Rows.Any(r=>r.Status is "pending" or "unknown")
             &&selected.Rows.Any(r=>r.Status=="created"&&r.RecordId>0&&r.Row.Kind is "work" or "manual"&&(r.Row.SourceEntryIds.Count>0||r.Row.EmailEvidenceKeys.Count>0||r.Row.ManualEntryIds.Count>0)&&r.DeletionConfirmedAtUtc is null);
@@ -702,6 +703,44 @@ public partial class MainWindow : Window
             var history=_store.LoadReceipts(_settings.ProfileKey); HistoryGrid.ItemsSource=history;
             HistoryGrid.SelectedItem=history.Single(r=>r.SubmissionId==result.SubmissionId); StatusText.Text=result.DisplayMessage;
         });
+    }
+    private async void Resume_Click(object sender,RoutedEventArgs e)
+    {
+        if(!ResumeButton.IsEnabled||HistoryGrid.SelectedItem is not SubmissionReceipt receipt) return;
+        await RunAsync(async ct=>
+        {
+            var session=_store.LoadSession(receipt.SessionId)??throw new InvalidOperationException("The original source session is missing.");
+            if(new TextDialog(this,"Review remaining timecards",ResumePreview(session,receipt),confirmLabel:"Submit remaining rows").ShowDialog()!=true)
+            { StatusText.Text="Continuation cancelled. Nothing was submitted."; return; }
+            _writing=true; StatusText.Text="Rechecking Quickbase before submitting the saved remaining rows...";
+            using var api=MakeApi(session.Settings);
+            try
+            {
+                var result=await new SubmissionService(api,_store).ResumeAsync(receipt,ct);
+                ResetReview(); StatusText.Text=result.DisplayMessage;
+                new TextDialog(this,"Quickbase submission receipt",ReceiptText(result)).ShowDialog();
+            }
+            finally
+            {
+                RetireCreatedManualDrafts();
+                var history=_store.LoadReceipts(_settings.ProfileKey); HistoryGrid.ItemsSource=history;
+                HistoryGrid.SelectedItem=history.Single(r=>r.SubmissionId==receipt.SubmissionId);
+                if(_session?.SessionId==receipt.SessionId) { _validation=null; _proposal=null; }
+            }
+        });
+    }
+    internal static string ResumePreview(ReadSession session,SubmissionReceipt receipt)
+    {
+        var remaining=receipt.Rows.Where(r=>r.Status=="not_sent").ToList();
+        var preview=new StringBuilder($"{remaining.Count} remaining timecards - {remaining.Sum(r=>r.Row.Hours):0.00} h\n\nAlready created: {receipt.Rows.Count(r=>r.Status=="created")}. These records will not be submitted again.\n\nQuickbase will be rechecked. Saved descriptions, hours and billing choices are retained.\n\n");
+        foreach(var item in remaining)
+        {
+            var row=item.Row;
+            var billing=row.BillableOverride??session.Reference.Billing?.DefaultFor(row.Project,row.Task);
+            preview.AppendLine($"{row.Date:yyyy-MM-dd}  {row.Hours:0.00} h  {row.ProjectName}\nAssignment: {(row.Assignment.HasValue?$"#{row.Assignment}":"Direct to project")}  |  Task: {row.TaskName}\nBilling: {(billing is null?"Default unavailable":billing.Value?"Billable":"Nonbillable")}{(row.BillableOverride.HasValue||billing is null?"":" - Default")}\n{row.Description}\n");
+        }
+        if(receipt.ReviewedWarnings.Count>0) preview.AppendLine("Previously acknowledged review notes:\n"+string.Join("\n",receipt.ReviewedWarnings));
+        return preview.ToString();
     }
     private async void RecoverDeleted_Click(object sender,RoutedEventArgs e)
     {

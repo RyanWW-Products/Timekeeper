@@ -41,8 +41,52 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
             Rows = reviewedRows.Select(r => new RowOutcome { Row = r, Status = "not_sent", Message = "Not sent." }).ToList()
         };
         store.SaveReceipt(receipt);
+        return await WriteRemainingAsync(scope.Session, receipt, recovered, ct);
+    }
+
+    // Continue the saved, reviewed journal. Never rebuild its rows or replay an uncertain write.
+    public async Task<SubmissionReceipt> ResumeAsync(SubmissionReceipt reviewedReceipt, CancellationToken ct = default)
+    {
+        using var localLock = store.AcquireSubmissionLock();
+        var history = store.LoadReceipts(api.Settings.ProfileKey);
+        var saved = history.SingleOrDefault(r => r.SubmissionId == reviewedReceipt.SubmissionId)
+            ?? throw new InvalidOperationException("The original submission receipt is missing for this account.");
+        if (!Same(saved, reviewedReceipt))
+            throw new InvalidOperationException("This receipt changed. Select it again and review the remaining rows before submitting.");
+        if (!CanResume(saved))
+            throw new InvalidOperationException("Only rows marked NOT_SENT can be continued. Resolve unknown outcomes or billing issues first. Deleted entries need a fresh review.");
+        var baseline = store.LoadSession(saved.SessionId) ?? throw new InvalidOperationException("The original source session is missing.");
+        if (baseline.Demo || baseline.SessionId != saved.SessionId || saved.ProfileKey != api.Settings.ProfileKey || !Same(baseline.Settings, api.Settings))
+            throw new InvalidOperationException("Use the original account and settings to continue this receipt.");
+        if (saved.ReviewedWarnings.Count > 0 && saved.WarningsAcknowledgedAtUtc is null)
+            throw new InvalidOperationException("This receipt has no saved confirmation of its review warnings. Prepare a fresh review before writing.");
+        var dates = saved.SelectedDates ?? baseline.Days.Select(d => d.Date).ToList();
+        if (dates.Count == 0 || dates.Distinct().Count() != dates.Count || dates.Any(d => !baseline.Days.Any(day => day.Date == d))
+            || saved.Rows.Any(r => !dates.Contains(r.Row.Date)) || saved.Rows.Select(r => r.Row.RowId).Distinct().Count() != saved.Rows.Count
+            || saved.Rows.Any(r => string.IsNullOrWhiteSpace(r.Row.RowId) || r.Row.Hours <= 0 || r.Row.Hours > 24 || string.IsNullOrWhiteSpace(r.Row.Description))
+            || saved.Rows.Where(r => r.Status == "created").Select(r => r.RecordId).Distinct().Count() != saved.Rows.Count(r => r.Status == "created"))
+            throw new InvalidDataException("The saved submission does not match its original dates or rows. Restore the receipt before continuing.");
+        var scope = baseline with { Days = baseline.Days.Where(d => dates.Contains(d.Date)).ToList() };
+        var remaining = saved.Rows.Where(r => r.Status == "not_sent").Select(r => r.Row).ToList();
+        var recovered = CheckHistory(scope, remaining, history.Where(r => r.SubmissionId != saved.SubmissionId).ToList());
+        // Include our confirmed creates when checking the original snapshot. Keep the stored baseline immutable.
+        var expected = scope with { Days = scope.Days.Select(day => day with { Existing = ExpectedExisting(scope, saved, day.Date) }).ToList() };
+        await CheckFreshAsync(expected, remaining, ct);
+        await CheckRecoveredStillAbsentAsync(recovered, ct);
+        ct.ThrowIfCancellationRequested();
+        saved.Message = "";
+        return await WriteRemainingAsync(scope, saved, recovered, ct);
+    }
+
+    public static bool CanResume(SubmissionReceipt receipt) => receipt.Rows.Any(r => r.Status == "not_sent")
+        && receipt.Rows.All(r => r.DeletionConfirmedAtUtc is null && (r.Status == "not_sent" && r.RecordId is null
+            || r.Status == "created" && r.RecordId > 0 && (!r.Row.BillableOverride.HasValue || r.ActualBillable == r.Row.BillableOverride)));
+
+    private async Task<SubmissionReceipt> WriteRemainingAsync(ReadSession session, SubmissionReceipt receipt, IReadOnlyList<RowOutcome> recovered, CancellationToken ct)
+    {
         for (var i = 0; i < receipt.Rows.Count; i++)
         {
+            if (receipt.Rows[i].Status != "not_sent") continue;
             if (ct.IsCancellationRequested)
             {
                 receipt.Message = "Submission stopped before sending the next row.";
@@ -51,12 +95,12 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
             // Detect edits by another window/tool between individual writes, accounting for our known creates.
             try
             {
-                await CheckExistingDuringSubmissionAsync(scope.Session, receipt, receipt.Rows[i].Row.Date, ct);
+                await CheckExistingDuringSubmissionAsync(session, receipt, receipt.Rows[i].Row.Date, ct);
                 await CheckRecoveredStillAbsentAsync(recovered, ct);
             }
             catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or InvalidDataException or OperationCanceledException)
             {
-                receipt.Message = $"Stopped before row {i + 1} ({receipt.Rows[i].Row.Date:yyyy-MM-dd}): {ex.Message}\nThis row and all remaining rows were not sent. Read again and tell Copilot which entries this receipt confirms were created.";
+                receipt.Message = $"Stopped before row {i + 1} ({receipt.Rows[i].Row.Date:yyyy-MM-dd}): {ex.Message}\nThis row and all remaining rows were not sent. In Submission history, choose Submit remaining rows to recheck and continue this saved review. Created rows will not be resent. If the data really changed, resolve it or prepare a fresh review.";
                 break;
             }
             receipt.Rows[i].Status = "pending";
@@ -263,17 +307,20 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
 
     private async Task CheckExistingDuringSubmissionAsync(ReadSession session, SubmissionReceipt receipt, DateOnly date, CancellationToken ct)
     {
-        var expected = session.Days.Single(d => d.Date == date).Existing.ToList();
-        expected.AddRange(receipt.Rows.Where(r => r.Status == "created" && r.Row.Date == date).Select(r => new ExistingTimecard(r.RecordId!.Value, r.Row.Date, r.Row.Hours, r.Row.Project, r.Row.Task, r.Row.Category, r.Row.Assignment, r.Row.Description) { Billable = r.ActualBillable }));
+        var expected = ExpectedExisting(session, receipt, date);
         var actual = await api.ReadExistingAsync(date, ct);
         CheckExistingUnchanged(expected, actual, date);
     }
+    private static List<ExistingTimecard> ExpectedExisting(ReadSession session, SubmissionReceipt receipt, DateOnly date) =>
+        session.Days.Single(d => d.Date == date).Existing.Concat(receipt.Rows.Where(r => r.Status == "created" && r.Row.Date == date)
+            .Select(r => new ExistingTimecard(r.RecordId!.Value, r.Row.Date, r.Row.Hours, r.Row.Project, r.Row.Task, r.Row.Category, r.Row.Assignment, r.Row.Description) { Billable = r.ActualBillable })).ToList();
     private static void CheckExistingUnchanged(IReadOnlyList<ExistingTimecard> expected, IReadOnlyList<ExistingTimecard> actual, DateOnly date)
     {
         // Record equality compares decimal values, so 3, 3.0 and 3.00 hours are equal.
         // JSON text equality incorrectly treats the service's decimal formatting as an edit.
         // Old receipts do not include billing state. Compare it only when captured in that baseline.
-        bool Equal(ExistingTimecard before, ExistingTimecard after) => before == (before.Billable.HasValue ? after : after with { Billable = null });
+        bool Equal(ExistingTimecard before, ExistingTimecard after) => SameDescription(before.Description, after.Description)
+            && before == (after with { Description = before.Description, Billable = before.Billable.HasValue ? after.Billable : null });
         if (expected.Count == actual.Count && expected.OrderBy(r => r.RecordId).Zip(actual.OrderBy(r => r.RecordId)).All(p => Equal(p.First, p.Second))) return;
         var actualById = actual.ToDictionary(r => r.RecordId);
         foreach (var before in expected.OrderBy(r => r.RecordId))
@@ -288,7 +335,7 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
             if (before.Task != after.Task) fields.Add("Task");
             if (before.Category != after.Category) fields.Add("Category");
             if (before.Assignment != after.Assignment) fields.Add("Assignment");
-            if (before.Description != after.Description) fields.Add("Description");
+            if (!SameDescription(before.Description, after.Description)) fields.Add("Description");
             if (before.Billable.HasValue && before.Billable != after.Billable) fields.Add("Billable");
             // Identify the fields without echoing potentially sensitive descriptions or response bodies.
             throw Changed($"record #{before.RecordId} has changed fields: {string.Join(", ", fields)}.");
@@ -297,7 +344,7 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
         var added = actual.First(r => !expectedIds.Contains(r.RecordId));
         throw Changed($"record #{added.RecordId} was added outside this submission.");
 
-        InvalidOperationException Changed(string detail) => new($"Quickbase timecards for {date:yyyy-MM-dd} changed: {detail} Read the day again and create a new proposal before writing.");
+        InvalidOperationException Changed(string detail) => new($"Quickbase timecards for {date:yyyy-MM-dd} changed: {detail} Check that record in Quickbase. If the change is intentional, read or import again to review the updated day.");
     }
     private static InvalidOperationException Stale(string what) => new($"{what} changed since the export. Read the day again and create a new proposal before writing.");
     private static bool Same<T>(T a, T b) => JsonSerializer.Serialize(a, JsonDefaults.Options) == JsonSerializer.Serialize(b, JsonDefaults.Options);
@@ -306,8 +353,11 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
     // Billing can be ignored/recalculated by Quickbase even when the create committed. Use the
     // original identity fields to find a unique record, then retain its actual billing for review.
     // Two otherwise identical uncertain rows remain ambiguous regardless of their billing choices.
-    private static bool SameFields(VerifiedRow a, VerifiedRow b) => a.Date == b.Date && a.Hours == b.Hours && a.Project == b.Project && a.Task == b.Task && a.Category == b.Category && a.Assignment == b.Assignment && a.Description == b.Description;
-    private static bool Matches(VerifiedRow row, ExistingTimecard record) => row.Date == record.Date && row.Hours == record.Hours && row.Project == record.Project && row.Task == record.Task && row.Category == record.Category && row.Assignment == record.Assignment && row.Description == record.Description;
+    private static bool SameFields(VerifiedRow a, VerifiedRow b) => a.Date == b.Date && a.Hours == b.Hours && a.Project == b.Project && a.Task == b.Task && a.Category == b.Category && a.Assignment == b.Assignment && SameDescription(a.Description, b.Description);
+    private static bool Matches(VerifiedRow row, ExistingTimecard record) => row.Date == record.Date && row.Hours == record.Hours && row.Project == record.Project && row.Task == record.Task && row.Category == record.Category && row.Assignment == record.Assignment && SameDescription(row.Description, record.Description);
+    // WPF edits use CRLF; a service can return LF. Preserve every character and blank line
+    // apart from the newline encoding. Do not trim, collapse whitespace, strip HTML or change case.
+    private static bool SameDescription(string a, string b) => a.Replace("\r\n", "\n").Replace('\r', '\n') == b.Replace("\r\n", "\n").Replace('\r', '\n');
     private async Task TestSourceAccountAsync(ReadSession session, CancellationToken ct)
     {
         if (session.EmailWorkbook is null && !session.ManualOnly) await api.TestAsync(ct);
@@ -323,7 +373,7 @@ public sealed class SubmissionService(TimecardApi api, SessionStore store)
             "unknown" => "At least one row has an unknown outcome. Reconcile before another write on these dates.",
             "reopened" => "Deletion was confirmed for selected entries. Read the day again to prepare their replacements. The original creation results remain below.",
             "attention" => "Created records need billing review in Quickbase. Keep their record IDs and correct those existing records; do not submit them again.",
-            _ => "Only rows marked created were confirmed. Review the receipt and read again before preparing remaining work."
+            _ => CanResume(receipt) ? "Submission paused. In Submission history, select this receipt and choose Submit remaining rows. Quickbase will be rechecked; created rows will not be resent." : "Only rows marked created were confirmed. Review the receipt and read again before preparing remaining work."
         };
     }
 }

@@ -16,7 +16,7 @@ The installer is per user and includes an optional desktop shortcut and standard
 
 ## Daily workflow
 
-Version 0.12.0 adds description editing in email review and the dashboard. Double-click the activity/description, press **F2**, or choose **Edit description**. Review the saved text and confirm before submitting. Original source evidence is preserved; receipts show the text sent to Quickbase. See [release notes](docs/releases/0.12.0.md).
+Version 0.12.1 fixes false description-change errors from multiline text. In **Submission history**, select an eligible partial receipt and choose **Submit remaining rows** to recheck Quickbase and continue the saved review without resending created records. Description editing remains available by double-click, **F2**, or **Edit description**. See [release notes](docs/releases/0.12.1.md).
 
 Version 0.11.0 puts **Work date** above separate Toggl / Quickbase and Email / Quickbase panels. Choose the date first, then use **Add timecard**, **Read selected date**, or **Import email Excel**. Manual preloads need only Quickbase, even if another date was previously loaded. Status lights identify source data loaded for the selected date; saved manual drafts on other dates remain pending. The email panel opens its own shared Copilot agent. See [release notes](docs/releases/0.11.0.md).
 
